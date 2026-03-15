@@ -5,6 +5,7 @@ from src.agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.agent.state import OpsState
 from src.config import get_settings
 from src.tools.exec_tools import exec_read, exec_write
+from src.tools.knowledge_tools import search_knowledge_base
 
 
 def build_tools():
@@ -25,11 +26,18 @@ def build_tools():
         return await exec_write(infra_id=infra_id, command=command)
 
     @tool
+    async def search_knowledge_base_tool(query: str, project_id: str) -> str:
+        """Search the project knowledge base for architecture docs, deployment guides, and other context.
+        Use this when investigating issues related to a specific project.
+        """
+        return await search_knowledge_base(query=query, project_id=project_id)
+
+    @tool
     def complete(summary: str) -> str:
         """Call this when the investigation is complete. Provide a brief summary."""
         return summary
 
-    return [exec_read_tool, exec_write_tool, complete]
+    return [exec_read_tool, exec_write_tool, search_knowledge_base_tool, complete]
 
 
 def get_llm():
@@ -51,6 +59,7 @@ async def main_agent_node(state: OpsState) -> dict:
         description=state["description"],
         severity=state["severity"],
         infrastructure_id=state["infrastructure_id"],
+        project_id=state.get("project_id", ""),
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]

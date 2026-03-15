@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { InfrastructureList } from "@/components/infrastructure/infrastructure-list";
+import { CreateInfrastructureDialog } from "@/components/infrastructure/create-infrastructure-dialog";
 
 export const Route = createFileRoute("/infrastructure/")({
   component: InfrastructurePage,
@@ -6,11 +8,12 @@ export const Route = createFileRoute("/infrastructure/")({
 
 function InfrastructurePage() {
   return (
-    <div className="p-6">
-      <h1 className="text-xl font-semibold">Infrastructure</h1>
-      <p className="mt-2 text-muted-foreground">
-        Infrastructure management will be available in Phase 2.
-      </p>
+    <div className="h-full">
+      <div className="flex items-center justify-between border-b px-6 py-4">
+        <h1 className="text-xl font-semibold">Infrastructure</h1>
+        <CreateInfrastructureDialog />
+      </div>
+      <InfrastructureList />
     </div>
   );
 }

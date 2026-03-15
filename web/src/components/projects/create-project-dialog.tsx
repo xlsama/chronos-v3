@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { createIncident } from "@/api/incidents";
+import { createProject } from "@/api/projects";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,38 +15,30 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Field, FieldLabel } from "@/components/ui/field";
 
-export function CreateIncidentDialog() {
+export function CreateProjectDialog() {
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
+  const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [severity, setSeverity] = useState("medium");
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const resetForm = () => {
-    setTitle("");
+    setName("");
     setDescription("");
-    setSeverity("medium");
   };
 
   const mutation = useMutation({
-    mutationFn: () => createIncident({ title, description, severity }),
-    onSuccess: (incident) => {
-      toast.success("Incident created");
-      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+    mutationFn: () =>
+      createProject({ name, description: description || undefined }),
+    onSuccess: (project) => {
+      toast.success("Project created");
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       setOpen(false);
       navigate({
-        to: "/incidents/$incidentId",
-        params: { incidentId: incident.id },
+        to: "/projects/$projectId",
+        params: { projectId: project.id },
       });
     },
   });
@@ -59,42 +51,28 @@ export function CreateIncidentDialog() {
         if (!open) resetForm();
       }}
     >
-      <DialogTrigger render={<Button size="sm" />}>New Incident</DialogTrigger>
+      <DialogTrigger render={<Button size="sm" />}>New Project</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Incident</DialogTitle>
+          <DialogTitle>Create Project</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <Field>
-            <FieldLabel>Title</FieldLabel>
+            <FieldLabel>Name</FieldLabel>
             <Input
-              placeholder="Incident title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Project name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
             />
           </Field>
           <Field>
             <FieldLabel>Description</FieldLabel>
             <Textarea
-              placeholder="Describe the incident..."
+              placeholder="Description (optional)"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={4}
+              rows={3}
             />
-          </Field>
-          <Field>
-            <FieldLabel>Severity</FieldLabel>
-            <Select value={severity} onValueChange={(v) => v && setSeverity(v)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="critical">Critical</SelectItem>
-              </SelectContent>
-            </Select>
           </Field>
         </div>
         <DialogFooter>
@@ -103,7 +81,7 @@ export function CreateIncidentDialog() {
           </DialogClose>
           <Button
             onClick={() => mutation.mutate()}
-            disabled={!title || !description || mutation.isPending}
+            disabled={!name || mutation.isPending}
           >
             {mutation.isPending ? "Creating..." : "Create"}
           </Button>

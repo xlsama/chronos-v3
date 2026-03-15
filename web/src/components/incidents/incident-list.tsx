@@ -1,38 +1,65 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { api } from "@/lib/api";
-import type { Incident } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { AlertCircle } from "lucide-react";
+import { getIncidents } from "@/api/incidents";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 
 const severityColors: Record<string, string> = {
-  low: "bg-blue-100 text-blue-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  high: "bg-orange-100 text-orange-800",
-  critical: "bg-red-100 text-red-800",
+  low: "bg-blue-100 text-blue-800 border-transparent",
+  medium: "bg-yellow-100 text-yellow-800 border-transparent",
+  high: "bg-orange-100 text-orange-800 border-transparent",
+  critical: "bg-red-100 text-red-800 border-transparent",
 };
 
 const statusColors: Record<string, string> = {
-  open: "bg-red-100 text-red-800",
-  investigating: "bg-yellow-100 text-yellow-800",
-  resolved: "bg-green-100 text-green-800",
-  closed: "bg-gray-100 text-gray-800",
+  open: "bg-red-100 text-red-800 border-transparent",
+  investigating: "bg-yellow-100 text-yellow-800 border-transparent",
+  resolved: "bg-green-100 text-green-800 border-transparent",
+  closed: "bg-gray-100 text-gray-800 border-transparent",
 };
 
 export function IncidentList() {
   const { data: incidents, isLoading } = useQuery({
     queryKey: ["incidents"],
-    queryFn: () => api<Incident[]>("/incidents"),
+    queryFn: getIncidents,
   });
 
   if (isLoading) {
-    return <div className="p-4 text-muted-foreground">Loading...</div>;
+    return (
+      <div className="divide-y">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 p-4">
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-3 w-72" />
+            </div>
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+        ))}
+      </div>
+    );
   }
 
   if (!incidents?.length) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        No incidents yet. Create one to get started.
-      </div>
+      <Empty className="py-12">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <AlertCircle />
+          </EmptyMedia>
+          <EmptyTitle>No incidents yet</EmptyTitle>
+          <EmptyDescription>Create one to get started.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
@@ -51,22 +78,12 @@ export function IncidentList() {
               {incident.description}
             </p>
           </div>
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 text-xs font-medium",
-              severityColors[incident.severity] ?? "bg-gray-100",
-            )}
-          >
+          <Badge className={severityColors[incident.severity]}>
             {incident.severity}
-          </span>
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 text-xs font-medium",
-              statusColors[incident.status] ?? "bg-gray-100",
-            )}
-          >
+          </Badge>
+          <Badge className={statusColors[incident.status]}>
             {incident.status}
-          </span>
+          </Badge>
           <span className="text-xs text-muted-foreground">
             {new Date(incident.created_at).toLocaleString()}
           </span>

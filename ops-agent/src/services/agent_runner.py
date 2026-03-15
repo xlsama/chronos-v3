@@ -20,6 +20,7 @@ class AgentRunner:
         description: str,
         severity: str,
         infrastructure_id: str,
+        project_id: str = "",
     ) -> str:
         thread_id = str(uuid.uuid4())
         channel = EventPublisher.channel_for_incident(incident_id)
@@ -30,6 +31,7 @@ class AgentRunner:
             "messages": [HumanMessage(content=f"事件: {title}\n\n{description}")],
             "incident_id": incident_id,
             "infrastructure_id": infrastructure_id,
+            "project_id": project_id,
             "title": title,
             "description": description,
             "severity": severity,

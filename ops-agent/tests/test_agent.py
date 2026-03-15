@@ -19,6 +19,7 @@ def test_ops_state_init():
         "messages": [],
         "incident_id": "inc-1",
         "infrastructure_id": "infra-1",
+        "project_id": "",
         "title": "Disk full",
         "description": "Server disk is 95% full",
         "severity": "high",
@@ -29,6 +30,7 @@ def test_ops_state_init():
     }
     assert state["incident_id"] == "inc-1"
     assert state["is_complete"] is False
+    assert state["project_id"] == ""
 
 
 def test_ops_state_messages_accumulate():

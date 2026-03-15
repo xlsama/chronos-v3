@@ -95,3 +95,53 @@ class ApprovalResponse(BaseModel):
 class ApprovalDecisionRequest(BaseModel):
     decision: str  # "approved" or "rejected"
     decided_by: str = "admin"
+
+
+# ── Project ──
+
+class ProjectCreate(BaseModel):
+    name: str
+    slug: str | None = None
+    description: str | None = None
+    cloud_md: str | None = None
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+    description: str | None = None
+
+
+class ProjectCloudMdUpdate(BaseModel):
+    cloud_md: str
+
+
+class ProjectResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    description: str | None
+    cloud_md: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Document ──
+
+class DocumentUpload(BaseModel):
+    filename: str
+    content: str
+    doc_type: str = "markdown"
+
+
+class DocumentResponse(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    filename: str
+    doc_type: str
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

@@ -1,7 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { ShieldAlert } from "lucide-react";
+import { decideApproval } from "@/api/approvals";
+import { Button } from "@/components/ui/button";
 
 interface ApprovalCardProps {
   toolCall: Record<string, unknown> | null;
@@ -11,10 +12,10 @@ interface ApprovalCardProps {
 export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
   const decideMutation = useMutation({
     mutationFn: (decision: string) =>
-      api(`/approvals/${approvalId}/decide`, {
-        method: "POST",
-        body: { decision, decided_by: "admin" },
-      }),
+      decideApproval(approvalId!, { decision, decided_by: "admin" }),
+    onSuccess: (_, decision) => {
+      toast.success(`Request ${decision}`);
+    },
   });
 
   return (

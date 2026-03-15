@@ -1,11 +1,32 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.connection import Base
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    slug: Mapped[str] = mapped_column(String(255), unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cloud_md: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    documents: Mapped[list["ProjectDocument"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+    infrastructures: Mapped[list["Infrastructure"]] = relationship(back_populates="project")
+    incidents: Mapped[list["Incident"]] = relationship(back_populates="project")
 
 
 class Infrastructure(Base):
@@ -19,11 +40,15 @@ class Infrastructure(Base):
     encrypted_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     encrypted_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="unknown")  # unknown, online, offline
-    project_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    project: Mapped["Project | None"] = relationship(back_populates="infrastructures")
 
 
 class Incident(Base):
@@ -37,7 +62,9 @@ class Incident(Base):
     infrastructure_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("infrastructures.id"), nullable=True
     )
-    project_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True
+    )
     summary_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     thread_id: Mapped[str | None] = mapped_column(String(100), nullable=True)  # LangGraph thread
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -47,6 +74,44 @@ class Incident(Base):
 
     messages: Mapped[list["Message"]] = relationship(back_populates="incident", order_by="Message.created_at")
     approval_requests: Mapped[list["ApprovalRequest"]] = relationship(back_populates="incident")
+    project: Mapped["Project | None"] = relationship(back_populates="incidents")
+
+
+class ProjectDocument(Base):
+    __tablename__ = "project_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(500))
+    content: Mapped[str] = mapped_column(Text)
+    doc_type: Mapped[str] = mapped_column(String(50))  # markdown, text, etc.
+    status: Mapped[str] = mapped_column(String(20), default="processing")  # processing, ready, error
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    project: Mapped["Project"] = relationship(back_populates="documents")
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project_documents.id", ondelete="CASCADE"), index=True
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    embedding = mapped_column(Vector(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    document: Mapped["ProjectDocument"] = relationship(back_populates="chunks")
 
 
 class Message(Base):

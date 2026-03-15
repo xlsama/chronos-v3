@@ -94,6 +94,9 @@ async def test_create_incident(client: AsyncClient, mock_session):
     mock_incident.created_at = datetime.now(timezone.utc)
     mock_incident.updated_at = datetime.now(timezone.utc)
 
+    # Mock agent_runner on app.state
+    app.state.agent_runner = AsyncMock()
+
     with patch("src.api.incidents.IncidentService") as mock_svc_cls:
         mock_svc = AsyncMock()
         mock_svc.create.return_value = mock_incident
@@ -126,23 +129,34 @@ async def test_list_incidents(client: AsyncClient, mock_session):
 
 async def test_decide_approval(client: AsyncClient, mock_session):
     approval_id = uuid.uuid4()
+    incident_id = uuid.uuid4()
 
-    # Before decide
+    # Before decide - first get returns approval, second get returns incident
     pre_approval = MagicMock()
     pre_approval.id = approval_id
+    pre_approval.incident_id = incident_id
     pre_approval.decision = None
-    mock_session.get.return_value = pre_approval
+
+    mock_incident = MagicMock()
+    mock_incident.id = incident_id
+    mock_incident.thread_id = "thread-123"
 
     # After decide
     decided_approval = MagicMock()
     decided_approval.id = approval_id
-    decided_approval.incident_id = uuid.uuid4()
+    decided_approval.incident_id = incident_id
     decided_approval.tool_name = "exec_write"
     decided_approval.tool_args = '{"command": "systemctl restart nginx"}'
     decided_approval.decision = "approved"
     decided_approval.decided_by = "admin"
     decided_approval.decided_at = datetime.now(timezone.utc)
     decided_approval.created_at = datetime.now(timezone.utc)
+
+    # mock_session.get is called twice: once for ApprovalRequest, once for Incident
+    mock_session.get.side_effect = [pre_approval, mock_incident]
+
+    # Mock agent_runner on app.state
+    app.state.agent_runner = AsyncMock()
 
     with patch("src.api.approvals.ApprovalService") as mock_svc_cls:
         mock_svc = AsyncMock()

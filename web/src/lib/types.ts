@@ -52,5 +52,24 @@ export interface SSEEvent {
   timestamp: string;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  cloud_md: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectDocument {
+  id: string;
+  project_id: string;
+  filename: string;
+  doc_type: string;
+  status: string;
+  created_at: string;
+}
+
 export type SeverityLevel = "low" | "medium" | "high" | "critical";
 export type IncidentStatus = "open" | "investigating" | "resolved" | "closed";

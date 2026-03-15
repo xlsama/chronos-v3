@@ -3,18 +3,43 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from psycopg import AsyncConnection
 
+from src.agent.event_publisher import EventPublisher
 from src.api.approvals import router as approvals_router
+from src.api.documents import router as documents_router
 from src.api.incidents import router as incidents_router
 from src.api.infrastructures import router as infrastructures_router
+from src.api.projects import router as projects_router
+from src.config import get_settings
 from src.lib.errors import AppError
 from src.lib.logger import logger
+from src.lib.redis import get_redis
+from src.services.agent_runner import AgentRunner
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Chronos Ops Agent")
+
+    settings = get_settings()
+
+    # Initialize LangGraph checkpointer with PostgreSQL
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+    conn = await AsyncConnection.connect(settings.langgraph_checkpoint_dsn, autocommit=True)
+    checkpointer = AsyncPostgresSaver(conn)
+    await checkpointer.setup()
+
+    # Initialize EventPublisher + AgentRunner
+    publisher = EventPublisher(redis=get_redis())
+    app.state.agent_runner = AgentRunner(publisher=publisher, checkpointer=checkpointer)
+
+    logger.info("Agent runner initialized")
+
     yield
+
+    await conn.close()
     logger.info("Shutting down Chronos Ops Agent")
 
 
@@ -46,3 +71,5 @@ async def health():
 app.include_router(infrastructures_router)
 app.include_router(incidents_router)
 app.include_router(approvals_router)
+app.include_router(projects_router)
+app.include_router(documents_router)

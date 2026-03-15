@@ -2,7 +2,7 @@ import asyncio
 import uuid
 
 import orjson
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -14,26 +14,69 @@ from src.api.schemas import (
     UserMessageRequest,
 )
 from src.config import get_settings
-from src.db.connection import get_session
+from src.db.connection import get_session, get_session_factory
 from src.db.models import Incident, Message
 from src.lib.errors import NotFoundError
+from src.lib.logger import logger
 from src.lib.redis import get_redis
+from src.services.agent_runner import AgentRunner
 from src.services.incident_service import IncidentService
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
+
+
+async def _start_agent_background(
+    runner: AgentRunner,
+    incident_id: str,
+    title: str,
+    description: str,
+    severity: str,
+    infrastructure_id: str,
+    project_id: str,
+) -> None:
+    try:
+        thread_id = await runner.start(
+            incident_id=incident_id,
+            title=title,
+            description=description,
+            severity=severity,
+            infrastructure_id=infrastructure_id,
+            project_id=project_id,
+        )
+        # Write thread_id back to Incident record
+        factory = get_session_factory()
+        async with factory() as session:
+            incident = await session.get(Incident, uuid.UUID(incident_id))
+            if incident:
+                incident.thread_id = thread_id
+                await session.commit()
+                logger.info(f"Agent started for incident {incident_id}, thread {thread_id}")
+    except Exception as e:
+        logger.error(f"Failed to start agent for incident {incident_id}: {e}")
 
 
 @router.post("", response_model=IncidentResponse)
 async def create_incident(
     body: IncidentCreate,
     background_tasks: BackgroundTasks,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     service = IncidentService(session=session)
     incident = await service.create(**body.model_dump())
 
-    # Start agent in background (will be wired up in Phase 1 integration)
-    # background_tasks.add_task(run_agent, str(incident.id), body)
+    # Start agent in background
+    runner: AgentRunner = request.app.state.agent_runner
+    background_tasks.add_task(
+        _start_agent_background,
+        runner,
+        str(incident.id),
+        body.title,
+        body.description,
+        body.severity,
+        str(body.infrastructure_id or ""),
+        str(body.project_id or ""),
+    )
 
     return incident
 

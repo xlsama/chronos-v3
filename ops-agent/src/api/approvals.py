@@ -1,12 +1,12 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import ApprovalDecisionRequest, ApprovalResponse
 from src.db.connection import get_session
-from src.db.models import ApprovalRequest
+from src.db.models import ApprovalRequest, Incident
 from src.lib.errors import NotFoundError, ValidationError
 from src.services.approval_service import ApprovalService
 
@@ -28,6 +28,8 @@ async def get_approval(
 async def decide_approval(
     approval_id: uuid.UUID,
     body: ApprovalDecisionRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
     approval = await session.get(ApprovalRequest, approval_id)
@@ -43,6 +45,16 @@ async def decide_approval(
     except ValueError as e:
         raise ValidationError(str(e))
 
-    # TODO: Resume graph if approved (Phase 1 integration)
+    # Resume graph if approved
+    if body.decision == "approved":
+        incident = await session.get(Incident, approval.incident_id)
+        if incident and incident.thread_id:
+            runner = request.app.state.agent_runner
+            background_tasks.add_task(
+                runner.resume,
+                thread_id=incident.thread_id,
+                incident_id=str(incident.id),
+                approval_result={"decision": "approved"},
+            )
 
     return approval

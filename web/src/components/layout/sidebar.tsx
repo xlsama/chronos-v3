@@ -1,11 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { AlertTriangle, Server, LayoutDashboard } from "lucide-react";
+import { AlertTriangle, BookOpen, Server, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/incidents", label: "Incidents", icon: AlertTriangle },
   { to: "/infrastructure", label: "Infrastructure", icon: Server },
+  { to: "/projects", label: "Projects", icon: BookOpen },
 ] as const;
 
 export function Sidebar() {

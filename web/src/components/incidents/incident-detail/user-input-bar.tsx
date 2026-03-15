@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
+import { sendIncidentMessage } from "@/api/incidents";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface UserInputBarProps {
   incidentId: string;
@@ -12,11 +13,7 @@ export function UserInputBar({ incidentId }: UserInputBarProps) {
   const [message, setMessage] = useState("");
 
   const mutation = useMutation({
-    mutationFn: (content: string) =>
-      api(`/incidents/${incidentId}/messages`, {
-        method: "POST",
-        body: { content },
-      }),
+    mutationFn: (content: string) => sendIncidentMessage(incidentId, content),
     onSuccess: () => setMessage(""),
   });
 
@@ -32,12 +29,11 @@ export function UserInputBar({ incidentId }: UserInputBarProps) {
       onSubmit={handleSubmit}
       className="flex items-center gap-2 border-t p-4"
     >
-      <input
-        type="text"
+      <Input
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         placeholder="Send a message to the agent..."
-        className="flex-1 rounded-md border px-3 py-2 text-sm"
+        className="flex-1"
       />
       <Button
         type="submit"

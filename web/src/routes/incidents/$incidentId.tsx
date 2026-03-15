@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { getIncident } from "@/api/incidents";
 import { useIncidentStream } from "@/hooks/use-incident-stream";
 import { EventTimeline } from "@/components/incidents/incident-detail/event-timeline";
 import { UserInputBar } from "@/components/incidents/incident-detail/user-input-bar";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
-import type { Incident } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/incidents/$incidentId")({
@@ -18,7 +17,7 @@ function IncidentDetailPage() {
 
   const { data: incident } = useQuery({
     queryKey: ["incident", incidentId],
-    queryFn: () => api<Incident>(`/incidents/${incidentId}`),
+    queryFn: () => getIncident(incidentId),
   });
 
   useIncidentStream(incidentId);

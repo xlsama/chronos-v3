@@ -9,8 +9,8 @@ from src.tools.safety import CommandType
 
 @pytest.fixture
 def mock_ssh():
-    with patch("src.tools.exec_tools.get_ssh_connector") as mock:
-        connector = AsyncMock()
+    connector = AsyncMock()
+    with patch("src.tools.exec_tools.get_ssh_connector", new_callable=AsyncMock) as mock:
         mock.return_value = connector
         yield connector
 

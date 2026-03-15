@@ -8,6 +8,7 @@ from langgraph.graph import MessagesState
 class OpsState(MessagesState):
     incident_id: str
     infrastructure_id: str
+    project_id: str
     title: str
     description: str
     severity: str
