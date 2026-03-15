@@ -1,0 +1,116 @@
+import asyncio
+import uuid
+
+import orjson
+from fastapi import APIRouter, BackgroundTasks, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sse_starlette.sse import EventSourceResponse
+
+from src.api.schemas import (
+    IncidentCreate,
+    IncidentResponse,
+    MessageResponse,
+    UserMessageRequest,
+)
+from src.config import get_settings
+from src.db.connection import get_session
+from src.db.models import Incident, Message
+from src.lib.errors import NotFoundError
+from src.lib.redis import get_redis
+from src.services.incident_service import IncidentService
+
+router = APIRouter(prefix="/api/incidents", tags=["incidents"])
+
+
+@router.post("", response_model=IncidentResponse)
+async def create_incident(
+    body: IncidentCreate,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    service = IncidentService(session=session)
+    incident = await service.create(**body.model_dump())
+
+    # Start agent in background (will be wired up in Phase 1 integration)
+    # background_tasks.add_task(run_agent, str(incident.id), body)
+
+    return incident
+
+
+@router.get("", response_model=list[IncidentResponse])
+async def list_incidents(
+    status: str | None = None,
+    session: AsyncSession = Depends(get_session),
+):
+    query = select(Incident).order_by(Incident.created_at.desc())
+    if status:
+        query = query.where(Incident.status == status)
+    result = await session.execute(query)
+    return result.scalars().all()
+
+
+@router.get("/{incident_id}", response_model=IncidentResponse)
+async def get_incident(
+    incident_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    incident = await session.get(Incident, incident_id)
+    if not incident:
+        raise NotFoundError("Incident not found")
+    return incident
+
+
+@router.get("/{incident_id}/messages", response_model=list[MessageResponse])
+async def get_incident_messages(
+    incident_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(Message)
+        .where(Message.incident_id == incident_id)
+        .order_by(Message.created_at)
+    )
+    return result.scalars().all()
+
+
+@router.get("/{incident_id}/stream")
+async def stream_incident(incident_id: uuid.UUID):
+    redis = get_redis()
+    channel = f"incident:{incident_id}"
+
+    async def event_generator():
+        pubsub = redis.pubsub()
+        await pubsub.subscribe(channel)
+        try:
+            while True:
+                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if msg and msg["type"] == "message":
+                    yield {"data": msg["data"]}
+                else:
+                    await asyncio.sleep(0.1)
+        finally:
+            await pubsub.unsubscribe(channel)
+            await pubsub.aclose()
+
+    return EventSourceResponse(event_generator())
+
+
+@router.post("/{incident_id}/messages")
+async def send_user_message(
+    incident_id: uuid.UUID,
+    body: UserMessageRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    incident = await session.get(Incident, incident_id)
+    if not incident:
+        raise NotFoundError("Incident not found")
+
+    service = IncidentService(session=session)
+    message = await service.save_message(
+        incident_id=incident_id,
+        role="user",
+        event_type="user_message",
+        content=body.content,
+    )
+    return {"ok": True, "message_id": str(message.id)}
