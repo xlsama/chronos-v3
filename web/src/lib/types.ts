@@ -10,6 +10,16 @@ export interface Infrastructure {
   updated_at: string;
 }
 
+export interface Attachment {
+  id: string;
+  incident_id: string | null;
+  filename: string;
+  stored_filename: string;
+  content_type: string;
+  size: number;
+  created_at: string;
+}
+
 export interface Incident {
   id: string;
   title: string;
@@ -20,6 +30,8 @@ export interface Incident {
   project_id: string | null;
   summary_md: string | null;
   thread_id: string | null;
+  saved_to_memory: boolean;
+  attachments?: Attachment[];
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +62,8 @@ export interface SSEEvent {
   event_type: string;
   data: Record<string, unknown>;
   timestamp: string;
+  phase?: string;
+  agent?: string;
 }
 
 export interface Project {

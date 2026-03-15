@@ -9,7 +9,7 @@ from src.config import get_settings
 async def summarize_node(state: OpsState) -> dict:
     s = get_settings()
     llm = ChatOpenAI(
-        model=s.mini_model,
+        model=s.main_model,
         base_url=s.llm_base_url,
         api_key=s.dashscope_api_key,
     )

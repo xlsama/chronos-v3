@@ -10,9 +10,8 @@ export function getIncident(id: string) {
 }
 
 export function createIncident(data: {
-  title: string;
   description: string;
-  severity: string;
+  attachment_ids?: string[];
 }) {
   return request<Incident>("/incidents", { method: "POST", body: data });
 }
@@ -26,4 +25,11 @@ export function sendIncidentMessage(incidentId: string, content: string) {
     method: "POST",
     body: { content },
   });
+}
+
+export function saveToMemory(incidentId: string) {
+  return request<{ ok: boolean; incident_history_id?: string; error?: string }>(
+    `/incidents/${incidentId}/save-to-memory`,
+    { method: "POST" },
+  );
 }

@@ -1,8 +1,9 @@
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Incident, Message
+from src.db.models import Attachment, Incident, Message
 
 
 class IncidentService:
@@ -11,12 +12,17 @@ class IncidentService:
 
     async def create(
         self,
-        title: str,
         description: str,
+        title: str = "",
         severity: str = "medium",
         infrastructure_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
+        attachment_ids: list[uuid.UUID] | None = None,
     ) -> Incident:
+        if not title:
+            first_line = description.split("\n", 1)[0].strip()
+            title = first_line[:120] if first_line else "Untitled Incident"
+
         incident = Incident(
             title=title,
             description=description,
@@ -26,6 +32,15 @@ class IncidentService:
             project_id=project_id,
         )
         self.session.add(incident)
+        await self.session.flush()
+
+        if attachment_ids:
+            result = await self.session.execute(
+                select(Attachment).where(Attachment.id.in_(attachment_ids))
+            )
+            for attachment in result.scalars():
+                attachment.incident_id = incident.id
+
         await self.session.commit()
         await self.session.refresh(incident)
         return incident

@@ -1,6 +1,7 @@
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from src.agent.nodes.gather_context import gather_context_node
 from src.agent.nodes.human_approval import human_approval_node
 from src.agent.nodes.main_agent import build_tools, main_agent_node, route_decision
 from src.agent.nodes.summarize import summarize_node
@@ -14,15 +15,17 @@ def build_graph():
     graph = StateGraph(OpsState)
 
     # Add nodes
+    graph.add_node("gather_context", gather_context_node)
     graph.add_node("main_agent", main_agent_node)
     graph.add_node("tools", tool_node)
     graph.add_node("human_approval", human_approval_node)
     graph.add_node("summarize", summarize_node)
 
     # Entry point
-    graph.set_entry_point("main_agent")
+    graph.set_entry_point("gather_context")
 
     # Edges
+    graph.add_edge("gather_context", "main_agent")
     graph.add_conditional_edges(
         "main_agent",
         route_decision,

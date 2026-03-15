@@ -63,12 +63,19 @@ async def main_agent_node(state: OpsState) -> dict:
     tools = build_tools()
     llm = get_llm().bind_tools(tools)
 
+    history_summary = state.get("incident_history_summary")
+    if history_summary:
+        history_context = f"## 历史事件参考\n以下是与当前事件相似的历史事件供参考：\n\n{history_summary}"
+    else:
+        history_context = ""
+
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         title=state["title"],
         description=state["description"],
         severity=state["severity"],
         infrastructure_id=state["infrastructure_id"],
         project_id=state.get("project_id", ""),
+        incident_history_context=history_context,
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]

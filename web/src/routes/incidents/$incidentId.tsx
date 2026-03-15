@@ -46,7 +46,10 @@ function IncidentDetailPage() {
 
       {/* Timeline */}
       <div className="flex-1 overflow-auto">
-        <EventTimeline />
+        <EventTimeline
+          incidentId={incidentId}
+          savedToMemory={incident?.saved_to_memory}
+        />
       </div>
 
       {/* Input */}

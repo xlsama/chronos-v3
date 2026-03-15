@@ -1,7 +1,7 @@
 """E2E test: full agent flow with mock LLM + mock SSH.
 
 Tests the complete cycle:
-  create event → Agent start → tool calls → approval interrupt → resume → summary
+  create event → gather_context → Agent start → tool calls → approval interrupt → resume → summary
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -122,7 +122,7 @@ def cleanup_ssh_registry():
 
 
 async def test_full_agent_flow():
-    """Full E2E: agent runs → read tool → write tool (interrupt) → resume → complete → summarize."""
+    """Full E2E: gather_context → agent runs → read tool → write tool (interrupt) → resume → complete → summarize."""
     checkpointer = MemorySaver()
 
     # Register mock SSH
@@ -138,6 +138,8 @@ async def test_full_agent_flow():
     with (
         patch("src.agent.nodes.main_agent.get_llm", return_value=fake_llm),
         patch("src.agent.nodes.summarize.ChatOpenAI", return_value=mock_summarize_llm),
+        patch("src.agent.nodes.gather_context.run_history_agent", return_value="暂无相似历史事件"),
+        patch("src.agent.nodes.gather_context.get_redis"),
     ):
         graph = compile_graph(checkpointer=checkpointer)
         config = {"configurable": {"thread_id": "test-thread-1"}}
@@ -154,6 +156,8 @@ async def test_full_agent_flow():
             "needs_approval": False,
             "pending_tool_call": None,
             "summary_md": None,
+            "incident_history_summary": None,
+            "_event_channel": "",
         }
 
         # Phase 1: Run until approval interrupt
@@ -253,6 +257,8 @@ async def test_agent_runner_with_events():
         patch("src.agent.nodes.main_agent.get_llm", return_value=fake_llm),
         patch("src.agent.nodes.summarize.ChatOpenAI", return_value=mock_summarize_llm),
         patch("src.services.agent_runner.get_session_factory") as mock_factory,
+        patch("src.agent.nodes.gather_context.run_history_agent", return_value="暂无相似历史事件"),
+        patch("src.agent.nodes.gather_context.get_redis"),
     ):
         # Mock the session factory for _post_run DB operations
         mock_session = AsyncMock()
@@ -337,6 +343,8 @@ async def test_agent_runner_creates_approval_record():
         patch("src.agent.nodes.main_agent.get_llm", return_value=fake_llm),
         patch("src.services.agent_runner.get_session_factory") as mock_factory,
         patch("src.services.agent_runner.ApprovalService") as mock_approval_svc_cls,
+        patch("src.agent.nodes.gather_context.run_history_agent", return_value="暂无相似历史事件"),
+        patch("src.agent.nodes.gather_context.get_redis"),
     ):
         mock_session = AsyncMock()
         mock_ctx = AsyncMock()

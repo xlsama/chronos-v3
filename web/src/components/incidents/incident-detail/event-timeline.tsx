@@ -3,12 +3,33 @@ import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
 import { ApprovalCard } from "./approval-card";
 import { SummarySection } from "./summary-section";
+import { SubAgentCard } from "./sub-agent-card";
 
-export function EventTimeline() {
-  const { events, thinkingContent } = useIncidentStreamStore();
+interface EventTimelineProps {
+  incidentId?: string;
+  savedToMemory?: boolean;
+}
+
+export function EventTimeline({ incidentId, savedToMemory }: EventTimelineProps) {
+  const { events, gatherContextEvents, thinkingContent, subAgentThinkingContent } =
+    useIncidentStreamStore();
+
+  const hasGatherContext =
+    gatherContextEvents.length > 0 || !!subAgentThinkingContent;
 
   return (
     <div className="space-y-3 p-4" data-testid="event-timeline">
+      {/* Gather Context Phase */}
+      {hasGatherContext && (
+        <SubAgentCard
+          agentName="history"
+          events={gatherContextEvents}
+          isStreaming={!!subAgentThinkingContent}
+          streamingContent={subAgentThinkingContent}
+        />
+      )}
+
+      {/* Main Agent Events */}
       {events.map((event, i) => {
         switch (event.event_type) {
           case "thinking":
@@ -48,6 +69,8 @@ export function EventTimeline() {
               <SummarySection
                 key={i}
                 markdown={event.data.summary_md as string}
+                incidentId={incidentId}
+                savedToMemory={savedToMemory}
               />
             );
           case "error":

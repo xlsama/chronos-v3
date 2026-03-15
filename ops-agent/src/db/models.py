@@ -67,6 +67,7 @@ class Incident(Base):
     )
     summary_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     thread_id: Mapped[str | None] = mapped_column(String(100), nullable=True)  # LangGraph thread
+    saved_to_memory: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -74,7 +75,24 @@ class Incident(Base):
 
     messages: Mapped[list["Message"]] = relationship(back_populates="incident", order_by="Message.created_at")
     approval_requests: Mapped[list["ApprovalRequest"]] = relationship(back_populates="incident")
+    attachments: Mapped[list["Attachment"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
     project: Mapped["Project | None"] = relationship(back_populates="incidents")
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    filename: Mapped[str] = mapped_column(String(500))
+    stored_filename: Mapped[str] = mapped_column(String(500))
+    content_type: Mapped[str] = mapped_column(String(255))
+    size: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    incident: Mapped["Incident | None"] = relationship(back_populates="attachments")
 
 
 class ProjectDocument(Base):
@@ -148,3 +166,19 @@ class ApprovalRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     incident: Mapped["Incident"] = relationship(back_populates="approval_requests")
+
+
+class IncidentHistory(Base):
+    __tablename__ = "incident_history"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("incidents.id"), nullable=True
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(500))
+    summary_md: Mapped[str] = mapped_column(Text)
+    embedding = mapped_column(Vector(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

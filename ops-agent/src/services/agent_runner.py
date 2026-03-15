@@ -43,6 +43,8 @@ class AgentRunner:
             "needs_approval": False,
             "pending_tool_call": None,
             "summary_md": None,
+            "incident_history_summary": None,
+            "_event_channel": channel,
         }
 
         logger.info(f"Starting agent for incident {incident_id}, thread {thread_id}")
@@ -121,22 +123,39 @@ class AgentRunner:
                         return tc
         return None
 
+    def _get_phase_agent(self, event: dict) -> tuple[str, str]:
+        """Extract phase and agent from event metadata."""
+        metadata = event.get("metadata", {})
+        node = metadata.get("langgraph_node", "")
+        if node == "gather_context":
+            return "gather_context", "history"
+        return "main", ""
+
     async def _process_event(self, channel: str, event: dict) -> None:
         kind = event.get("event")
+        phase, agent = self._get_phase_agent(event)
 
         if kind == "on_chat_model_stream":
             chunk = event["data"].get("chunk")
             if chunk and chunk.content:
-                await self.publisher.publish(channel, "thinking", {"content": chunk.content})
+                await self.publisher.publish(channel, "thinking", {
+                    "content": chunk.content,
+                    "phase": phase,
+                    "agent": agent,
+                })
 
         elif kind == "on_tool_start":
             await self.publisher.publish(channel, "tool_call", {
                 "name": event.get("name", ""),
                 "args": event["data"].get("input", {}),
+                "phase": phase,
+                "agent": agent,
             })
 
         elif kind == "on_tool_end":
             await self.publisher.publish(channel, "tool_result", {
                 "name": event.get("name", ""),
                 "output": str(event["data"].get("output", "")),
+                "phase": phase,
+                "agent": agent,
             })

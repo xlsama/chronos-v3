@@ -1,9 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { AlertTriangle, BookOpen, Server, LayoutDashboard } from "lucide-react";
+import { AlertTriangle, BookOpen, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/incidents", label: "Incidents", icon: AlertTriangle },
   { to: "/infrastructure", label: "Infrastructure", icon: Server },
   { to: "/projects", label: "Projects", icon: BookOpen },
@@ -19,10 +18,7 @@ export function Sidebar() {
       </div>
       <nav className="flex-1 space-y-1 p-2">
         {navItems.map((item) => {
-          const isActive =
-            item.to === "/"
-              ? location.pathname === "/"
-              : location.pathname.startsWith(item.to);
+          const isActive = location.pathname.startsWith(item.to);
           return (
             <Link
               key={item.to}

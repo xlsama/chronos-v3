@@ -5,6 +5,7 @@ import orjson
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
 
 from src.api.schemas import (
@@ -20,6 +21,7 @@ from src.lib.errors import NotFoundError
 from src.lib.logger import logger
 from src.lib.redis import get_redis
 from src.services.agent_runner import AgentRunner
+from src.services.incident_history_service import IncidentHistoryService
 from src.services.incident_service import IncidentService
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -72,7 +74,7 @@ async def create_incident(
         _start_agent_background,
         runner,
         str(incident.id),
-        body.title,
+        incident.title,
         body.description,
         body.severity,
         str(body.infrastructure_id or ""),
@@ -99,7 +101,10 @@ async def get_incident(
     incident_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
 ):
-    incident = await session.get(Incident, incident_id)
+    result = await session.execute(
+        select(Incident).options(selectinload(Incident.attachments)).where(Incident.id == incident_id)
+    )
+    incident = result.scalar_one_or_none()
     if not incident:
         raise NotFoundError("Incident not found")
     return incident
@@ -158,3 +163,29 @@ async def send_user_message(
         content=body.content,
     )
     return {"ok": True, "message_id": str(message.id)}
+
+
+@router.post("/{incident_id}/save-to-memory")
+async def save_to_memory(
+    incident_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    incident = await session.get(Incident, incident_id)
+    if not incident:
+        raise NotFoundError("Incident not found")
+
+    if incident.saved_to_memory:
+        return {"ok": False, "error": "already_saved"}
+
+    if not incident.summary_md:
+        return {"ok": False, "error": "no_summary"}
+
+    service = IncidentHistoryService(session=session)
+    record = await service.save(
+        incident_id=incident.id,
+        project_id=incident.project_id,
+        title=incident.title,
+        summary_md=incident.summary_md,
+    )
+
+    return {"ok": True, "incident_history_id": str(record.id)}

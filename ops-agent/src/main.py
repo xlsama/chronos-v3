@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -7,6 +8,7 @@ from psycopg import AsyncConnection
 
 from src.agent.event_publisher import EventPublisher
 from src.api.approvals import router as approvals_router
+from src.api.attachments import router as attachments_router
 from src.api.documents import router as documents_router
 from src.api.incidents import router as incidents_router
 from src.api.infrastructures import router as infrastructures_router
@@ -23,6 +25,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Chronos Ops Agent")
 
     settings = get_settings()
+    os.makedirs(settings.upload_dir, exist_ok=True)
 
     # Initialize LangGraph checkpointer with PostgreSQL
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -71,5 +74,6 @@ async def health():
 app.include_router(infrastructures_router)
 app.include_router(incidents_router)
 app.include_router(approvals_router)
+app.include_router(attachments_router)
 app.include_router(projects_router)
 app.include_router(documents_router)

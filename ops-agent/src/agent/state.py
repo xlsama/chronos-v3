@@ -16,3 +16,5 @@ class OpsState(MessagesState):
     needs_approval: bool
     pending_tool_call: dict | None
     summary_md: str | None
+    incident_history_summary: str | None
+    _event_channel: str

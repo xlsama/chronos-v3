@@ -38,11 +38,24 @@ class ConnectionTestResponse(BaseModel):
 # ── Incident ──
 
 class IncidentCreate(BaseModel):
-    title: str
+    title: str = ""
     description: str
     severity: str = "medium"
     infrastructure_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
+    attachment_ids: list[uuid.UUID] = []
+
+
+class AttachmentResponse(BaseModel):
+    id: uuid.UUID
+    incident_id: uuid.UUID | None
+    filename: str
+    stored_filename: str
+    content_type: str
+    size: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class IncidentResponse(BaseModel):
@@ -55,6 +68,8 @@ class IncidentResponse(BaseModel):
     project_id: uuid.UUID | None
     summary_md: str | None
     thread_id: str | None
+    saved_to_memory: bool
+    attachments: list[AttachmentResponse] = []
     created_at: datetime
     updated_at: datetime
 

@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-v3"
     embedding_dimension: int = 1024
 
+    # Upload
+    upload_dir: str = "uploads"
+
     # Security
     encryption_key: str = "dGVzdC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVz"
     jwt_secret: str = "dev-jwt-secret"

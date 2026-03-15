@@ -4,8 +4,15 @@ import type { SSEEvent } from "@/lib/types";
 
 export function useIncidentStream(incidentId: string | undefined) {
   const eventSourceRef = useRef<EventSource | null>(null);
-  const { addEvent, appendThinking, clearThinking, setConnected, reset } =
-    useIncidentStreamStore();
+  const {
+    addEvent,
+    appendThinking,
+    clearThinking,
+    appendSubAgentThinking,
+    clearSubAgentThinking,
+    setConnected,
+    reset,
+  } = useIncidentStreamStore();
 
   useEffect(() => {
     if (!incidentId) return;
@@ -22,8 +29,30 @@ export function useIncidentStream(incidentId: string | undefined) {
     es.onmessage = (e) => {
       try {
         const event: SSEEvent = JSON.parse(e.data);
+        const phase = (event.data.phase as string) || "";
 
-        if (event.event_type === "thinking") {
+        if (phase === "gather_context") {
+          // Sub agent events
+          if (event.event_type === "thinking") {
+            appendSubAgentThinking(event.data.content as string);
+          } else {
+            const { subAgentThinkingContent } =
+              useIncidentStreamStore.getState();
+            if (subAgentThinkingContent) {
+              addEvent({
+                event_type: "thinking",
+                data: {
+                  content: subAgentThinkingContent,
+                  phase: "gather_context",
+                  agent: event.data.agent,
+                },
+                timestamp: event.timestamp,
+              });
+              clearSubAgentThinking();
+            }
+            addEvent(event);
+          }
+        } else if (event.event_type === "thinking") {
           appendThinking(event.data.content as string);
         } else {
           // When a non-thinking event arrives, flush thinking content

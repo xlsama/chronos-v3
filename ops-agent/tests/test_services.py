@@ -1,4 +1,4 @@
-"""Tests for infrastructure, incident, and approval services.
+"""Tests for infrastructure, incident, approval, and incident history services.
 
 These are unit tests using in-memory mocks instead of a real database.
 """
@@ -12,6 +12,7 @@ import pytest
 from src.services.infrastructure_service import InfrastructureService
 from src.services.incident_service import IncidentService
 from src.services.approval_service import ApprovalService
+from src.services.incident_history_service import IncidentHistoryService
 
 
 # ── Infrastructure Service ──
@@ -185,3 +186,91 @@ class TestApprovalService:
 
         with pytest.raises(ValueError, match="already decided"):
             await service.decide(approval, decision="rejected", decided_by="admin")
+
+
+# ── IncidentHistory Service ──
+
+
+class TestIncidentHistoryService:
+    @pytest.fixture
+    def mock_embedder(self):
+        embedder = AsyncMock()
+        embedder.embed_text.return_value = [0.1] * 1024
+        return embedder
+
+    @pytest.fixture
+    def service(self, mock_embedder):
+        session = AsyncMock()
+        session.add = MagicMock()
+        return IncidentHistoryService(session=session, embedder=mock_embedder)
+
+    async def test_save_creates_record_with_embedding(self, service, mock_embedder, tmp_path):
+        incident_id = uuid.uuid4()
+        mock_incident = MagicMock()
+        mock_incident.saved_to_memory = False
+        service.session.get.return_value = mock_incident
+
+        # Patch HISTORY_DIR to tmp_path
+        with patch("src.services.incident_history_service.HISTORY_DIR", tmp_path):
+            result = await service.save(
+                incident_id=incident_id,
+                project_id=None,
+                title="Disk Full Alert",
+                summary_md="# Disk full\n\nDisk was 95% full.",
+            )
+
+        assert result.title == "Disk Full Alert"
+        assert result.summary_md == "# Disk full\n\nDisk was 95% full."
+        assert result.embedding == [0.1] * 1024
+        mock_embedder.embed_text.assert_called_once_with("# Disk full\n\nDisk was 95% full.")
+        service.session.add.assert_called_once()
+        service.session.commit.assert_called_once()
+
+    async def test_save_writes_markdown_file(self, service, tmp_path):
+        incident_id = uuid.uuid4()
+        service.session.get.return_value = MagicMock(saved_to_memory=False)
+
+        with patch("src.services.incident_history_service.HISTORY_DIR", tmp_path):
+            result = await service.save(
+                incident_id=incident_id,
+                project_id=None,
+                title="OOM Kill",
+                summary_md="# OOM\n\nProcess killed.",
+            )
+
+        md_files = list(tmp_path.glob("*.md"))
+        assert len(md_files) == 1
+        assert "OOM" in md_files[0].read_text()
+
+    async def test_save_updates_saved_to_memory(self, service, tmp_path):
+        incident_id = uuid.uuid4()
+        mock_incident = MagicMock()
+        mock_incident.saved_to_memory = False
+        service.session.get.return_value = mock_incident
+
+        with patch("src.services.incident_history_service.HISTORY_DIR", tmp_path):
+            await service.save(
+                incident_id=incident_id,
+                project_id=None,
+                title="Test",
+                summary_md="Test summary",
+            )
+
+        assert mock_incident.saved_to_memory is True
+
+    async def test_search_returns_formatted_results(self, service, mock_embedder):
+        mock_row = MagicMock()
+        mock_row.title = "Disk Full"
+        mock_row.summary_md = "Disk was full"
+        mock_row.distance = 0.15
+
+        mock_result = MagicMock()
+        mock_result.all.return_value = [mock_row]
+        service.session.execute.return_value = mock_result
+
+        results = await service.search(query="disk full", project_id=None)
+
+        assert len(results) == 1
+        assert results[0]["title"] == "Disk Full"
+        assert results[0]["distance"] == 0.15
+        mock_embedder.embed_text.assert_called_with("disk full")

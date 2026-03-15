@@ -91,6 +91,7 @@ async def test_create_incident(client: AsyncClient, mock_session):
     mock_incident.project_id = None
     mock_incident.summary_md = None
     mock_incident.thread_id = None
+    mock_incident.saved_to_memory = False
     mock_incident.created_at = datetime.now(timezone.utc)
     mock_incident.updated_at = datetime.now(timezone.utc)
 
@@ -194,3 +195,49 @@ async def test_get_approval_not_found(client: AsyncClient, mock_session):
 
     response = await client.get(f"/api/approvals/{uuid.uuid4()}")
     assert response.status_code == 404
+
+
+# ── Save to Memory ──
+
+
+async def test_save_to_memory_endpoint(client: AsyncClient, mock_session):
+    incident_id = uuid.uuid4()
+    mock_incident = MagicMock()
+    mock_incident.id = incident_id
+    mock_incident.title = "Disk full"
+    mock_incident.summary_md = "## Report\n\nDisk was full"
+    mock_incident.saved_to_memory = False
+    mock_incident.project_id = None
+
+    mock_session.get.return_value = mock_incident
+
+    mock_record = MagicMock()
+    mock_record.id = uuid.uuid4()
+
+    with patch("src.api.incidents.IncidentHistoryService") as mock_svc_cls:
+        mock_svc = AsyncMock()
+        mock_svc.save.return_value = mock_record
+        mock_svc_cls.return_value = mock_svc
+
+        response = await client.post(f"/api/incidents/{incident_id}/save-to-memory")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert "incident_history_id" in data
+
+
+async def test_save_to_memory_already_saved(client: AsyncClient, mock_session):
+    incident_id = uuid.uuid4()
+    mock_incident = MagicMock()
+    mock_incident.id = incident_id
+    mock_incident.saved_to_memory = True
+
+    mock_session.get.return_value = mock_incident
+
+    response = await client.post(f"/api/incidents/{incident_id}/save-to-memory")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["error"] == "already_saved"
