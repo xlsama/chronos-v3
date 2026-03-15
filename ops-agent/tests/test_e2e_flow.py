@@ -64,7 +64,13 @@ def build_fake_responses() -> list[AIMessage]:
             tool_calls=[
                 {
                     "name": "exec_write_tool",
-                    "args": {"infra_id": INFRA_ID, "command": "systemctl restart nginx"},
+                    "args": {
+                        "infra_id": INFRA_ID,
+                        "command": "systemctl restart nginx",
+                        "explanation": "重启 nginx 恢复服务",
+                        "risk_level": "MEDIUM",
+                        "risk_detail": "短暂服务中断",
+                    },
                     "id": "tc-write-1",
                 }
             ],
@@ -246,10 +252,20 @@ async def test_agent_runner_with_events():
     with (
         patch("src.agent.nodes.main_agent.get_llm", return_value=fake_llm),
         patch("src.agent.nodes.summarize.ChatOpenAI", return_value=mock_summarize_llm),
+        patch("src.services.agent_runner.get_session_factory") as mock_factory,
     ):
+        # Mock the session factory for _post_run DB operations
+        mock_session = AsyncMock()
+        mock_session.get.return_value = None  # No incident in DB during test
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+        mock_factory.return_value = MagicMock(return_value=mock_ctx)
+
+        inc_id = "00000000-0000-0000-0000-000000000002"
         runner = AgentRunner(publisher=publisher, checkpointer=checkpointer)
         thread_id = await runner.start(
-            incident_id="inc-002",
+            incident_id=inc_id,
             title="Disk check",
             description="Routine disk check",
             severity="low",
@@ -262,6 +278,95 @@ async def test_agent_runner_with_events():
     event_types = [e["event_type"] for e in published_events]
     assert len(published_events) > 0, "AgentRunner should have published events"
     # All events should be on the correct channel
-    expected_channel = f"incident:inc-002"
+    expected_channel = f"incident:{inc_id}"
     for e in published_events:
         assert e["channel"] == expected_channel
+    # Should have summary event from _post_run
+    assert "summary" in event_types, "AgentRunner should publish summary event"
+
+
+async def test_agent_runner_creates_approval_record():
+    """Test AgentRunner creates ApprovalRequest when agent needs approval."""
+    import fakeredis.aioredis
+
+    from src.agent.event_publisher import EventPublisher
+    from src.services.agent_runner import AgentRunner
+
+    checkpointer = MemorySaver()
+
+    mock_ssh = make_mock_ssh()
+    register_ssh_connector(INFRA_ID, mock_ssh)
+
+    # Responses that trigger approval
+    fake_responses = [
+        AIMessage(
+            content="Need to restart nginx",
+            tool_calls=[
+                {
+                    "name": "exec_write_tool",
+                    "args": {
+                        "infra_id": INFRA_ID,
+                        "command": "systemctl restart nginx",
+                        "explanation": "重启 nginx",
+                        "risk_level": "MEDIUM",
+                        "risk_detail": "服务短暂中断",
+                    },
+                    "id": "tc-write-1",
+                }
+            ],
+        ),
+    ]
+    fake_llm = FakeLLM(fake_responses)
+
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    publisher = EventPublisher(redis=redis)
+
+    published_events = []
+    original_publish = publisher.publish
+
+    async def capture_publish(channel, event_type, data):
+        published_events.append({"channel": channel, "event_type": event_type, "data": data})
+        await original_publish(channel, event_type, data)
+
+    publisher.publish = capture_publish
+
+    mock_approval = MagicMock()
+    mock_approval.id = "approval-uuid-123"
+
+    with (
+        patch("src.agent.nodes.main_agent.get_llm", return_value=fake_llm),
+        patch("src.services.agent_runner.get_session_factory") as mock_factory,
+        patch("src.services.agent_runner.ApprovalService") as mock_approval_svc_cls,
+    ):
+        mock_session = AsyncMock()
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+        mock_factory.return_value = MagicMock(return_value=mock_ctx)
+
+        mock_svc = AsyncMock()
+        mock_svc.create.return_value = mock_approval
+        mock_approval_svc_cls.return_value = mock_svc
+
+        inc_id = "00000000-0000-0000-0000-000000000003"
+        runner = AgentRunner(publisher=publisher, checkpointer=checkpointer)
+        thread_id = await runner.start(
+            incident_id=inc_id,
+            title="Restart nginx",
+            description="Need to restart",
+            severity="high",
+            infrastructure_id=INFRA_ID,
+            project_id="",
+        )
+
+    # Verify approval was created with risk fields
+    mock_svc.create.assert_called_once()
+    call_kwargs = mock_svc.create.call_args.kwargs
+    assert call_kwargs["risk_level"] == "MEDIUM"
+    assert call_kwargs["explanation"] == "重启 nginx"
+
+    # Verify approval_required event has approval_id
+    approval_events = [e for e in published_events if e["event_type"] == "approval_required"]
+    assert len(approval_events) == 1
+    assert approval_events[0]["data"]["approval_id"] == "approval-uuid-123"
+    assert approval_events[0]["data"]["tool_name"] == "exec_write_tool"

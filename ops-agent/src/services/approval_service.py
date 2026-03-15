@@ -15,11 +15,17 @@ class ApprovalService:
         incident_id: uuid.UUID,
         tool_name: str,
         tool_args: str,
+        risk_level: str | None = None,
+        risk_detail: str | None = None,
+        explanation: str | None = None,
     ) -> ApprovalRequest:
         approval = ApprovalRequest(
             incident_id=incident_id,
             tool_name=tool_name,
             tool_args=tool_args,
+            risk_level=risk_level,
+            risk_detail=risk_detail,
+            explanation=explanation,
         )
         self.session.add(approval)
         await self.session.commit()

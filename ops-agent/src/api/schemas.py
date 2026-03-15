@@ -87,6 +87,9 @@ class ApprovalResponse(BaseModel):
     decision: str | None
     decided_by: str | None
     decided_at: datetime | None
+    risk_level: str | None
+    risk_detail: str | None
+    explanation: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

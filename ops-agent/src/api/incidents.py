@@ -43,12 +43,13 @@ async def _start_agent_background(
             infrastructure_id=infrastructure_id,
             project_id=project_id,
         )
-        # Write thread_id back to Incident record
+        # Write thread_id back + set status to investigating
         factory = get_session_factory()
         async with factory() as session:
             incident = await session.get(Incident, uuid.UUID(incident_id))
             if incident:
                 incident.thread_id = thread_id
+                incident.status = "investigating"
                 await session.commit()
                 logger.info(f"Agent started for incident {incident_id}, thread {thread_id}")
     except Exception as e:

@@ -143,6 +143,24 @@ class TestApprovalService:
         assert result.decision is None
         service.session.add.assert_called_once()
 
+    async def test_create_approval_request_with_risk_fields(self, service: ApprovalService):
+        incident_id = uuid.uuid4()
+
+        result = await service.create(
+            incident_id=incident_id,
+            tool_name="exec_write_tool",
+            tool_args='{"command": "systemctl restart nginx"}',
+            risk_level="MEDIUM",
+            risk_detail="短暂服务中断",
+            explanation="重启 nginx 恢复服务",
+        )
+
+        assert result.incident_id == incident_id
+        assert result.risk_level == "MEDIUM"
+        assert result.risk_detail == "短暂服务中断"
+        assert result.explanation == "重启 nginx 恢复服务"
+        service.session.add.assert_called()
+
     async def test_approve(self, service: ApprovalService):
         approval = MagicMock()
         approval.decision = None

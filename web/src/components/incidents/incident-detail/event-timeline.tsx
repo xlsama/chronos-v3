@@ -8,7 +8,7 @@ export function EventTimeline() {
   const { events, thinkingContent } = useIncidentStreamStore();
 
   return (
-    <div className="space-y-3 p-4">
+    <div className="space-y-3 p-4" data-testid="event-timeline">
       {events.map((event, i) => {
         switch (event.event_type) {
           case "thinking":
@@ -39,9 +39,8 @@ export function EventTimeline() {
             return (
               <ApprovalCard
                 key={i}
-                toolCall={
-                  event.data.pending_tool_call as Record<string, unknown>
-                }
+                toolCall={event.data.tool_args as Record<string, unknown>}
+                approvalId={event.data.approval_id as string}
               />
             );
           case "summary":

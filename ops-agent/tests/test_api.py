@@ -150,6 +150,9 @@ async def test_decide_approval(client: AsyncClient, mock_session):
     decided_approval.decision = "approved"
     decided_approval.decided_by = "admin"
     decided_approval.decided_at = datetime.now(timezone.utc)
+    decided_approval.risk_level = "MEDIUM"
+    decided_approval.risk_detail = "短暂服务中断"
+    decided_approval.explanation = "重启 nginx"
     decided_approval.created_at = datetime.now(timezone.utc)
 
     # mock_session.get is called twice: once for ApprovalRequest, once for Incident

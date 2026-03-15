@@ -12,6 +12,7 @@ export function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
         "rounded-lg bg-muted p-4 text-sm whitespace-pre-wrap",
         isStreaming && "border-l-2 border-primary",
       )}
+      data-testid="thinking-bubble"
     >
       <div className="mb-1 text-xs font-medium text-muted-foreground">
         Agent Thinking {isStreaming && "..."}

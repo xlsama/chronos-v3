@@ -1,11 +1,15 @@
 import uuid
 
+import orjson
 from langchain_core.messages import HumanMessage
 
 from src.agent.event_publisher import EventPublisher
 from src.agent.graph import compile_graph
 from src.agent.state import OpsState
+from src.db.connection import get_session_factory
+from src.db.models import Incident
 from src.lib.logger import logger
+from src.services.approval_service import ApprovalService
 
 
 class AgentRunner:
@@ -51,6 +55,7 @@ class AgentRunner:
             await self.publisher.publish(channel, "error", {"message": str(e)})
             raise
 
+        await self._post_run(config, channel, incident_id)
         return thread_id
 
     async def resume(self, thread_id: str, incident_id: str, approval_result: dict) -> None:
@@ -66,6 +71,55 @@ class AgentRunner:
             logger.error(f"Agent resume error for incident {incident_id}: {e}")
             await self.publisher.publish(channel, "error", {"message": str(e)})
             raise
+
+        await self._post_run(config, channel, incident_id)
+
+    async def _post_run(self, config: dict, channel: str, incident_id: str) -> None:
+        state = await self.graph.aget_state(config)
+        vals = state.values
+
+        # Gap A/B: interrupted before human_approval → create approval record + SSE
+        if "human_approval" in (state.next or ()):
+            pending = self._extract_pending_tool_call(vals)
+            if pending:
+                args = pending.get("args", {})
+                async with get_session_factory()() as session:
+                    approval = await ApprovalService(session).create(
+                        incident_id=uuid.UUID(incident_id),
+                        tool_name=pending["name"],
+                        tool_args=orjson.dumps(args).decode(),
+                        risk_level=args.get("risk_level"),
+                        risk_detail=args.get("risk_detail"),
+                        explanation=args.get("explanation"),
+                    )
+                await self.publisher.publish(channel, "approval_required", {
+                    "approval_id": str(approval.id),
+                    "tool_name": pending["name"],
+                    "tool_args": args,
+                })
+
+        # Gap C: graph complete → update Incident status + publish summary
+        if vals.get("is_complete"):
+            async with get_session_factory()() as session:
+                incident = await session.get(Incident, uuid.UUID(incident_id))
+                if incident:
+                    incident.summary_md = vals.get("summary_md")
+                    incident.status = "resolved"
+                    await session.commit()
+            await self.publisher.publish(channel, "summary", {
+                "summary_md": vals.get("summary_md", ""),
+            })
+
+    @staticmethod
+    def _extract_pending_tool_call(vals: dict) -> dict | None:
+        """Extract the exec_write_tool call from the last AI message."""
+        messages = vals.get("messages", [])
+        for msg in reversed(messages):
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    if tc["name"] == "exec_write_tool":
+                        return tc
+        return None
 
     async def _process_event(self, channel: str, event: dict) -> None:
         kind = event.get("event")
@@ -86,15 +140,3 @@ class AgentRunner:
                 "name": event.get("name", ""),
                 "output": str(event["data"].get("output", "")),
             })
-
-        elif kind == "on_chain_end":
-            output = event["data"].get("output", {})
-            if isinstance(output, dict):
-                if output.get("is_complete"):
-                    await self.publisher.publish(channel, "summary", {
-                        "summary_md": output.get("summary_md", ""),
-                    })
-                if output.get("needs_approval"):
-                    await self.publisher.publish(channel, "approval_required", {
-                        "pending_tool_call": output.get("pending_tool_call"),
-                    })

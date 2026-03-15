@@ -19,9 +19,18 @@ def build_tools():
         return await exec_read(infra_id=infra_id, command=command)
 
     @tool
-    async def exec_write_tool(infra_id: str, command: str) -> dict:
+    async def exec_write_tool(
+        infra_id: str,
+        command: str,
+        explanation: str,
+        risk_level: str,
+        risk_detail: str,
+    ) -> dict:
         """Execute a write command on the target infrastructure.
-        This requires human approval. Use for commands like: systemctl restart, rm, mkdir, etc.
+        This requires human approval.
+        - explanation: 操作说明（为什么需要执行这个命令）
+        - risk_level: LOW / MEDIUM / HIGH
+        - risk_detail: 风险说明（可能的影响）
         """
         return await exec_write(infra_id=infra_id, command=command)
 

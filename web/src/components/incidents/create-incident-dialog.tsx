@@ -59,7 +59,7 @@ export function CreateIncidentDialog() {
         if (!open) resetForm();
       }}
     >
-      <DialogTrigger render={<Button size="sm" />}>New Incident</DialogTrigger>
+      <DialogTrigger render={<Button size="sm" data-testid="create-incident-btn" />}>New Incident</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Create Incident</DialogTitle>
@@ -71,6 +71,7 @@ export function CreateIncidentDialog() {
               placeholder="Incident title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              data-testid="incident-title"
             />
           </Field>
           <Field>
@@ -80,6 +81,7 @@ export function CreateIncidentDialog() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
+              data-testid="incident-description"
             />
           </Field>
           <Field>
@@ -104,6 +106,7 @@ export function CreateIncidentDialog() {
           <Button
             onClick={() => mutation.mutate()}
             disabled={!title || !description || mutation.isPending}
+            data-testid="submit-incident"
           >
             {mutation.isPending ? "Creating..." : "Create"}
           </Button>

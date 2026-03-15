@@ -6,7 +6,7 @@ interface SummarySectionProps {
 
 export function SummarySection({ markdown }: SummarySectionProps) {
   return (
-    <div className="rounded-lg border-2 border-green-300 bg-green-50/50 p-4">
+    <div className="rounded-lg border-2 border-green-300 bg-green-50/50 p-4" data-testid="summary-section">
       <div className="flex items-center gap-2 text-sm font-semibold text-green-800">
         <CheckCircle className="h-5 w-5" />
         Investigation Complete
