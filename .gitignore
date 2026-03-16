@@ -37,6 +37,7 @@ docker-compose.override.yml
 .coverage
 htmlcov/
 .pytest_cache/
+tests/test-results/
 
 # Alembic
 alembic/versions/*.pyc

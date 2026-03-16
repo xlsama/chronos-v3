@@ -17,7 +17,7 @@ class ConnectionService:
     async def create(
         self,
         name: str,
-        project_id: uuid.UUID,
+        project_id: uuid.UUID | None = None,
         type: str = "ssh",
         description: str | None = None,
         # SSH fields
@@ -33,9 +33,10 @@ class ConnectionService:
         capabilities: list[str] | None = None,
         scope_metadata: dict | None = None,
     ) -> Connection:
-        project = await self.session.get(Project, project_id)
-        if not project:
-            raise ValidationError("Project not found")
+        if project_id:
+            project = await self.session.get(Project, project_id)
+            if not project:
+                raise ValidationError("Project not found")
 
         if type not in {"ssh", "kubernetes"}:
             raise ValidationError(f"Unsupported connection type: {type}")
@@ -46,13 +47,15 @@ class ConnectionService:
         if type == "kubernetes" and not kubeconfig:
             raise ValidationError("Kubernetes connection requires kubeconfig")
 
-        duplicate_stmt = select(Connection).where(
-            Connection.project_id == project_id,
-            Connection.name == name,
-        )
+        dup_filters = [Connection.name == name]
+        if project_id:
+            dup_filters.append(Connection.project_id == project_id)
+        else:
+            dup_filters.append(Connection.project_id.is_(None))
+        duplicate_stmt = select(Connection).where(*dup_filters)
         duplicate = (await self.session.execute(duplicate_stmt)).scalar_one_or_none()
         if duplicate:
-            raise ValidationError("Connection name already exists in this project")
+            raise ValidationError("Connection name already exists")
 
         conn_config = None
         scope_metadata = dict(scope_metadata or {})

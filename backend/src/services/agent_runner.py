@@ -30,24 +30,6 @@ class AgentRunner:
 
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
 
-        # Check monitoring sources for the project
-        has_prometheus = False
-        has_loki = False
-        if project_id:
-            try:
-                from src.services.crypto import CryptoService
-                from src.config import get_settings
-                from src.services.monitoring_source_service import MonitoringSourceService
-
-                async with get_session_factory()() as session:
-                    crypto = CryptoService(key=get_settings().encryption_key)
-                    ms_service = MonitoringSourceService(session=session, crypto=crypto)
-                    has_prometheus, has_loki = await ms_service.has_source_types(
-                        uuid.UUID(project_id)
-                    )
-            except Exception as e:
-                logger.warning(f"Failed to check monitoring sources: {e}")
-
         initial_state = {
             "messages": [HumanMessage(content=f"事件: {title}\n\n{description}")],
             "incident_id": incident_id,
@@ -61,8 +43,8 @@ class AgentRunner:
             "summary_md": None,
             "incident_history_summary": None,
             "kb_summary": None,
-            "has_prometheus": has_prometheus,
-            "has_loki": has_loki,
+            "has_prometheus": False,
+            "has_loki": False,
             "_event_channel": channel,
         }
 
@@ -78,6 +60,32 @@ class AgentRunner:
 
         await self._post_run(config, channel, incident_id)
         return thread_id
+
+    async def resume_with_human_input(self, thread_id: str, incident_id: str, human_input: str) -> None:
+        """Resume graph from ask_human interrupt with user's response."""
+        channel = EventPublisher.channel_for_incident(incident_id)
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
+
+        # Only resume if graph is actually at ask_human interrupt
+        state = await self.graph.aget_state(config)
+        if "ask_human" not in (state.next or ()):
+            return
+
+        from langgraph.types import Command
+
+        resume_input = Command(resume=human_input)
+
+        logger.info(f"Resuming agent (human input) for incident {incident_id}, thread {thread_id}")
+
+        try:
+            async for event in self.graph.astream_events(resume_input, config=config, version="v2"):
+                await self._process_event(channel, event)
+        except Exception as e:
+            logger.error(f"Agent resume (human input) error for incident {incident_id}: {e}")
+            await self.publisher.publish(channel, "error", {"message": str(e)})
+            raise
+
+        await self._post_run(config, channel, incident_id)
 
     async def resume(self, thread_id: str, incident_id: str, approval_result: dict) -> None:
         channel = EventPublisher.channel_for_incident(incident_id)
@@ -176,6 +184,8 @@ class AgentRunner:
         """Extract phase and agent from event metadata."""
         metadata = event.get("metadata", {})
         node = metadata.get("langgraph_node", "")
+        if node == "discover_project":
+            return "discover_project", "discovery"
         if node == "gather_context":
             return "gather_context", "history"
         return "main", ""

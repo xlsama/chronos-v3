@@ -42,7 +42,7 @@ class ConnectionCreate(BaseModel):
     namespace: str | None = None
     capabilities: list[str] = Field(default_factory=list)
     scope_metadata: dict[str, Any] = Field(default_factory=dict)
-    project_id: uuid.UUID
+    project_id: uuid.UUID | None = None
 
 
 class ConnectionUpdate(BaseModel):
@@ -62,7 +62,7 @@ class ConnectionResponse(BaseModel):
     status: str
     capabilities: list[str]
     scope_metadata: dict[str, Any]
-    project_id: uuid.UUID
+    project_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 

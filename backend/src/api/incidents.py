@@ -149,6 +149,8 @@ async def stream_incident(incident_id: uuid.UUID):
 async def send_user_message(
     incident_id: uuid.UUID,
     body: UserMessageRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
     incident = await session.get(Incident, incident_id)
@@ -170,6 +172,17 @@ async def send_user_message(
         event_type="user_message",
         content=body.content,
     )
+
+    # If agent is waiting for human input (ask_human interrupt), resume the graph
+    if incident.thread_id and incident.status == "investigating":
+        runner: AgentRunner = request.app.state.agent_runner
+        background_tasks.add_task(
+            runner.resume_with_human_input,
+            thread_id=incident.thread_id,
+            incident_id=str(incident.id),
+            human_input=body.content,
+        )
+
     return {"ok": True, "message_id": str(message.id)}
 
 

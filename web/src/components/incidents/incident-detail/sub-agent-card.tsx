@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ChevronDown, ChevronRight, Search, BookOpen } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, BookOpen, Crosshair } from "lucide-react";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 
@@ -8,6 +8,7 @@ const AGENT_CONFIG: Record<
   string,
   { label: string; icon: typeof Search }
 > = {
+  discovery: { label: "项目识别", icon: Crosshair },
   history: { label: "历史事件检索", icon: Search },
   kb: { label: "知识库检索", icon: BookOpen },
 };

@@ -2,6 +2,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from src.ops_agent.nodes.ask_human import ask_human_node
+from src.ops_agent.nodes.discover_project import discover_project_node
 from src.ops_agent.nodes.gather_context import gather_context_node
 from src.ops_agent.nodes.human_approval import human_approval_node
 from src.ops_agent.nodes.main_agent import build_all_tools, main_agent_node, route_decision
@@ -17,6 +18,7 @@ def build_graph():
     graph = StateGraph(OpsState)
 
     # Add nodes
+    graph.add_node("discover_project", discover_project_node)
     graph.add_node("gather_context", gather_context_node)
     graph.add_node("main_agent", main_agent_node)
     graph.add_node("tools", tool_node)
@@ -25,9 +27,10 @@ def build_graph():
     graph.add_node("summarize", summarize_node)
 
     # Entry point
-    graph.set_entry_point("gather_context")
+    graph.set_entry_point("discover_project")
 
     # Edges
+    graph.add_edge("discover_project", "gather_context")
     graph.add_edge("gather_context", "main_agent")
     graph.add_conditional_edges(
         "main_agent",

@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: chronos
+      POSTGRES_PASSWORD: chronos
+      POSTGRES_DB: chronos
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chronos"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  target:
+    image: ubuntu:22.04
+    ports:
+      - "12222:22"
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y openssh-server &&
+        mkdir -p /run/sshd &&
+        echo 'root:testpassword' | chpasswd &&
+        echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config &&
+        /usr/sbin/sshd -D
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/tcp/localhost/22'"]
+      interval: 5s
+      timeout: 5s
+      start_period: 60s
+      retries: 30

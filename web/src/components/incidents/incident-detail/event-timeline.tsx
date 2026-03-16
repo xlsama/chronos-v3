@@ -21,23 +21,35 @@ const itemVariants = {
 export function EventTimeline({ incidentId, savedToMemory }: EventTimelineProps) {
   const {
     events,
+    discoveryAgentState,
     historyAgentState,
     kbAgentState,
     thinkingContent,
   } = useIncidentStreamStore();
 
+  const hasDiscovery =
+    discoveryAgentState.events.length > 0 ||
+    !!discoveryAgentState.thinkingContent;
   const hasHistory =
     historyAgentState.events.length > 0 ||
     !!historyAgentState.thinkingContent;
   const hasKB =
     kbAgentState.events.length > 0 || !!kbAgentState.thinkingContent;
-  const hasGatherContext = hasHistory || hasKB;
+  const hasGatherContext = hasDiscovery || hasHistory || hasKB;
 
   return (
     <div className="space-y-3 p-4" data-testid="event-timeline">
       {/* Gather Context Phase — sub agent cards in grid */}
       {hasGatherContext && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {hasDiscovery && (
+            <SubAgentCard
+              agentName="discovery"
+              events={discoveryAgentState.events}
+              isStreaming={!!discoveryAgentState.thinkingContent}
+              streamingContent={discoveryAgentState.thinkingContent}
+            />
+          )}
           {hasHistory && (
             <SubAgentCard
               agentName="history"

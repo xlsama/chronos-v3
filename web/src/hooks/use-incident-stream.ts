@@ -50,7 +50,14 @@ export function useIncidentStream(incidentId: string | undefined) {
           const phase = (event.data.phase as string) || "";
           const agent = (event.data.agent as string) || "history";
 
-          if (phase === "gather_context") {
+          if (phase === "discover_project") {
+            if (event.event_type === "thinking") {
+              appendSubAgentThinking("discovery", event.data.content as string);
+            } else {
+              flushSubAgentThinking("discovery", event.timestamp);
+              addSubAgentEvent("discovery", event);
+            }
+          } else if (phase === "gather_context") {
             if (event.event_type === "thinking") {
               appendSubAgentThinking(agent, event.data.content as string);
             } else {

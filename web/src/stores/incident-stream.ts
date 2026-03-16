@@ -8,6 +8,7 @@ interface SubAgentState {
 
 interface IncidentStreamState {
   events: SSEEvent[];
+  discoveryAgentState: SubAgentState;
   historyAgentState: SubAgentState;
   kbAgentState: SubAgentState;
   isConnected: boolean;
@@ -31,6 +32,7 @@ const emptySubAgent = (): SubAgentState => ({
 
 export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   events: [],
+  discoveryAgentState: emptySubAgent(),
   historyAgentState: emptySubAgent(),
   kbAgentState: emptySubAgent(),
   isConnected: false,
@@ -49,7 +51,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   appendSubAgentThinking: (agent, content) =>
     set((state) => {
       const key =
-        agent === "kb" ? "kbAgentState" : "historyAgentState";
+        agent === "discovery"
+          ? "discoveryAgentState"
+          : agent === "kb"
+            ? "kbAgentState"
+            : "historyAgentState";
       return {
         [key]: {
           ...state[key],
@@ -61,7 +67,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   flushSubAgentThinking: (agent, timestamp) =>
     set((state) => {
       const key =
-        agent === "kb" ? "kbAgentState" : "historyAgentState";
+        agent === "discovery"
+          ? "discoveryAgentState"
+          : agent === "kb"
+            ? "kbAgentState"
+            : "historyAgentState";
       const agentState = state[key];
       if (!agentState.thinkingContent) return {};
       return {
@@ -72,7 +82,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
               event_type: "thinking",
               data: {
                 content: agentState.thinkingContent,
-                phase: "gather_context",
+                phase: agent === "discovery" ? "discover_project" : "gather_context",
                 agent,
               },
               timestamp,
@@ -86,7 +96,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   addSubAgentEvent: (agent, event) =>
     set((state) => {
       const key =
-        agent === "kb" ? "kbAgentState" : "historyAgentState";
+        agent === "discovery"
+          ? "discoveryAgentState"
+          : agent === "kb"
+            ? "kbAgentState"
+            : "historyAgentState";
       return {
         [key]: {
           ...state[key],
@@ -102,6 +116,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   reset: () =>
     set({
       events: [],
+      discoveryAgentState: emptySubAgent(),
       historyAgentState: emptySubAgent(),
       kbAgentState: emptySubAgent(),
       isConnected: false,
