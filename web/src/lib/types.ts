@@ -142,6 +142,7 @@ export interface ProjectDocument {
   filename: string;
   doc_type: string;
   status: string;
+  error_message: string | null;
   created_at: string;
 }
 

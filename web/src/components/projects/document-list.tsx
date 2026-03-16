@@ -4,6 +4,16 @@ import { toast } from "sonner";
 import { FileText, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { deleteDocument, getDocuments } from "@/api/documents";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +24,11 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DocumentViewer } from "./document-viewer";
 
 interface DocumentListProps {
@@ -21,18 +36,38 @@ interface DocumentListProps {
 }
 
 const statusColors: Record<string, string> = {
-  ready: "bg-green-100 text-green-800 border-transparent",
-  processing: "bg-yellow-100 text-yellow-800 border-transparent",
+  indexed: "bg-green-100 text-green-800 border-transparent",
+  indexing: "bg-blue-100 text-blue-800 border-transparent",
+  pending: "bg-yellow-100 text-yellow-800 border-transparent",
   error: "bg-red-100 text-red-800 border-transparent",
+};
+
+const statusLabels: Record<string, string> = {
+  indexed: "已索引",
+  indexing: "索引中",
+  pending: "等待索引",
+  error: "失败",
 };
 
 export function DocumentList({ projectId }: DocumentListProps) {
   const queryClient = useQueryClient();
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    filename: string;
+  } | null>(null);
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ["documents", projectId],
     queryFn: () => getDocuments(projectId),
+    refetchInterval: (query) => {
+      const docs = query.state.data;
+      if (!docs) return false;
+      const hasInProgress = docs.some(
+        (d) => d.status === "pending" || d.status === "indexing",
+      );
+      return hasInProgress ? 2000 : false;
+    },
   });
 
   const deleteMutation = useMutation({
@@ -94,20 +129,35 @@ export function DocumentList({ projectId }: DocumentListProps) {
                 {dayjs(doc.created_at).fromNow()}
               </p>
             </div>
-            <Badge
-              className={
-                statusColors[doc.status] ??
-                "bg-gray-100 text-gray-800 border-transparent"
-              }
-            >
-              {doc.status}
-            </Badge>
+            {doc.status === "error" && doc.error_message ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    className={statusColors.error}
+                  >
+                    {statusLabels.error}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  {doc.error_message}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Badge
+                className={
+                  statusColors[doc.status] ??
+                  "bg-gray-100 text-gray-800 border-transparent"
+                }
+              >
+                {statusLabels[doc.status] ?? doc.status}
+              </Badge>
+            )}
             <Button
               variant="ghost"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                deleteMutation.mutate(doc.id);
+                setDeleteTarget({ id: doc.id, filename: doc.filename });
               }}
               disabled={deleteMutation.isPending}
             >
@@ -116,6 +166,33 @@ export function DocumentList({ projectId }: DocumentListProps) {
           </div>
         ))}
       </div>
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除文档</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除 <strong>{deleteTarget?.filename}</strong>{" "}
+              吗？该操作将同时清除向量数据库中的相关数据，且无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+                setDeleteTarget(null);
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "删除中..." : "删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <DocumentViewer
         documentId={selectedDocId}
         onClose={() => setSelectedDocId(null)}

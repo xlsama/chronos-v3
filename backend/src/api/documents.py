@@ -1,7 +1,7 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -10,9 +10,9 @@ from src.api.schemas import DocumentDetailResponse, DocumentResponse, DocumentUp
 from src.db.connection import get_session
 from src.lib.embedder import Embedder
 from src.lib.errors import NotFoundError
-from src.lib.file_parsers import SUPPORTED_EXTENSIONS
+from src.lib.file_parsers import SUPPORTED_EXTENSIONS, ParsedSegment, is_image, parse_file_segments
 from src.lib.image_describer import ImageDescriber
-from src.services.document_service import DocumentService
+from src.services.document_service import DocumentService, _index_document_background
 from src.services.project_service import ProjectService
 
 router = APIRouter(tags=["documents"])
@@ -39,20 +39,27 @@ def get_image_describer() -> ImageDescriber:
 async def upload_document(
     project_id: uuid.UUID,
     body: DocumentUpload,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
-    embedder: Embedder = Depends(get_embedder),
 ):
     project_service = ProjectService(session=session)
     project = await project_service.get(project_id)
     if not project:
         raise NotFoundError("Project not found")
 
-    service = DocumentService(session=session, embedder=embedder)
-    doc = await service.upload(
+    service = DocumentService(session=session, embedder=None)
+    doc = await service.save_document(
         project_id=project_id,
         filename=body.filename,
         content=body.content,
         doc_type=body.doc_type,
+    )
+    background_tasks.add_task(
+        _index_document_background,
+        document_id=doc.id,
+        project_id=project_id,
+        content=body.content,
+        segments=None,
     )
     return doc
 
@@ -61,8 +68,8 @@ async def upload_document(
 async def upload_document_file(
     project_id: uuid.UUID,
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
-    embedder: Embedder = Depends(get_embedder),
     image_describer: ImageDescriber = Depends(get_image_describer),
 ):
     """Upload a binary file (PDF, Word, Excel, CSV, Markdown, Text, Image)."""
@@ -72,7 +79,6 @@ async def upload_document_file(
         raise NotFoundError("Project not found")
 
     filename = file.filename or "unknown"
-    from pathlib import Path
     ext = Path(filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         from src.lib.errors import AppError
@@ -82,12 +88,46 @@ async def upload_document_file(
         )
 
     file_bytes = await file.read()
-    service = DocumentService(session=session, embedder=embedder, image_describer=image_describer)
-    doc = await service.upload_file(
+
+    # Store original file to filesystem
+    storage_dir = Path("data/knowledge") / project.slug
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    file_path = storage_dir / filename
+    file_path.write_bytes(file_bytes)
+
+    # Parse file (usually fast) - keep in request
+    if is_image(filename):
+        description = await image_describer.describe(file_bytes, filename)
+        content = description
+        doc_type = "image"
+        segments: list[ParsedSegment] = [ParsedSegment(content=description, metadata={"source_type": "image"})]
+    else:
+        segments = parse_file_segments(file_bytes, filename)
+        content = "\n\n".join(seg.content for seg in segments)
+        doc_type_map = {
+            ".pdf": "pdf", ".docx": "word", ".xlsx": "excel", ".xls": "excel",
+            ".csv": "csv", ".md": "markdown", ".txt": "text", ".pptx": "pptx",
+            ".html": "html", ".htm": "html", ".json": "json",
+            ".yaml": "yaml", ".yml": "yaml", ".log": "log",
+        }
+        doc_type = doc_type_map.get(ext, "text")
+
+    # Save document record (fast)
+    service = DocumentService(session=session, embedder=None)
+    doc = await service.save_document(
         project_id=project_id,
-        project_slug=project.slug,
         filename=filename,
-        file_bytes=file_bytes,
+        content=content,
+        doc_type=doc_type,
+    )
+
+    # Chunk + embed in background
+    background_tasks.add_task(
+        _index_document_background,
+        document_id=doc.id,
+        project_id=project_id,
+        content=content,
+        segments=segments,
     )
     return doc
 

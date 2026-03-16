@@ -5,9 +5,11 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.db.connection import get_session_factory
 from src.db.models import DocumentChunk, ProjectDocument
 from src.lib.chunker import ChunkWithMetadata, chunk_segments, chunk_text
 from src.lib.embedder import Embedder
@@ -17,11 +19,86 @@ if TYPE_CHECKING:
     from src.lib.image_describer import ImageDescriber
 
 
+async def _index_document_background(
+    document_id: uuid.UUID,
+    project_id: uuid.UUID,
+    content: str,
+    segments: list[ParsedSegment] | None,
+) -> None:
+    """Background task: chunk, embed, and save vectors for a document."""
+    factory = get_session_factory()
+    embedder = Embedder()
+    async with factory() as session:
+        try:
+            doc = await session.get(ProjectDocument, document_id)
+            if not doc:
+                logger.error(f"Document {document_id} not found for indexing")
+                return
+
+            doc.status = "indexing"
+            await session.commit()
+
+            if segments:
+                chunks_with_meta = chunk_segments(segments)
+            else:
+                chunks_with_meta = [ChunkWithMetadata(content=c, metadata={}) for c in chunk_text(content)]
+
+            texts = [c.content for c in chunks_with_meta]
+            embeddings = await embedder.embed_texts(texts)
+
+            chunk_models = [
+                DocumentChunk(
+                    document_id=doc.id,
+                    project_id=project_id,
+                    chunk_index=i,
+                    content=c.content,
+                    embedding=emb,
+                    chunk_metadata=c.metadata,
+                )
+                for i, (c, emb) in enumerate(zip(chunks_with_meta, embeddings))
+            ]
+            session.add_all(chunk_models)
+
+            doc.status = "indexed"
+            doc.error_message = None
+            await session.commit()
+            logger.info(f"Document {document_id} indexed successfully ({len(chunk_models)} chunks)")
+        except Exception as e:
+            await session.rollback()
+            async with factory() as err_session:
+                doc = await err_session.get(ProjectDocument, document_id)
+                if doc:
+                    doc.status = "error"
+                    doc.error_message = str(e)[:500]
+                    await err_session.commit()
+            logger.error(f"Failed to index document {document_id}: {e}")
+
+
 class DocumentService:
     def __init__(self, session: AsyncSession, embedder: Embedder, image_describer: ImageDescriber | None = None):
         self.session = session
         self.embedder = embedder
         self.image_describer = image_describer
+
+    async def save_document(
+        self,
+        project_id: uuid.UUID,
+        filename: str,
+        content: str,
+        doc_type: str,
+    ) -> ProjectDocument:
+        """Phase 1: Save document record with status=pending. Returns immediately."""
+        doc = ProjectDocument(
+            project_id=project_id,
+            filename=filename,
+            content=content,
+            doc_type=doc_type,
+            status="pending",
+        )
+        self.session.add(doc)
+        await self.session.commit()
+        await self.session.refresh(doc)
+        return doc
 
     async def upload(
         self,

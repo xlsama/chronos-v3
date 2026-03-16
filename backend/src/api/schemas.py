@@ -297,6 +297,7 @@ class DocumentResponse(BaseModel):
     filename: str
     doc_type: str
     status: str
+    error_message: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

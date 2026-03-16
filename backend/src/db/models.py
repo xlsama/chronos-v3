@@ -248,7 +248,8 @@ class ProjectDocument(Base):
     filename: Mapped[str] = mapped_column(String(500))
     content: Mapped[str] = mapped_column(Text)
     doc_type: Mapped[str] = mapped_column(String(50))
-    status: Mapped[str] = mapped_column(String(20), default="processing")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     project: Mapped["Project"] = relationship(back_populates="documents")

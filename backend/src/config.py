@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     # DashScope / Bailian
     dashscope_api_key: str = ""
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    main_model: str = "qwen-plus"
-    mini_model: str = "qwen-turbo"
+    main_model: str = "qwen3.5-plus"
+    mini_model: str = "qwen3.5-flash"
     embedding_model: str = "text-embedding-v4"
     embedding_dimension: int = 1024
     rerank_model: str = "qwen3-rerank"

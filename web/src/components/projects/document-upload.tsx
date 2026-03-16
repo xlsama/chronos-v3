@@ -40,7 +40,7 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
         doc_type: "markdown",
       }),
     onSuccess: () => {
-      toast.success("Document uploaded");
+      toast.success("文件已上传，正在索引中...");
       queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
       form.reset();
     },
@@ -49,7 +49,7 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
   const fileMutation = useMutation({
     mutationFn: (file: File) => uploadDocumentFile(projectId, file),
     onSuccess: () => {
-      toast.success("File uploaded and indexed");
+      toast.success("文件已上传，正在索引中...");
       queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
     },
     onError: (err: Error) => {

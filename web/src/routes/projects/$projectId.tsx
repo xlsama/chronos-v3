@@ -43,16 +43,13 @@ function ProjectDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue="topology">
+      <Tabs defaultValue="documents">
         <div className="px-6 pt-4">
           <TabsList>
-            <TabsTrigger value="topology">Topology</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="topology">Topology</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="topology" className="px-6 py-4">
-          <ProjectTopologyPanel project={project} />
-        </TabsContent>
         <TabsContent value="documents" className="space-y-6 p-6">
           <DocumentUpload projectId={projectId} />
           <DocumentList projectId={projectId} />
