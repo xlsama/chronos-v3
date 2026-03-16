@@ -18,15 +18,29 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     main_model: str = "qwen-plus"
     mini_model: str = "qwen-turbo"
-    embedding_model: str = "text-embedding-v3"
+    embedding_model: str = "text-embedding-v4"
     embedding_dimension: int = 1024
+    rerank_model: str = "qwen3-rerank"
+    rerank_base_url: str = "https://dashscope.aliyuncs.com/compatible-api/v1"
+    vision_model: str = "qwen-vl-max"
+    asr_model: str = "qwen3-asr-flash-realtime"
+    dashscope_ws_url: str = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
 
     # Upload
     upload_dir: str = "uploads"
 
-    # Security
+    # Security — override these in production via environment variables
     encryption_key: str = "dGVzdC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVz"
     jwt_secret: str = "dev-jwt-secret"
+
+    def validate_production_secrets(self) -> list[str]:
+        """Return warnings if default secrets are still in use."""
+        warnings = []
+        if self.encryption_key == "dGVzdC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVz":
+            warnings.append("ENCRYPTION_KEY is using the default dev value — set a unique key in production")
+        if self.jwt_secret == "dev-jwt-secret":
+            warnings.append("JWT_SECRET is using the default dev value — set a unique secret in production")
+        return warnings
 
 
 @lru_cache

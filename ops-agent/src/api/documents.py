@@ -8,14 +8,28 @@ from src.db.connection import get_session
 from src.lib.embedder import Embedder
 from src.lib.errors import NotFoundError
 from src.lib.file_parsers import SUPPORTED_EXTENSIONS
+from src.lib.image_describer import ImageDescriber
 from src.services.document_service import DocumentService
 from src.services.project_service import ProjectService
 
 router = APIRouter(tags=["documents"])
 
+_embedder_instance: Embedder | None = None
+_image_describer_instance: ImageDescriber | None = None
+
 
 def get_embedder() -> Embedder:
-    return Embedder()
+    global _embedder_instance
+    if _embedder_instance is None:
+        _embedder_instance = Embedder()
+    return _embedder_instance
+
+
+def get_image_describer() -> ImageDescriber:
+    global _image_describer_instance
+    if _image_describer_instance is None:
+        _image_describer_instance = ImageDescriber()
+    return _image_describer_instance
 
 
 @router.post("/api/projects/{project_id}/documents", response_model=DocumentResponse)
@@ -46,8 +60,9 @@ async def upload_document_file(
     file: UploadFile,
     session: AsyncSession = Depends(get_session),
     embedder: Embedder = Depends(get_embedder),
+    image_describer: ImageDescriber = Depends(get_image_describer),
 ):
-    """Upload a binary file (PDF, Word, Excel, CSV, Markdown, Text)."""
+    """Upload a binary file (PDF, Word, Excel, CSV, Markdown, Text, Image)."""
     project_service = ProjectService(session=session)
     project = await project_service.get(project_id)
     if not project:
@@ -64,7 +79,7 @@ async def upload_document_file(
         )
 
     file_bytes = await file.read()
-    service = DocumentService(session=session, embedder=embedder)
+    service = DocumentService(session=session, embedder=embedder, image_describer=image_describer)
     doc = await service.upload_file(
         project_id=project_id,
         project_slug=project.slug,

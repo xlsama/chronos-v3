@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Markdown } from "@/components/ui/markdown";
 
 interface ThinkingBubbleProps {
   content: string;
@@ -9,7 +10,7 @@ export function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
   return (
     <div
       className={cn(
-        "rounded-lg bg-muted p-4 text-sm whitespace-pre-wrap",
+        "rounded-lg bg-muted p-4 text-sm",
         isStreaming && "border-l-2 border-primary",
       )}
       data-testid="thinking-bubble"
@@ -17,9 +18,7 @@ export function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
       <div className="mb-1 text-xs font-medium text-muted-foreground">
         Agent Thinking {isStreaming && "..."}
       </div>
-      <div className="prose prose-sm max-w-none dark:prose-invert">
-        {content}
-      </div>
+      <Markdown content={content} streaming={isStreaming} />
     </div>
   );
 }

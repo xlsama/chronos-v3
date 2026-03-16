@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.connection import Base
@@ -67,10 +67,10 @@ class Incident(Base):
     status: Mapped[str] = mapped_column(String(20), default="open")  # open, investigating, resolved, closed
     severity: Mapped[str] = mapped_column(String(20), default="medium")  # low, medium, high, critical
     infrastructure_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("infrastructures.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("infrastructures.id"), nullable=True, index=True
     )
     project_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True, index=True
     )
     summary_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     thread_id: Mapped[str | None] = mapped_column(String(100), nullable=True)  # LangGraph thread
@@ -134,6 +134,7 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text)
     embedding = mapped_column(Vector(1024), nullable=True)
+    chunk_metadata: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, server_default=text("'{}'"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped["ProjectDocument"] = relationship(back_populates="chunks")
@@ -183,7 +184,7 @@ class Service(Base):
         UUID(as_uuid=True), ForeignKey("infrastructures.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(255))
-    service_type: Mapped[str] = mapped_column(String(50))  # process, docker, systemd, k8s_deployment, k8s_statefulset, cron_job, database, cache, queue
+    service_type: Mapped[str] = mapped_column(String(50))  # mysql, postgresql, redis, mongodb, elasticsearch, nginx, apache, cron_job, systemd, docker_container, k8s_deployment, k8s_statefulset, java_app, node_app, python_app, custom
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     namespace: Mapped[str | None] = mapped_column(String(255), nullable=True)  # K8s namespace
     config_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # Extra config as JSON

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { AlertCircle } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { getIncidents } from "@/api/incidents";
@@ -66,29 +67,35 @@ export function IncidentList() {
 
   return (
     <div className="divide-y">
-      {incidents.map((incident) => (
-        <Link
+      {incidents.map((incident, i) => (
+        <motion.div
           key={incident.id}
-          to="/incidents/$incidentId"
-          params={{ incidentId: incident.id }}
-          className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: i * 0.05 }}
         >
-          <div className="flex-1 space-y-1">
-            <p className="font-medium">{incident.title}</p>
-            <p className="text-sm text-muted-foreground line-clamp-1">
-              {incident.description}
-            </p>
-          </div>
-          <Badge className={severityColors[incident.severity]}>
-            {incident.severity}
-          </Badge>
-          <Badge className={statusColors[incident.status]}>
-            {incident.status}
-          </Badge>
-          <span className="text-xs text-muted-foreground">
-            {dayjs(incident.created_at).fromNow()}
-          </span>
-        </Link>
+          <Link
+            to="/incidents/$incidentId"
+            params={{ incidentId: incident.id }}
+            className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+          >
+            <div className="flex-1 space-y-1">
+              <p className="font-medium">{incident.title}</p>
+              <p className="text-sm text-muted-foreground line-clamp-1">
+                {incident.description}
+              </p>
+            </div>
+            <Badge className={severityColors[incident.severity]}>
+              {incident.severity}
+            </Badge>
+            <Badge className={statusColors[incident.status]}>
+              {incident.status}
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              {dayjs(incident.created_at).fromNow()}
+            </span>
+          </Link>
+        </motion.div>
       ))}
     </div>
   );

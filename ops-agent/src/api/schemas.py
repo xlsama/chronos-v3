@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -8,7 +9,7 @@ from pydantic import BaseModel
 
 class InfrastructureCreate(BaseModel):
     name: str
-    type: str = "ssh"  # ssh, kubernetes
+    type: Literal["ssh", "kubernetes"] = "ssh"
     # SSH fields
     host: str = ""
     port: int = 22
@@ -44,10 +45,18 @@ class ConnectionTestResponse(BaseModel):
 
 # ── Service ──
 
+SERVICE_TYPES = Literal[
+    "mysql", "postgresql", "redis", "mongodb", "elasticsearch",
+    "nginx", "apache", "cron_job", "systemd",
+    "docker_container", "k8s_deployment", "k8s_statefulset",
+    "java_app", "node_app", "python_app", "custom",
+]
+
+
 class ServiceCreate(BaseModel):
     infrastructure_id: uuid.UUID
     name: str
-    service_type: str
+    service_type: SERVICE_TYPES
     port: int | None = None
     namespace: str | None = None
     config_json: str | None = None
@@ -79,7 +88,7 @@ class DiscoverServicesResponse(BaseModel):
 class MonitoringSourceCreate(BaseModel):
     project_id: uuid.UUID
     name: str
-    source_type: str  # prometheus, loki
+    source_type: Literal["prometheus", "loki"]
     endpoint: str
     auth_header: str | None = None  # e.g. "Bearer xxx"
 
@@ -102,7 +111,7 @@ class MonitoringSourceResponse(BaseModel):
 class IncidentCreate(BaseModel):
     title: str = ""
     description: str
-    severity: str = "medium"
+    severity: Literal["low", "medium", "high", "critical"] = "medium"
     infrastructure_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     attachment_ids: list[uuid.UUID] = []
@@ -174,7 +183,7 @@ class ApprovalResponse(BaseModel):
 
 
 class ApprovalDecisionRequest(BaseModel):
-    decision: str  # "approved" or "rejected"
+    decision: Literal["approved", "rejected"]
     decided_by: str = "admin"
 
 

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.lib.file_parsers import ParsedSegment
 from src.services.document_service import DocumentService
 
 
@@ -79,6 +80,54 @@ class TestDocumentService:
         assert len(chunks) == 2
         assert chunks[0].chunk_index == 0
         assert chunks[1].chunk_index == 1
+
+    async def test_upload_passes_metadata_to_chunks(self, session, embedder):
+        embedder.embed_texts = AsyncMock(return_value=[[0.1] * 1024, [0.2] * 1024])
+        service = DocumentService(session=session, embedder=embedder)
+
+        segments = [
+            ParsedSegment(content="Page one text", metadata={"page": 1}),
+            ParsedSegment(content="Page two text", metadata={"page": 2}),
+        ]
+
+        await service.upload(
+            project_id=uuid.uuid4(),
+            filename="report.pdf",
+            content="Page one text\n\nPage two text",
+            doc_type="pdf",
+            segments=segments,
+        )
+
+        session.add_all.assert_called_once()
+        chunks = session.add_all.call_args[0][0]
+        assert len(chunks) == 2
+        assert chunks[0].chunk_metadata == {"page": 1}
+        assert chunks[1].chunk_metadata == {"page": 2}
+
+    async def test_upload_file_image(self, session, embedder):
+        embedder.embed_texts = AsyncMock(return_value=[[0.1] * 1024])
+        image_describer = AsyncMock()
+        image_describer.describe = AsyncMock(return_value="A server rack in a datacenter")
+
+        service = DocumentService(session=session, embedder=embedder, image_describer=image_describer)
+
+        with patch("src.services.document_service.Path") as mock_path_cls:
+            mock_path_instance = MagicMock()
+            mock_path_cls.return_value = mock_path_instance
+            mock_path_instance.suffix = ".png"
+            mock_path_instance.__truediv__ = MagicMock(return_value=mock_path_instance)
+            mock_path_instance.mkdir = MagicMock()
+            mock_path_instance.write_bytes = MagicMock()
+
+            result = await service.upload_file(
+                project_id=uuid.uuid4(),
+                project_slug="my-project",
+                filename="server.png",
+                file_bytes=b"\x89PNG\r\n",
+            )
+
+        image_describer.describe.assert_called_once_with(b"\x89PNG\r\n", "server.png")
+        assert result.doc_type == "image"
 
     async def test_list_by_project(self, service, session):
         mock_result = MagicMock()

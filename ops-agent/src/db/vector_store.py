@@ -19,8 +19,10 @@ class VectorStore:
         stmt = (
             select(
                 DocumentChunk.id,
+                DocumentChunk.document_id,
                 DocumentChunk.content,
                 DocumentChunk.chunk_index,
+                DocumentChunk.chunk_metadata,
                 ProjectDocument.filename,
                 DocumentChunk.embedding.cosine_distance(query_embedding).label("distance"),
             )
@@ -37,8 +39,10 @@ class VectorStore:
         return [
             {
                 "id": str(row.id),
+                "document_id": str(row.document_id),
                 "content": row.content,
                 "chunk_index": row.chunk_index,
+                "metadata": row.chunk_metadata or {},
                 "filename": row.filename,
                 "distance": row.distance,
             }

@@ -7,16 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const typeIcons: Record<string, string> = {
-  docker: "🐳",
-  systemd: "⚙️",
-  process: "📦",
-  database: "🐬",
-  cache: "🔴",
-  queue: "📨",
+  mysql: "🐬",
+  postgresql: "🐘",
+  redis: "🔴",
+  mongodb: "🍃",
+  elasticsearch: "🔍",
+  nginx: "🌐",
+  apache: "🪶",
   cron_job: "⏰",
-  k8s_deployment: "📦",
-  k8s_statefulset: "📦",
-  k8s_service: "🔗",
+  systemd: "⚙️",
+  docker_container: "🐳",
+  k8s_deployment: "☸️",
+  k8s_statefulset: "☸️",
+  java_app: "☕",
+  node_app: "💚",
+  python_app: "🐍",
+  custom: "📦",
 };
 
 export function ServiceList({ infraId }: { infraId: string }) {

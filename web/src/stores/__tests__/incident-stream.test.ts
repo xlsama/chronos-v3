@@ -9,10 +9,12 @@ describe("incident-stream store", () => {
   it("should start with empty state", () => {
     const state = useIncidentStreamStore.getState();
     expect(state.events).toEqual([]);
-    expect(state.gatherContextEvents).toEqual([]);
+    expect(state.historyAgentState.events).toEqual([]);
+    expect(state.kbAgentState.events).toEqual([]);
     expect(state.isConnected).toBe(false);
     expect(state.thinkingContent).toBe("");
-    expect(state.subAgentThinkingContent).toBe("");
+    expect(state.historyAgentState.thinkingContent).toBe("");
+    expect(state.kbAgentState.thinkingContent).toBe("");
   });
 
   it("should add events", () => {
@@ -60,43 +62,37 @@ describe("incident-stream store", () => {
       timestamp: "2026-01-01T00:00:00Z",
     });
     state.appendThinking("test");
-    state.appendSubAgentThinking("sub-test");
+    state.appendSubAgentThinking("history", "sub-test");
     state.setConnected(true);
 
     state.reset();
 
     const newState = useIncidentStreamStore.getState();
     expect(newState.events).toEqual([]);
-    expect(newState.gatherContextEvents).toEqual([]);
+    expect(newState.historyAgentState.events).toEqual([]);
+    expect(newState.kbAgentState.events).toEqual([]);
     expect(newState.thinkingContent).toBe("");
-    expect(newState.subAgentThinkingContent).toBe("");
+    expect(newState.historyAgentState.thinkingContent).toBe("");
+    expect(newState.kbAgentState.thinkingContent).toBe("");
     expect(newState.isConnected).toBe(false);
   });
 
-  it("should route gather_context events to gatherContextEvents", () => {
-    const { addEvent } = useIncidentStreamStore.getState();
-    addEvent({
-      event_type: "tool_call",
-      data: { name: "search", phase: "gather_context", agent: "history" },
-      timestamp: "2026-01-01T00:00:00Z",
-    });
-
-    const state = useIncidentStreamStore.getState();
-    expect(state.gatherContextEvents).toHaveLength(1);
-    expect(state.events).toHaveLength(0);
-  });
-
-  it("should append and clear sub agent thinking content", () => {
-    const { appendSubAgentThinking, clearSubAgentThinking } =
+  it("should append and flush sub agent thinking content", () => {
+    const { appendSubAgentThinking, flushSubAgentThinking } =
       useIncidentStreamStore.getState();
-    appendSubAgentThinking("Searching ");
-    appendSubAgentThinking("history...");
+    appendSubAgentThinking("history", "Searching ");
+    appendSubAgentThinking("history", "history...");
 
-    expect(useIncidentStreamStore.getState().subAgentThinkingContent).toBe(
-      "Searching history...",
-    );
+    expect(
+      useIncidentStreamStore.getState().historyAgentState.thinkingContent,
+    ).toBe("Searching history...");
 
-    clearSubAgentThinking();
-    expect(useIncidentStreamStore.getState().subAgentThinkingContent).toBe("");
+    flushSubAgentThinking("history", "2026-01-01T00:00:00Z");
+    expect(
+      useIncidentStreamStore.getState().historyAgentState.thinkingContent,
+    ).toBe("");
+    expect(
+      useIncidentStreamStore.getState().historyAgentState.events,
+    ).toHaveLength(1);
   });
 });

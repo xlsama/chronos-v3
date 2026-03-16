@@ -1,13 +1,14 @@
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { Upload } from "lucide-react";
 import { uploadDocument, uploadDocumentFile } from "@/api/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const ACCEPTED_TYPES: Record<string, string[]> = {
@@ -29,18 +30,19 @@ interface DocumentUploadProps {
 }
 
 export function DocumentUpload({ projectId }: DocumentUploadProps) {
-  const [filename, setFilename] = useState("");
-  const [content, setContent] = useState("");
   const queryClient = useQueryClient();
 
   const textMutation = useMutation({
-    mutationFn: () =>
-      uploadDocument(projectId, { filename, content, doc_type: "markdown" }),
+    mutationFn: (data: { filename: string; content: string }) =>
+      uploadDocument(projectId, {
+        filename: data.filename,
+        content: data.content,
+        doc_type: "markdown",
+      }),
     onSuccess: () => {
       toast.success("Document uploaded");
       queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
-      setFilename("");
-      setContent("");
+      form.reset();
     },
   });
 
@@ -52,6 +54,13 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
     },
     onError: (err: Error) => {
       toast.error(err.message);
+    },
+  });
+
+  const form = useForm({
+    defaultValues: { filename: "", content: "" },
+    onSubmit: ({ value }) => {
+      textMutation.mutate(value);
     },
   });
 
@@ -111,32 +120,76 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
           </div>
         </TabsContent>
 
-        <TabsContent value="text" className="space-y-4 pt-4">
-          <Field>
-            <FieldLabel>Filename</FieldLabel>
-            <Input
-              placeholder="e.g. deploy-guide.md"
-              value={filename}
-              onChange={(e) => setFilename(e.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Content</FieldLabel>
-            <Textarea
-              placeholder="Paste document content here..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={8}
-              className="font-mono"
-            />
-          </Field>
-          <Button
-            size="sm"
-            onClick={() => textMutation.mutate()}
-            disabled={!filename || !content || textMutation.isPending}
+        <TabsContent value="text" className="pt-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              form.handleSubmit();
+            }}
+            className="space-y-4"
           >
-            {textMutation.isPending ? "Uploading..." : "Upload"}
-          </Button>
+            <form.Field
+              name="filename"
+              validators={{
+                onSubmit: ({ value }) =>
+                  !value ? "文件名不能为空" : undefined,
+              }}
+            >
+              {(field) => (
+                <Field
+                  data-invalid={
+                    field.state.meta.errors.length > 0 || undefined
+                  }
+                >
+                  <FieldLabel>Filename</FieldLabel>
+                  <Input
+                    placeholder="e.g. deploy-guide.md"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  <FieldError
+                    errors={field.state.meta.errors.map((e) => ({
+                      message: String(e),
+                    }))}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <form.Field
+              name="content"
+              validators={{
+                onSubmit: ({ value }) =>
+                  !value ? "内容不能为空" : undefined,
+              }}
+            >
+              {(field) => (
+                <Field
+                  data-invalid={
+                    field.state.meta.errors.length > 0 || undefined
+                  }
+                >
+                  <FieldLabel>Content</FieldLabel>
+                  <Textarea
+                    placeholder="Paste document content here..."
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    rows={8}
+                    className="font-mono"
+                  />
+                  <FieldError
+                    errors={field.state.meta.errors.map((e) => ({
+                      message: String(e),
+                    }))}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <Button size="sm" type="submit" disabled={textMutation.isPending}>
+              {textMutation.isPending ? "Uploading..." : "Upload"}
+            </Button>
+          </form>
         </TabsContent>
       </Tabs>
     </div>

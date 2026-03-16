@@ -87,8 +87,10 @@ class ServiceCatalog:
                     if len(parts) >= 1:
                         name = parts[0].strip()
                         port = self._extract_port(parts[1]) if len(parts) > 1 else None
+                        image = parts[2].strip() if len(parts) > 2 else ""
+                        svc_type = self._guess_type_from_image(image) or "docker_container"
                         svc = await self._create_if_not_exists(
-                            infra_id, name, "docker", port
+                            infra_id, name, svc_type, port
                         )
                         if svc:
                             discovered.append(svc)
@@ -196,25 +198,6 @@ class ServiceCatalog:
         except Exception as e:
             logger.debug(f"K8s statefulset discovery failed: {e}")
 
-        # K8s Services (to get ports)
-        try:
-            result = await connector.execute(
-                "kubectl get services --all-namespaces -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,PORT:.spec.ports[0].port --no-headers"
-            )
-            if result.exit_code == 0 and result.stdout.strip():
-                for line in result.stdout.strip().split("\n"):
-                    parts = line.split()
-                    if len(parts) >= 3 and parts[1] != "kubernetes":
-                        ns, name = parts[0], parts[1]
-                        port = int(parts[2]) if parts[2] != "<none>" else None
-                        svc = await self._create_if_not_exists(
-                            infra_id, f"svc-{name}", "k8s_service", port=port, namespace=ns
-                        )
-                        if svc:
-                            discovered.append(svc)
-        except Exception as e:
-            logger.debug(f"K8s service discovery failed: {e}")
-
         return discovered
 
     async def _create_if_not_exists(
@@ -269,15 +252,50 @@ class ServiceCatalog:
         return name not in skip
 
     @staticmethod
-    def _guess_service_type(proc_name: str, port: int) -> str:
-        db_ports = {3306: "database", 5432: "database", 27017: "database"}
-        cache_ports = {6379: "cache", 11211: "cache"}
-        queue_ports = {5672: "queue", 9092: "queue"}
+    def _guess_type_from_image(image: str) -> str | None:
+        """Guess fine-grained service type from Docker image name."""
+        image_lower = image.lower().split(":")[0].split("/")[-1]  # e.g. "mysql" from "library/mysql:8"
+        mapping = {
+            "mysql": "mysql", "mariadb": "mysql",
+            "postgres": "postgresql", "postgresql": "postgresql",
+            "redis": "redis",
+            "mongo": "mongodb", "mongodb": "mongodb",
+            "elasticsearch": "elasticsearch", "opensearch": "elasticsearch",
+            "nginx": "nginx",
+            "httpd": "apache", "apache": "apache",
+        }
+        for keyword, svc_type in mapping.items():
+            if keyword in image_lower:
+                return svc_type
+        return None
 
-        if port in db_ports:
-            return db_ports[port]
-        if port in cache_ports:
-            return cache_ports[port]
-        if port in queue_ports:
-            return queue_ports[port]
-        return "process"
+    @staticmethod
+    def _guess_service_type(proc_name: str, port: int) -> str:
+        port_map = {
+            3306: "mysql",
+            5432: "postgresql",
+            27017: "mongodb",
+            6379: "redis",
+            9200: "elasticsearch",
+        }
+        if port in port_map:
+            return port_map[port]
+
+        name_map = {
+            "mysql": "mysql", "mariadb": "mysql",
+            "postgres": "postgresql",
+            "redis": "redis",
+            "mongo": "mongodb",
+            "elasticsearch": "elasticsearch",
+            "nginx": "nginx",
+            "httpd": "apache", "apache": "apache",
+            "java": "java_app",
+            "node": "node_app",
+            "python": "python_app", "gunicorn": "python_app", "uvicorn": "python_app",
+        }
+        proc_lower = proc_name.lower()
+        for keyword, svc_type in name_map.items():
+            if keyword in proc_lower:
+                return svc_type
+
+        return "custom"

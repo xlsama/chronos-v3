@@ -24,12 +24,12 @@ class TestServiceCatalogCRUD:
         result = await catalog.create(
             infrastructure_id=infra_id,
             name="nginx",
-            service_type="docker",
+            service_type="nginx",
             port=80,
         )
 
         assert result.name == "nginx"
-        assert result.service_type == "docker"
+        assert result.service_type == "nginx"
         assert result.port == 80
         assert result.infrastructure_id == infra_id
         session.add.assert_called_once()
@@ -101,9 +101,10 @@ class TestAutoDiscoverSSH:
 
         assert len(discovered) == 2
         assert discovered[0].name == "nginx"
-        assert discovered[0].service_type == "docker"
+        assert discovered[0].service_type == "nginx"
         assert discovered[0].port == 80
         assert discovered[1].name == "redis"
+        assert discovered[1].service_type == "redis"
         assert discovered[1].port == 6379
 
     @patch("src.services.service_catalog.get_connector")
@@ -158,12 +159,10 @@ class TestAutoDiscoverK8s:
 
         deployments_output = "default   nginx\nkube-system   coredns"
         statefulsets_output = "default   postgres"
-        services_output = "default   nginx   80\ndefault   postgres   5432"
 
         mock_connector.execute.side_effect = [
             MagicMock(exit_code=0, stdout=deployments_output),
             MagicMock(exit_code=0, stdout=statefulsets_output),
-            MagicMock(exit_code=0, stdout=services_output),
         ]
 
         discovered = await catalog.auto_discover(infra_id)
@@ -172,7 +171,6 @@ class TestAutoDiscoverK8s:
         names = [s.name for s in discovered]
         assert "k8s_deployment" in types
         assert "k8s_statefulset" in types
-        assert "k8s_service" in types
         assert "nginx" in names
         assert "coredns" in names
         assert "postgres" in names
@@ -197,19 +195,27 @@ class TestHelperMethods:
         assert ServiceCatalog._extract_port("") is None
         assert ServiceCatalog._extract_port("no-port-here") is None
 
-    def test_guess_service_type_database(self):
-        assert ServiceCatalog._guess_service_type("mysql", 3306) == "database"
-        assert ServiceCatalog._guess_service_type("postgres", 5432) == "database"
-        assert ServiceCatalog._guess_service_type("mongo", 27017) == "database"
+    def test_guess_service_type_by_port(self):
+        assert ServiceCatalog._guess_service_type("mysqld", 3306) == "mysql"
+        assert ServiceCatalog._guess_service_type("pg_main", 5432) == "postgresql"
+        assert ServiceCatalog._guess_service_type("mongod", 27017) == "mongodb"
+        assert ServiceCatalog._guess_service_type("redis-server", 6379) == "redis"
+        assert ServiceCatalog._guess_service_type("es", 9200) == "elasticsearch"
 
-    def test_guess_service_type_cache(self):
-        assert ServiceCatalog._guess_service_type("redis", 6379) == "cache"
-        assert ServiceCatalog._guess_service_type("memcached", 11211) == "cache"
-
-    def test_guess_service_type_queue(self):
-        assert ServiceCatalog._guess_service_type("rabbitmq", 5672) == "queue"
-        assert ServiceCatalog._guess_service_type("kafka", 9092) == "queue"
+    def test_guess_service_type_by_name(self):
+        assert ServiceCatalog._guess_service_type("nginx", 80) == "nginx"
+        assert ServiceCatalog._guess_service_type("node", 3000) == "node_app"
+        assert ServiceCatalog._guess_service_type("java", 8080) == "java_app"
+        assert ServiceCatalog._guess_service_type("gunicorn", 8000) == "python_app"
+        assert ServiceCatalog._guess_service_type("httpd", 80) == "apache"
 
     def test_guess_service_type_default(self):
-        assert ServiceCatalog._guess_service_type("nginx", 80) == "process"
-        assert ServiceCatalog._guess_service_type("node", 3000) == "process"
+        assert ServiceCatalog._guess_service_type("unknown-proc", 9999) == "custom"
+
+    def test_guess_type_from_image(self):
+        assert ServiceCatalog._guess_type_from_image("nginx:latest") == "nginx"
+        assert ServiceCatalog._guess_type_from_image("library/mysql:8") == "mysql"
+        assert ServiceCatalog._guess_type_from_image("redis:7") == "redis"
+        assert ServiceCatalog._guess_type_from_image("postgres:15-alpine") == "postgresql"
+        assert ServiceCatalog._guess_type_from_image("mongo:6") == "mongodb"
+        assert ServiceCatalog._guess_type_from_image("custom-app:v1") is None

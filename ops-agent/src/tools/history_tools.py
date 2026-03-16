@@ -25,7 +25,7 @@ async def search_incident_history(query: str, project_id: str = "") -> str:
 
     sections = []
     for r in results:
-        similarity = 1 - r["distance"]
+        similarity = r.get("relevance_score", 1 - r["distance"])
         sections.append(
             f"### {r['title']} (相似度: {similarity:.2f})\n\n"
             f"{r['summary_md']}"

@@ -1,0 +1,1 @@
+{"name":"E2E Test Server","type":"ssh","host":"localhost","port":2222,"username":"testuser","password":"testpass"}

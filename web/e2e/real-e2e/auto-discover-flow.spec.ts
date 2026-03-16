@@ -1,13 +1,11 @@
 import { test, expect } from "@playwright/test";
 import {
-  humanType,
   readingPause,
   thinkingPause,
   waitForBackend,
   cleanupTestData,
 } from "./helpers";
 
-const BASE_URL = "http://localhost:5173";
 const API_URL = "http://localhost:8000";
 
 test.describe("Agent 自主发现基础设施 - Real E2E", () => {
@@ -70,16 +68,24 @@ test.describe("Agent 自主发现基础设施 - Real E2E", () => {
     await readingPause();
 
     // ── Phase 2: 创建事件（不指定 infra）──
-    // Create incident via Playwright request API (avoids React controlled input issues)
-    const res = await page.request.post("http://localhost:8000/api/incidents", {
-      data: { description: "服务器磁盘空间告警，请检查磁盘使用情况" },
-    });
-    const incident = await res.json();
+    // Navigate to incidents list first, then create via browser fetch (through Vite proxy)
+    // so we can navigate to detail page BEFORE the BackgroundTask starts the Agent.
+    await page.goto("/incidents");
     await readingPause();
 
-    // Navigate to the incident detail page
+    const incident = await page.evaluate(async () => {
+      const res = await fetch("/api/incidents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: "服务器磁盘空间告警，请检查磁盘使用情况",
+        }),
+      });
+      return res.json();
+    });
+
+    // Navigate immediately to establish SSE before Agent starts
     await page.goto(`/incidents/${incident.id}`);
-    await readingPause();
 
     // ── Phase 3: 观察 Agent 工作 ──
 

@@ -13,8 +13,9 @@ class HTTPResult:
 
 
 class HTTPConnector:
-    def __init__(self, timeout: int = 30):
+    def __init__(self, timeout: int = 30, verify: bool = True):
         self.timeout = timeout
+        self.verify = verify
 
     async def request(
         self,
@@ -24,7 +25,7 @@ class HTTPConnector:
         body: str | None = None,
     ) -> HTTPResult:
         logger.info(f"HTTP {method} {url}")
-        async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, verify=self.verify) as client:
             response = await client.request(
                 method=method.upper(),
                 url=url,

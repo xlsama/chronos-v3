@@ -1,6 +1,7 @@
 """Tests for text chunker — pure function, no external deps."""
 
-from src.lib.chunker import chunk_text
+from src.lib.chunker import ChunkWithMetadata, chunk_segments, chunk_text
+from src.lib.file_parsers import ParsedSegment
 
 
 class TestChunkText:
@@ -47,4 +48,40 @@ class TestChunkText:
 
     def test_whitespace_only_returns_empty(self):
         result = chunk_text("   \n\n   ")
+        assert result == []
+
+
+class TestChunkSegments:
+    def test_preserves_metadata(self):
+        segments = [
+            ParsedSegment(content="Short text", metadata={"page": 1}),
+            ParsedSegment(content="Another piece", metadata={"page": 2}),
+        ]
+        result = chunk_segments(segments, max_chars=500)
+        assert len(result) == 2
+        assert result[0].content == "Short text"
+        assert result[0].metadata == {"page": 1}
+        assert result[1].content == "Another piece"
+        assert result[1].metadata == {"page": 2}
+
+    def test_splits_long_segment_keeps_metadata(self):
+        long_content = "Line one.\n\nLine two.\n\nLine three."
+        segments = [ParsedSegment(content=long_content, metadata={"slide": 3})]
+        result = chunk_segments(segments, max_chars=20)
+        assert len(result) >= 2
+        for chunk in result:
+            assert chunk.metadata == {"slide": 3}
+
+    def test_filters_empty_segments(self):
+        segments = [
+            ParsedSegment(content="   ", metadata={"page": 1}),
+            ParsedSegment(content="Real content", metadata={"page": 2}),
+        ]
+        result = chunk_segments(segments, max_chars=500)
+        assert len(result) == 1
+        assert result[0].content == "Real content"
+        assert result[0].metadata == {"page": 2}
+
+    def test_empty_segments_list(self):
+        result = chunk_segments([], max_chars=500)
         assert result == []

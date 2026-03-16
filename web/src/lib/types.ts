@@ -89,7 +89,8 @@ export interface ApprovalRequest {
   created_at: string;
 }
 
-// SSE event types
+// SSE event types — canonical shape kept for runtime compatibility.
+// Validated at parse time via sseEventSchema in lib/schemas.ts.
 export interface SSEEvent {
   event_type: string;
   data: Record<string, unknown>;

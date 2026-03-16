@@ -94,7 +94,7 @@ export function createMockService(overrides?: Partial<Service>): Service {
     id: "svc-001",
     infrastructure_id: INFRA_SSH_ID,
     name: "nginx",
-    service_type: "docker",
+    service_type: "nginx",
     port: 80,
     namespace: null,
     config_json: null,
@@ -112,13 +112,13 @@ export function createMockServiceList(): Service[] {
     createMockService({
       id: "svc-002",
       name: "redis",
-      service_type: "cache",
+      service_type: "redis",
       port: 6379,
     }),
     createMockService({
       id: "svc-003",
       name: "postgres",
-      service_type: "database",
+      service_type: "postgresql",
       port: 5432,
     }),
   ];

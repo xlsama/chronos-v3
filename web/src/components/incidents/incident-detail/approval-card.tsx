@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { motion } from "motion/react";
 import { ShieldAlert } from "lucide-react";
 import { decideApproval } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
@@ -30,9 +31,12 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
   const riskDetail = toolCall?.risk_detail as string | undefined;
 
   return (
-    <div
+    <motion.div
       className="rounded-lg border-2 border-yellow-300 bg-yellow-50/50 p-4"
       data-testid="approval-card"
+      initial={{ scale: 0.95, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
       <div className="flex items-center gap-2 text-sm font-semibold text-yellow-800">
         <ShieldAlert className="h-5 w-5" />
@@ -96,6 +100,6 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
           </Button>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

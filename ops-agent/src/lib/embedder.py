@@ -10,7 +10,7 @@ class Embedder:
         self.model = s.embedding_model
         self.dimension = s.embedding_dimension
 
-    async def embed_texts(self, texts: list[str], batch_size: int = 20) -> list[list[float]]:
+    async def embed_texts(self, texts: list[str], batch_size: int = 10) -> list[list[float]]:
         if not texts:
             raise ValueError("texts must not be empty")
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Paperclip, Send, X } from "lucide-react";
+import { Check, Mic, Paperclip, Send, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import {
   FileUpload,
@@ -12,6 +13,8 @@ import {
   PromptInputActions,
   PromptInputTextarea,
 } from "@/components/ui/prompt-input";
+import { useVoiceInput } from "@/hooks/use-voice-input";
+import { AudioVisualizer } from "@/components/voice-input/audio-visualizer";
 
 interface FileWithPreview {
   file: File;
@@ -34,6 +37,18 @@ export function PromptComposer({
   const [text, setText] = useState("");
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const objectUrlsRef = useRef<string[]>([]);
+
+  const { state: voiceState, interimText, analyserNode, startRecording, stopRecording, cancelRecording } =
+    useVoiceInput({
+      onTranscript: useCallback((transcript: string) => {
+        setText((prev) => {
+          const separator = prev && !prev.endsWith("\n") ? "\n" : "";
+          return prev + separator + transcript;
+        });
+      }, []),
+    });
+
+  const isRecording = voiceState === "recording" || voiceState === "connecting";
 
   useEffect(() => {
     return () => {
@@ -115,7 +130,7 @@ export function PromptComposer({
         onSubmit={handleSubmit}
         disabled={disabled}
       >
-        {files.length > 0 && (
+        {files.length > 0 && !isRecording && (
           <div className="flex flex-wrap gap-2 px-2 pt-2">
             {files.map((f, i) => (
               <div
@@ -151,30 +166,98 @@ export function PromptComposer({
           </div>
         )}
 
-        <PromptInputTextarea
-          placeholder={placeholder}
-          onPaste={handlePaste}
-          data-testid="prompt-textarea"
-        />
+        <AnimatePresence mode="wait">
+          {isRecording ? (
+            <motion.div
+              key="recording"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="flex items-center gap-3 overflow-hidden px-4 py-3"
+            >
+              <AudioVisualizer analyserNode={analyserNode} className="shrink-0" />
+              <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">
+                {voiceState === "connecting"
+                  ? "正在连接..."
+                  : interimText || "正在聆听..."}
+              </span>
+            </motion.div>
+          ) : (
+            <motion.div key="textarea" initial={false}>
+              <PromptInputTextarea
+                placeholder={placeholder}
+                onPaste={handlePaste}
+                data-testid="prompt-textarea"
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <PromptInputActions className="justify-between px-2 pb-1">
           <PromptInputAction tooltip="添加附件">
             <FileUploadTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8 rounded-full">
+              <Button variant="ghost" size="icon" className="size-8 rounded-full" disabled={isRecording}>
                 <Paperclip className="size-4" />
               </Button>
             </FileUploadTrigger>
           </PromptInputAction>
 
-          <Button
-            size="icon"
-            className="size-8 rounded-full"
-            onClick={handleSubmit}
-            disabled={disabled || isLoading || (!text.trim() && files.length === 0)}
-            data-testid="submit-incident"
-          >
-            <Send className="size-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <AnimatePresence mode="wait">
+              {isRecording ? (
+                <motion.div
+                  key="recording-actions"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  className="flex items-center gap-1"
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-full"
+                    onClick={cancelRecording}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    className="bg-primary size-8 rounded-full"
+                    onClick={stopRecording}
+                  >
+                    <Check className="size-4" />
+                  </Button>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="normal-actions"
+                  initial={false}
+                  className="flex items-center gap-1"
+                >
+                  <PromptInputAction tooltip="语音输入">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 rounded-full"
+                      onClick={startRecording}
+                      disabled={disabled || isLoading}
+                    >
+                      <Mic className="size-4" />
+                    </Button>
+                  </PromptInputAction>
+                  <Button
+                    size="icon"
+                    className="size-8 rounded-full"
+                    onClick={handleSubmit}
+                    disabled={disabled || isLoading || (!text.trim() && files.length === 0)}
+                    data-testid="submit-incident"
+                  >
+                    <Send className="size-4" />
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </PromptInputActions>
       </PromptInput>
     </FileUpload>

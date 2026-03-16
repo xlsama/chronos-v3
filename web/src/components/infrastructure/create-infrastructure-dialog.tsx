@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { createInfrastructure } from "@/api/infrastructures";
+import { infrastructureSchema } from "@/lib/schemas";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -23,51 +25,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+function fieldError(errors: unknown[]) {
+  return errors.map((e) => ({
+    message:
+      typeof e === "string"
+        ? e
+        : (e as { message?: string })?.message ?? String(e),
+  }));
+}
+
 export function CreateInfrastructureDialog() {
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState("ssh");
-  const [name, setName] = useState("");
-  // SSH fields
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("22");
-  const [username, setUsername] = useState("root");
-  const [password, setPassword] = useState("");
-  // K8s fields
-  const [kubeconfig, setKubeconfig] = useState("");
-  const [context, setContext] = useState("");
-  const [namespace, setNamespace] = useState("");
   const queryClient = useQueryClient();
 
-  const resetForm = () => {
-    setType("ssh");
-    setName("");
-    setHost("");
-    setPort("22");
-    setUsername("root");
-    setPassword("");
-    setKubeconfig("");
-    setContext("");
-    setNamespace("");
-  };
-
   const mutation = useMutation({
-    mutationFn: () =>
-      createInfrastructure({
-        name,
-        type,
-        ...(type === "ssh"
-          ? {
-              host,
-              port: parseInt(port),
-              username,
-              password: password || undefined,
-            }
-          : {
-              kubeconfig: kubeconfig || undefined,
-              context: context || undefined,
-              namespace: namespace || undefined,
-            }),
-      }),
+    mutationFn: createInfrastructure,
     onSuccess: () => {
       toast.success("Infrastructure added");
       queryClient.invalidateQueries({ queryKey: ["infrastructures"] });
@@ -75,16 +47,63 @@ export function CreateInfrastructureDialog() {
     },
   });
 
-  const isValid =
-    name &&
-    (type === "ssh" ? host : kubeconfig);
+  const form = useForm({
+    defaultValues: {
+      type: "ssh" as "ssh" | "kubernetes",
+      name: "",
+      host: "",
+      port: "22",
+      username: "root",
+      password: "",
+      kubeconfig: "",
+      context: "",
+      namespace: "",
+    },
+    onSubmit: ({ value }) => {
+      const payload =
+        value.type === "ssh"
+          ? {
+              type: "ssh" as const,
+              name: value.name,
+              host: value.host,
+              port: parseInt(value.port),
+              username: value.username,
+              password: value.password || undefined,
+            }
+          : {
+              type: "kubernetes" as const,
+              name: value.name,
+              kubeconfig: value.kubeconfig,
+              context: value.context || undefined,
+              namespace: value.namespace || undefined,
+            };
+
+      const result = infrastructureSchema.safeParse(payload);
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          const path = issue.path?.[0]?.toString();
+          if (path && path in form.state.values) {
+            form.setFieldMeta(path as keyof typeof form.state.values, (prev) => ({
+              ...prev,
+              errorMap: { ...prev.errorMap, onSubmit: issue.message },
+            }));
+          }
+        }
+        return;
+      }
+
+      mutation.mutate(result.data);
+    },
+  });
+
+  const type = useStore(form.store, (s) => s.values.type);
 
   return (
     <Dialog
       open={open}
       onOpenChange={(open) => {
         setOpen(open);
-        if (!open) resetForm();
+        if (!open) form.reset();
       }}
     >
       <DialogTrigger render={<Button size="sm" />}>
@@ -94,112 +113,215 @@ export function CreateInfrastructureDialog() {
         <DialogHeader>
           <DialogTitle>Add Infrastructure</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <Field>
-            <FieldLabel>Type</FieldLabel>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ssh">SSH Server</SelectItem>
-                <SelectItem value="kubernetes">Kubernetes Cluster</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>Name</FieldLabel>
-            <Input
-              placeholder={
-                type === "ssh"
-                  ? "e.g. Production Server"
-                  : "e.g. K8s Production"
-              }
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            form.handleSubmit();
+          }}
+        >
+          <div className="space-y-4">
+            <form.Field name="type">
+              {(field) => (
+                <Field>
+                  <FieldLabel>Type</FieldLabel>
+                  <Select
+                    value={field.state.value}
+                    onValueChange={(v) =>
+                      field.handleChange(v as "ssh" | "kubernetes")
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ssh">SSH Server</SelectItem>
+                      <SelectItem value="kubernetes">
+                        Kubernetes Cluster
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+            </form.Field>
 
-          {type === "ssh" ? (
-            <>
-              <div className="flex gap-3">
-                <Field className="flex-1">
-                  <FieldLabel>Host</FieldLabel>
+            <form.Field
+              name="name"
+              validators={{
+                onSubmit: ({ value }) =>
+                  !value ? "名称不能为空" : undefined,
+              }}
+            >
+              {(field) => (
+                <Field
+                  data-invalid={
+                    field.state.meta.errors.length > 0 || undefined
+                  }
+                >
+                  <FieldLabel>Name</FieldLabel>
                   <Input
-                    placeholder="e.g. 192.168.1.1"
-                    value={host}
-                    onChange={(e) => setHost(e.target.value)}
+                    placeholder={
+                      type === "ssh"
+                        ? "e.g. Production Server"
+                        : "e.g. K8s Production"
+                    }
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
                   />
+                  <FieldError errors={fieldError(field.state.meta.errors)} />
                 </Field>
-                <Field className="w-24">
-                  <FieldLabel>Port</FieldLabel>
-                  <Input
-                    type="number"
-                    value={port}
-                    onChange={(e) => setPort(e.target.value)}
-                  />
-                </Field>
-              </div>
-              <Field>
-                <FieldLabel>Username</FieldLabel>
-                <Input
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel>Password</FieldLabel>
-                <Input
-                  type="password"
-                  placeholder="Optional"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </Field>
-            </>
-          ) : (
-            <>
-              <Field>
-                <FieldLabel>Kubeconfig</FieldLabel>
-                <Textarea
-                  placeholder="Paste kubeconfig YAML content here..."
-                  rows={6}
-                  value={kubeconfig}
-                  onChange={(e) => setKubeconfig(e.target.value)}
-                />
-              </Field>
-              <div className="flex gap-3">
-                <Field className="flex-1">
-                  <FieldLabel>Context</FieldLabel>
-                  <Input
-                    placeholder="Optional"
-                    value={context}
-                    onChange={(e) => setContext(e.target.value)}
-                  />
-                </Field>
-                <Field className="flex-1">
-                  <FieldLabel>Default Namespace</FieldLabel>
-                  <Input
-                    placeholder="default"
-                    value={namespace}
-                    onChange={(e) => setNamespace(e.target.value)}
-                  />
-                </Field>
-              </div>
-            </>
-          )}
-        </div>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cancel
-          </DialogClose>
-          <Button
-            onClick={() => mutation.mutate()}
-            disabled={!isValid || mutation.isPending}
-          >
-            {mutation.isPending ? "Adding..." : "Add"}
-          </Button>
-        </DialogFooter>
+              )}
+            </form.Field>
+
+            {type === "ssh" ? (
+              <>
+                <div className="flex gap-3">
+                  <form.Field
+                    name="host"
+                    validators={{
+                      onSubmit: ({ value }) =>
+                        !value ? "主机地址不能为空" : undefined,
+                    }}
+                  >
+                    {(field) => (
+                      <Field
+                        className="flex-1"
+                        data-invalid={
+                          field.state.meta.errors.length > 0 || undefined
+                        }
+                      >
+                        <FieldLabel>Host</FieldLabel>
+                        <Input
+                          placeholder="e.g. 192.168.1.1"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                          onBlur={field.handleBlur}
+                        />
+                        <FieldError
+                          errors={fieldError(field.state.meta.errors)}
+                        />
+                      </Field>
+                    )}
+                  </form.Field>
+                  <form.Field name="port">
+                    {(field) => (
+                      <Field className="w-24">
+                        <FieldLabel>Port</FieldLabel>
+                        <Input
+                          type="number"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                        />
+                      </Field>
+                    )}
+                  </form.Field>
+                </div>
+                <form.Field
+                  name="username"
+                  validators={{
+                    onSubmit: ({ value }) =>
+                      !value ? "用户名不能为空" : undefined,
+                  }}
+                >
+                  {(field) => (
+                    <Field
+                      data-invalid={
+                        field.state.meta.errors.length > 0 || undefined
+                      }
+                    >
+                      <FieldLabel>Username</FieldLabel>
+                      <Input
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                      />
+                      <FieldError
+                        errors={fieldError(field.state.meta.errors)}
+                      />
+                    </Field>
+                  )}
+                </form.Field>
+                <form.Field name="password">
+                  {(field) => (
+                    <Field>
+                      <FieldLabel>Password</FieldLabel>
+                      <Input
+                        type="password"
+                        placeholder="Optional"
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                </form.Field>
+              </>
+            ) : (
+              <>
+                <form.Field
+                  name="kubeconfig"
+                  validators={{
+                    onSubmit: ({ value }) =>
+                      !value ? "Kubeconfig 不能为空" : undefined,
+                  }}
+                >
+                  {(field) => (
+                    <Field
+                      data-invalid={
+                        field.state.meta.errors.length > 0 || undefined
+                      }
+                    >
+                      <FieldLabel>Kubeconfig</FieldLabel>
+                      <Textarea
+                        placeholder="Paste kubeconfig YAML content here..."
+                        rows={6}
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        onBlur={field.handleBlur}
+                      />
+                      <FieldError
+                        errors={fieldError(field.state.meta.errors)}
+                      />
+                    </Field>
+                  )}
+                </form.Field>
+                <div className="flex gap-3">
+                  <form.Field name="context">
+                    {(field) => (
+                      <Field className="flex-1">
+                        <FieldLabel>Context</FieldLabel>
+                        <Input
+                          placeholder="Optional"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                        />
+                      </Field>
+                    )}
+                  </form.Field>
+                  <form.Field name="namespace">
+                    {(field) => (
+                      <Field className="flex-1">
+                        <FieldLabel>Default Namespace</FieldLabel>
+                        <Input
+                          placeholder="default"
+                          value={field.state.value}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                        />
+                      </Field>
+                    )}
+                  </form.Field>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Adding..." : "Add"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

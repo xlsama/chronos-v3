@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { createProject } from "@/api/projects";
 import { Button } from "@/components/ui/button";
@@ -15,23 +16,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 
 export function CreateProjectDialog() {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const resetForm = () => {
-    setName("");
-    setDescription("");
-  };
-
   const mutation = useMutation({
-    mutationFn: () =>
-      createProject({ name, description: description || undefined }),
+    mutationFn: createProject,
     onSuccess: (project) => {
       toast.success("Project created");
       queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -43,12 +36,22 @@ export function CreateProjectDialog() {
     },
   });
 
+  const form = useForm({
+    defaultValues: { name: "", description: "" },
+    onSubmit: ({ value }) => {
+      mutation.mutate({
+        name: value.name,
+        description: value.description || undefined,
+      });
+    },
+  });
+
   return (
     <Dialog
       open={open}
       onOpenChange={(open) => {
         setOpen(open);
-        if (!open) resetForm();
+        if (!open) form.reset();
       }}
     >
       <DialogTrigger render={<Button size="sm" />}>New Project</DialogTrigger>
@@ -56,36 +59,64 @@ export function CreateProjectDialog() {
         <DialogHeader>
           <DialogTitle>Create Project</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <Field>
-            <FieldLabel>Name</FieldLabel>
-            <Input
-              placeholder="Project name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Description</FieldLabel>
-            <Textarea
-              placeholder="Description (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-            />
-          </Field>
-        </div>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>
-            Cancel
-          </DialogClose>
-          <Button
-            onClick={() => mutation.mutate()}
-            disabled={!name || mutation.isPending}
-          >
-            {mutation.isPending ? "Creating..." : "Create"}
-          </Button>
-        </DialogFooter>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            form.handleSubmit();
+          }}
+        >
+          <div className="space-y-4">
+            <form.Field
+              name="name"
+              validators={{
+                onSubmit: ({ value }) =>
+                  !value ? "名称不能为空" : undefined,
+              }}
+            >
+              {(field) => (
+                <Field
+                  data-invalid={
+                    field.state.meta.errors.length > 0 || undefined
+                  }
+                >
+                  <FieldLabel>Name</FieldLabel>
+                  <Input
+                    placeholder="Project name"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  <FieldError
+                    errors={field.state.meta.errors.map((e) => ({
+                      message: String(e),
+                    }))}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <form.Field name="description">
+              {(field) => (
+                <Field>
+                  <FieldLabel>Description</FieldLabel>
+                  <Textarea
+                    placeholder="Description (optional)"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    rows={3}
+                  />
+                </Field>
+              )}
+            </form.Field>
+          </div>
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

@@ -1,11 +1,34 @@
-"""Tests for knowledge tools — mock Embedder + VectorStore."""
+"""Tests for knowledge tools — mock Embedder + VectorStore + Reranker."""
 
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.tools.knowledge_tools import search_knowledge_base
+from src.lib.reranker import RerankResult
+from src.tools.knowledge_tools import _format_source, search_knowledge_base
+
+
+class TestFormatSource:
+    def test_plain_filename(self):
+        assert _format_source("readme.md", {}) == "readme.md"
+
+    def test_with_page(self):
+        assert _format_source("report.pdf", {"page": 3}) == "report.pdf, 第3页"
+
+    def test_with_slide(self):
+        assert _format_source("deck.pptx", {"slide": 5}) == "deck.pptx, 第5张幻灯片"
+
+    def test_with_sheet(self):
+        assert _format_source("data.xlsx", {"sheet": "Sales"}) == "data.xlsx, 工作表: Sales"
+
+    def test_image_tag(self):
+        assert _format_source("arch.png", {"source_type": "image"}) == "arch.png [图片]"
+
+    def test_page_and_image(self):
+        result = _format_source("scan.pdf", {"page": 1, "source_type": "image"})
+        assert "第1页" in result
+        assert "[图片]" in result
 
 
 class TestSearchKnowledgeBase:
@@ -13,7 +36,7 @@ class TestSearchKnowledgeBase:
     def mock_session(self):
         return AsyncMock()
 
-    async def test_returns_formatted_results(self, mock_session):
+    async def test_returns_formatted_results_with_metadata(self, mock_session):
         project_id = str(uuid.uuid4())
 
         mock_project = MagicMock()
@@ -23,6 +46,7 @@ class TestSearchKnowledgeBase:
             patch("src.tools.knowledge_tools.get_session_ctx") as mock_get_session,
             patch("src.tools.knowledge_tools.Embedder") as mock_emb_cls,
             patch("src.tools.knowledge_tools.VectorStore") as mock_vs_cls,
+            patch("src.tools.knowledge_tools.Reranker") as mock_rr_cls,
         ):
             mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -39,17 +63,28 @@ class TestSearchKnowledgeBase:
 
             mock_vs = AsyncMock()
             mock_vs.search.return_value = [
-                {"content": "chunk 1", "filename": "readme.md", "distance": 0.1, "chunk_index": 0, "id": "1"},
-                {"content": "chunk 2", "filename": "deploy.md", "distance": 0.2, "chunk_index": 1, "id": "2"},
+                {"content": "chunk 1", "filename": "report.pdf", "distance": 0.1,
+                 "chunk_index": 0, "id": "1", "document_id": "d1", "metadata": {"page": 3}},
+                {"content": "chunk 2", "filename": "deck.pptx", "distance": 0.2,
+                 "chunk_index": 1, "id": "2", "document_id": "d2", "metadata": {"slide": 5}},
             ]
             mock_vs_cls.return_value = mock_vs
+
+            mock_rr = AsyncMock()
+            mock_rr.rerank.return_value = [
+                RerankResult(index=0, relevance_score=0.95),
+                RerankResult(index=1, relevance_score=0.80),
+            ]
+            mock_rr_cls.return_value = mock_rr
 
             result = await search_knowledge_base(query="how to deploy", project_id=project_id)
 
         assert "Service Architecture" in result
         assert "chunk 1" in result
         assert "chunk 2" in result
-        assert "readme.md" in result
+        assert "report.pdf, 第3页" in result
+        assert "deck.pptx, 第5张幻灯片" in result
+        assert "0.95" in result
 
     async def test_no_results(self, mock_session):
         project_id = str(uuid.uuid4())
@@ -61,6 +96,7 @@ class TestSearchKnowledgeBase:
             patch("src.tools.knowledge_tools.get_session_ctx") as mock_get_session,
             patch("src.tools.knowledge_tools.Embedder") as mock_emb_cls,
             patch("src.tools.knowledge_tools.VectorStore") as mock_vs_cls,
+            patch("src.tools.knowledge_tools.Reranker") as mock_rr_cls,
         ):
             mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -81,6 +117,7 @@ class TestSearchKnowledgeBase:
             result = await search_knowledge_base(query="anything", project_id=project_id)
 
         assert "没有找到" in result or "No relevant" in result or result != ""
+        mock_rr_cls.return_value.rerank.assert_not_called()
 
     async def test_project_not_found(self, mock_session):
         project_id = str(uuid.uuid4())
@@ -104,6 +141,7 @@ class TestSearchKnowledgeBase:
             patch("src.tools.knowledge_tools.get_session_ctx") as mock_get_session,
             patch("src.tools.knowledge_tools.Embedder") as mock_emb_cls,
             patch("src.tools.knowledge_tools.VectorStore") as mock_vs_cls,
+            patch("src.tools.knowledge_tools.Reranker"),
         ):
             mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -135,7 +173,7 @@ class TestSearchKnowledgeBase:
         # Mock infrastructure with services
         mock_svc = MagicMock()
         mock_svc.name = "nginx"
-        mock_svc.service_type = "docker"
+        mock_svc.service_type = "docker_container"
         mock_svc.status = "running"
         mock_svc.port = 80
         mock_svc.namespace = None
@@ -153,6 +191,7 @@ class TestSearchKnowledgeBase:
             patch("src.tools.knowledge_tools.get_session_ctx") as mock_get_session,
             patch("src.tools.knowledge_tools.Embedder") as mock_emb_cls,
             patch("src.tools.knowledge_tools.VectorStore") as mock_vs_cls,
+            patch("src.tools.knowledge_tools.Reranker"),
         ):
             mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)

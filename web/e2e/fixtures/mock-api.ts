@@ -264,7 +264,7 @@ class MockApiHelper {
             id: "svc-new",
             infrastructure_id: matchInfraId,
             name: "new-service",
-            service_type: "process",
+            service_type: "custom",
             port: null,
             namespace: null,
             config_json: null,

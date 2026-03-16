@@ -73,6 +73,20 @@ class TestDocumentChunkModel:
         assert chunk.chunk_index == 0
         assert chunk.content == "chunk text"
 
+    def test_has_chunk_metadata_field(self):
+        chunk = DocumentChunk(
+            document_id=uuid.uuid4(),
+            project_id=uuid.uuid4(),
+            chunk_index=0,
+            content="text",
+            chunk_metadata={"page": 3},
+        )
+        assert chunk.chunk_metadata == {"page": 3}
+
+    def test_chunk_metadata_defaults_to_dict(self):
+        col = DocumentChunk.__table__.c.metadata
+        assert col.server_default is not None
+
     def test_tablename(self):
         assert DocumentChunk.__tablename__ == "document_chunks"
 
@@ -153,12 +167,12 @@ class TestServiceModel:
         svc = Service(
             infrastructure_id=infra_id,
             name="nginx",
-            service_type="docker",
+            service_type="nginx",
             port=80,
             namespace="default",
         )
         assert svc.name == "nginx"
-        assert svc.service_type == "docker"
+        assert svc.service_type == "nginx"
         assert svc.port == 80
         assert svc.namespace == "default"
         assert svc.infrastructure_id == infra_id

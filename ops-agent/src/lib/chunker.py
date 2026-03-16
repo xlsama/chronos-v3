@@ -1,4 +1,27 @@
+from __future__ import annotations
+
 import re
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.lib.file_parsers import ParsedSegment
+
+
+@dataclass
+class ChunkWithMetadata:
+    content: str
+    metadata: dict = field(default_factory=dict)
+
+
+def chunk_segments(segments: list[ParsedSegment], max_chars: int = 500) -> list[ChunkWithMetadata]:
+    """Chunk each segment and propagate its metadata to sub-chunks."""
+    result: list[ChunkWithMetadata] = []
+    for seg in segments:
+        chunks = chunk_text(seg.content, max_chars)
+        for chunk in chunks:
+            result.append(ChunkWithMetadata(content=chunk, metadata=seg.metadata))
+    return result
 
 
 def chunk_text(text: str, max_chars: int = 500) -> list[str]:

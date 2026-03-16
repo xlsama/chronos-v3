@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown, ChevronRight, Search, BookOpen } from "lucide-react";
 import type { SSEEvent } from "@/lib/types";
+import { Markdown } from "@/components/ui/markdown";
 
 const AGENT_CONFIG: Record<
   string,
@@ -52,13 +54,21 @@ export function SubAgentCard({
         <span className="ml-auto text-xs text-blue-600">{status}</span>
       </button>
 
-      {expanded && hasEvents && (
-        <div className="mt-2 space-y-2 pl-6 text-sm text-blue-900/80">
+      <AnimatePresence initial={false}>
+        {expanded && hasEvents && (
+        <motion.div
+          className="mt-2 space-y-2 pl-6 text-sm text-blue-900/80"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          style={{ overflow: "hidden" }}
+        >
           {events.map((event, i) => {
             if (event.event_type === "thinking") {
               return (
-                <div key={i} className="whitespace-pre-wrap text-xs opacity-80">
-                  {event.data.content as string}
+                <div key={i} className="text-xs opacity-80">
+                  <Markdown content={event.data.content as string} />
                 </div>
               );
             }
@@ -96,12 +106,13 @@ export function SubAgentCard({
           })}
 
           {isStreaming && streamingContent && (
-            <div className="whitespace-pre-wrap text-xs opacity-80 animate-pulse">
-              {streamingContent}
+            <div className="text-xs opacity-80 animate-pulse">
+              <Markdown content={streamingContent} streaming />
             </div>
           )}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

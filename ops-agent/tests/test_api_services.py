@@ -35,7 +35,7 @@ def _mock_service(**overrides):
         "id": uuid.uuid4(),
         "infrastructure_id": uuid.uuid4(),
         "name": "nginx",
-        "service_type": "docker",
+        "service_type": "docker_container",
         "port": 80,
         "namespace": None,
         "config_json": None,
@@ -63,14 +63,14 @@ async def test_create_service(client: AsyncClient, mock_session):
         response = await client.post("/api/services", json={
             "infrastructure_id": str(infra_id),
             "name": "nginx",
-            "service_type": "docker",
+            "service_type": "docker_container",
             "port": 80,
         })
 
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "nginx"
-    assert data["service_type"] == "docker"
+    assert data["service_type"] == "docker_container"
 
 
 async def test_list_services_by_infra(client: AsyncClient, mock_session):

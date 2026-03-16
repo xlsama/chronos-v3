@@ -87,11 +87,14 @@ async def create_incident(
 @router.get("", response_model=list[IncidentResponse])
 async def list_incidents(
     status: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
     session: AsyncSession = Depends(get_session),
 ):
     query = select(Incident).options(selectinload(Incident.attachments)).order_by(Incident.created_at.desc())
     if status:
         query = query.where(Incident.status == status)
+    query = query.offset((page - 1) * page_size).limit(page_size)
     result = await session.execute(query)
     return result.scalars().all()
 

@@ -13,6 +13,7 @@ from src.api.documents import router as documents_router
 from src.api.incidents import router as incidents_router
 from src.api.infrastructures import router as infrastructures_router
 from src.api.projects import router as projects_router
+from src.api.asr import router as asr_router
 from src.api.monitoring_sources import router as monitoring_sources_router
 from src.api.services import router as services_router
 from src.config import get_settings
@@ -28,6 +29,9 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
     os.makedirs(settings.upload_dir, exist_ok=True)
+
+    for warning in settings.validate_production_secrets():
+        logger.warning(warning)
 
     # Initialize LangGraph checkpointer with PostgreSQL
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -81,3 +85,4 @@ app.include_router(projects_router)
 app.include_router(documents_router)
 app.include_router(services_router)
 app.include_router(monitoring_sources_router)
+app.include_router(asr_router)

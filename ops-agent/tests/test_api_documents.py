@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from src.api.documents import get_embedder
+from src.api.documents import get_embedder, get_image_describer
 from src.db.connection import get_session
 from src.main import app
 
@@ -25,12 +25,18 @@ def mock_embedder():
 
 
 @pytest.fixture
-async def client(mock_session, mock_embedder):
+def mock_image_describer():
+    return AsyncMock()
+
+
+@pytest.fixture
+async def client(mock_session, mock_embedder, mock_image_describer):
     async def override_session():
         yield mock_session
 
     app.dependency_overrides[get_session] = override_session
     app.dependency_overrides[get_embedder] = lambda: mock_embedder
+    app.dependency_overrides[get_image_describer] = lambda: mock_image_describer
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -140,3 +146,37 @@ async def test_delete_document_not_found(client: AsyncClient):
         response = await client.delete(f"/api/documents/{doc_id}")
 
     assert response.status_code == 404
+
+
+async def test_upload_image_file(client: AsyncClient):
+    """Image upload should pass image_describer to DocumentService."""
+    project_id = uuid.uuid4()
+    mock_doc = _mock_document(project_id=project_id, doc_type="image", filename="arch.png")
+
+    with (
+        patch("src.api.documents.ProjectService") as mock_proj_cls,
+        patch("src.api.documents.DocumentService") as mock_doc_cls,
+    ):
+        mock_proj = _mock_project()
+        mock_proj.slug = "test-project"
+        mock_proj_svc = AsyncMock()
+        mock_proj_svc.get.return_value = mock_proj
+        mock_proj_cls.return_value = mock_proj_svc
+
+        mock_doc_svc = AsyncMock()
+        mock_doc_svc.upload_file.return_value = mock_doc
+        mock_doc_cls.return_value = mock_doc_svc
+
+        response = await client.post(
+            f"/api/projects/{project_id}/documents/upload",
+            files={"file": ("arch.png", b"\x89PNG\r\n", "image/png")},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["doc_type"] == "image"
+    # Verify DocumentService was created with image_describer
+    mock_doc_cls.assert_called_once()
+    call_kwargs = mock_doc_cls.call_args[1]
+    assert "image_describer" in call_kwargs
+    assert call_kwargs["image_describer"] is not None

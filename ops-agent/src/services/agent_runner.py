@@ -29,7 +29,7 @@ class AgentRunner:
         thread_id = str(uuid.uuid4())
         channel = EventPublisher.channel_for_incident(incident_id)
 
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
 
         # Check monitoring sources for the project
         has_prometheus = False
@@ -83,7 +83,7 @@ class AgentRunner:
 
     async def resume(self, thread_id: str, incident_id: str, approval_result: dict) -> None:
         channel = EventPublisher.channel_for_incident(incident_id)
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
 
         logger.info(f"Resuming agent for incident {incident_id}, thread {thread_id}")
 

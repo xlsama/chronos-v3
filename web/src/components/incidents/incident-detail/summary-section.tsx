@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCircle, BookmarkPlus, BookmarkCheck } from "lucide-react";
 import { saveToMemory } from "@/api/incidents";
+import { Markdown } from "@/components/ui/markdown";
 
 interface SummarySectionProps {
   markdown: string;
@@ -38,9 +39,7 @@ export function SummarySection({
         <CheckCircle className="h-5 w-5" />
         Investigation Complete
       </div>
-      <div className="prose prose-sm mt-3 max-w-none dark:prose-invert whitespace-pre-wrap">
-        {markdown}
-      </div>
+      <Markdown content={markdown} className="mt-3" />
       {incidentId && (
         <div className="mt-4 flex items-center">
           {saved ? (

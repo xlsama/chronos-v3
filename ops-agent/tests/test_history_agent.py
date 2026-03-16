@@ -16,6 +16,7 @@ async def test_search_incident_history_tool():
             "title": "Disk Full Alert",
             "summary_md": "Disk was 95% full, cleaned logs.",
             "distance": 0.15,
+            "relevance_score": 0.92,
         }
     ]
 
@@ -38,7 +39,7 @@ async def test_search_incident_history_tool():
 
     assert "历史事件参考" in result
     assert "Disk Full Alert" in result
-    assert "0.85" in result  # 1 - 0.15 = 0.85
+    assert "0.92" in result  # relevance_score from reranker
 
 
 async def test_search_incident_history_no_results():

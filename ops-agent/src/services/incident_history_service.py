@@ -6,14 +6,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Incident, IncidentHistory
 from src.lib.embedder import Embedder
+from src.lib.reranker import Reranker
 
 HISTORY_DIR = Path(__file__).parent.parent.parent / "incident_history"
 
 
 class IncidentHistoryService:
-    def __init__(self, session: AsyncSession, embedder: Embedder | None = None):
+    def __init__(
+        self,
+        session: AsyncSession,
+        embedder: Embedder | None = None,
+        reranker: Reranker | None = None,
+    ):
         self.session = session
         self.embedder = embedder or Embedder()
+        self.reranker = reranker or Reranker()
 
     async def save(
         self,
@@ -64,7 +71,7 @@ class IncidentHistoryService:
             )
             .where(IncidentHistory.embedding.isnot(None))
             .order_by("distance")
-            .limit(limit)
+            .limit(limit * 4)
         )
 
         if project_id:
@@ -73,7 +80,7 @@ class IncidentHistoryService:
         result = await self.session.execute(stmt)
         rows = result.all()
 
-        return [
+        candidates = [
             {
                 "title": row.title,
                 "summary_md": row.summary_md,
@@ -81,3 +88,20 @@ class IncidentHistoryService:
             }
             for row in rows
         ]
+
+        if not candidates:
+            return []
+
+        rerank_results = await self.reranker.rerank(
+            query=query,
+            documents=[c["summary_md"] for c in candidates],
+            top_n=limit,
+        )
+
+        results = []
+        for rr in rerank_results:
+            item = candidates[rr.index].copy()
+            item["relevance_score"] = rr.relevance_score
+            results.append(item)
+
+        return results
