@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from psycopg import AsyncConnection
 
+from src.db.connection import get_session_factory
 from src.ops_agent.event_publisher import EventPublisher
 from src.api.approvals import router as approvals_router
 from src.api.attachments import router as attachments_router
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
     await checkpointer.setup()
 
     # Initialize EventPublisher + AgentRunner
-    publisher = EventPublisher(redis=get_redis())
+    publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
     app.state.agent_runner = AgentRunner(publisher=publisher, checkpointer=checkpointer)
 
     logger.info("Agent runner initialized")

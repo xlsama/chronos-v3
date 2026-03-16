@@ -8,17 +8,16 @@ import {
   updateDocument,
 } from "@/api/documents";
 import { Button } from "@/components/ui/button";
-import { Markdown } from "@/components/ui/markdown";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FilePreview, type FileType } from "@/components/ui/file-preview";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 
 interface DocumentViewerProps {
   documentId: string | null;
@@ -80,31 +79,7 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
 
     if (!doc) return null;
 
-    // PDF — iframe preview
-    if (doc.doc_type === "pdf") {
-      return (
-        <iframe
-          src={getDocumentFileUrl(doc.id)}
-          className="h-full w-full border-0"
-          title={doc.filename}
-        />
-      );
-    }
-
-    // Image — img preview
-    if (doc.doc_type === "image") {
-      return (
-        <div className="flex items-center justify-center p-4">
-          <img
-            src={getDocumentFileUrl(doc.id)}
-            alt={doc.filename}
-            className="max-h-full max-w-full rounded object-contain"
-          />
-        </div>
-      );
-    }
-
-    // Editing mode
+    // 编辑模式
     if (editing) {
       if (isMarkdown) {
         return (
@@ -117,8 +92,6 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
           </div>
         );
       }
-
-      // Other editable types — plain textarea
       return (
         <Textarea
           value={draft}
@@ -128,46 +101,25 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
       );
     }
 
-    // Read-only: markdown rendered
-    if (isMarkdown) {
-      return (
-        <ScrollArea className="h-full">
-          <div className="p-4">
-            <Markdown content={doc.content} />
-          </div>
-        </ScrollArea>
-      );
-    }
-
-    // Read-only: word/excel/pptx — show extracted text as markdown
-    if (["word", "excel", "pptx"].includes(doc.doc_type)) {
-      return (
-        <ScrollArea className="h-full">
-          <div className="p-4">
-            <Markdown content={doc.content} />
-          </div>
-        </ScrollArea>
-      );
-    }
-
-    // Read-only: other text types — monospace
+    // 只读模式 — 委托给通用 FilePreview
     return (
-      <ScrollArea className="h-full">
-        <pre className="whitespace-pre-wrap p-4 font-mono text-sm">
-          {doc.content}
-        </pre>
-      </ScrollArea>
+      <FilePreview
+        content={doc.content}
+        fileType={doc.doc_type as FileType}
+        fileUrl={getDocumentFileUrl(doc.id)}
+        filename={doc.filename}
+      />
     );
   }
 
   return (
-    <Sheet open={!!documentId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex flex-col sm:max-w-3xl">
-        <SheetHeader className="flex-row items-center justify-between gap-2 space-y-0">
-          <SheetTitle className="truncate">
+    <Dialog open={!!documentId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex h-[90vh] flex-col sm:max-w-[80vw]">
+        <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
+          <DialogTitle className="truncate">
             {doc?.filename ?? "文档预览"}
-          </SheetTitle>
-          <div className="flex items-center gap-2">
+          </DialogTitle>
+          <div className="mr-6 flex items-center gap-2">
             {isEditable && !editing && (
               <Button variant="outline" size="sm" onClick={startEditing}>
                 <Pencil className="mr-1.5 h-3.5 w-3.5" />
@@ -199,9 +151,9 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
               </>
             )}
           </div>
-        </SheetHeader>
+        </DialogHeader>
         <div className="min-h-0 flex-1">{renderContent()}</div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

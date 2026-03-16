@@ -126,6 +126,11 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
       .passthrough(),
     ...baseSSEFields,
   }),
+  z.object({
+    event_type: z.literal("user_message"),
+    data: z.object({ content: z.string() }).passthrough(),
+    ...baseSSEFields,
+  }),
 ]);
 
 export type SSEEventParsed = z.infer<typeof sseEventSchema>;

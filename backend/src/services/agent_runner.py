@@ -104,6 +104,7 @@ class AgentRunner:
         await self._post_run(config, channel, incident_id)
 
     async def _post_run(self, config: dict, channel: str, incident_id: str) -> None:
+        await self.publisher.flush_remaining(channel)
         state = await self.graph.aget_state(config)
         vals = state.values
 

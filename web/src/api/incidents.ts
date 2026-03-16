@@ -1,5 +1,5 @@
 import { request } from "@/lib/request";
-import type { Incident, Message } from "@/lib/types";
+import type { Incident, Message, SSEEvent } from "@/lib/types";
 
 export function getIncidents() {
   return request<Incident[]>("/incidents");
@@ -30,6 +30,10 @@ export function sendIncidentMessage(
     method: "POST",
     body: { content, attachment_ids: attachmentIds },
   });
+}
+
+export function getIncidentEvents(incidentId: string) {
+  return request<SSEEvent[]>(`/incidents/${incidentId}/events`);
 }
 
 export function saveToMemory(incidentId: string) {

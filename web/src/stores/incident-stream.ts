@@ -24,6 +24,7 @@ interface IncidentStreamState {
   setAskHumanQuestion: (question: string | null) => void;
   setApprovalDecided: (approvalId: string, decision: string) => void;
   setConnected: (connected: boolean) => void;
+  loadHistory: (events: SSEEvent[]) => void;
   reset: () => void;
 }
 
@@ -122,6 +123,67 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     }),
 
   setConnected: (connected) => set({ isConnected: connected }),
+
+  loadHistory: (events) => {
+    const discoveryEvents: SSEEvent[] = [];
+    const historyEvents: SSEEvent[] = [];
+    const kbEvents: SSEEvent[] = [];
+    const mainEvents: SSEEvent[] = [];
+    const decided = new Map<string, string>();
+    let askQuestion: string | null = null;
+    let lastAskHumanIndex = -1;
+    let hasUserMessageAfterAsk = false;
+
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      const phase = (event.data.phase as string) || "";
+      const agent = (event.data.agent as string) || "history";
+
+      if (event.event_type === "approval_decided") {
+        decided.set(
+          event.data.approval_id as string,
+          event.data.decision as string,
+        );
+        continue;
+      }
+
+      if (event.event_type === "user_message") {
+        if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
+        continue;
+      }
+
+      if (phase === "discover_project") {
+        discoveryEvents.push(event);
+      } else if (phase === "gather_context") {
+        if (agent === "kb") {
+          kbEvents.push(event);
+        } else {
+          historyEvents.push(event);
+        }
+      } else {
+        if (event.event_type === "ask_human") {
+          lastAskHumanIndex = i;
+          hasUserMessageAfterAsk = false;
+        }
+        mainEvents.push(event);
+      }
+    }
+
+    // Restore askHumanQuestion if last ask_human has no subsequent user_message
+    if (lastAskHumanIndex >= 0 && !hasUserMessageAfterAsk) {
+      const askEvent = events[lastAskHumanIndex];
+      askQuestion = (askEvent.data.question as string) || null;
+    }
+
+    set({
+      events: mainEvents,
+      discoveryAgentState: { events: discoveryEvents, thinkingContent: "" },
+      historyAgentState: { events: historyEvents, thinkingContent: "" },
+      kbAgentState: { events: kbEvents, thinkingContent: "" },
+      decidedApprovals: decided,
+      askHumanQuestion: askQuestion,
+    });
+  },
 
   reset: () =>
     set({

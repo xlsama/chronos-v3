@@ -1,15 +1,25 @@
 import { useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
+import { getIncidentEvents } from "@/api/incidents";
 import { sseEventSchema } from "@/lib/schemas";
 import type { SSEEvent } from "@/lib/types";
 
 const MAX_RETRIES = 5;
 const BASE_DELAY = 1000;
 
-export function useIncidentStream(incidentId: string | undefined) {
+export function useIncidentStream(
+  incidentId: string | undefined,
+  status: string | undefined,
+) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const retriesRef = useRef(0);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const lastTimestampRef = useRef("");
+  const loadedForRef = useRef("");
+
   const {
     addEvent,
     appendThinking,
@@ -21,12 +31,43 @@ export function useIncidentStream(incidentId: string | undefined) {
     setApprovalDecided,
     setConnected,
     reset,
+    loadHistory,
   } = useIncidentStreamStore();
+
+  // Fetch persisted history events
+  const { data: historyEvents } = useQuery({
+    queryKey: ["incident-events", incidentId],
+    queryFn: () => getIncidentEvents(incidentId!),
+    enabled: !!incidentId,
+    refetchOnWindowFocus: false,
+  });
 
   useEffect(() => {
     if (!incidentId) return;
 
-    reset();
+    // Incident changed → reset
+    if (loadedForRef.current && loadedForRef.current !== incidentId) {
+      reset();
+      lastTimestampRef.current = "";
+      loadedForRef.current = "";
+    }
+
+    // Load history once per incident
+    if (historyEvents && !loadedForRef.current) {
+      loadHistory(historyEvents);
+      loadedForRef.current = incidentId;
+      if (historyEvents.length > 0) {
+        lastTimestampRef.current =
+          historyEvents[historyEvents.length - 1].timestamp;
+      }
+    }
+
+    // Gate SSE on history being loaded
+    if (loadedForRef.current !== incidentId) return;
+    // No SSE for completed incidents
+    if (status === "resolved" || status === "closed") return;
+
+    retriesRef.current = 0;
 
     function connect() {
       const es = new EventSource(`/api/incidents/${incidentId}/stream`);
@@ -41,19 +82,27 @@ export function useIncidentStream(incidentId: string | undefined) {
         try {
           const raw = JSON.parse(e.data);
           const result = sseEventSchema.safeParse(raw);
+          if (!result.success) return;
 
-          if (!result.success) {
-            console.warn("[SSE] Malformed event:", result.error.issues, raw);
+          const event = result.data as SSEEvent;
+
+          // Dedup: skip events already covered by history
+          if (
+            lastTimestampRef.current &&
+            event.timestamp <= lastTimestampRef.current
+          ) {
             return;
           }
 
-          const event = result.data as SSEEvent;
           const phase = (event.data.phase as string) || "";
           const agent = (event.data.agent as string) || "history";
 
           if (phase === "discover_project") {
             if (event.event_type === "thinking") {
-              appendSubAgentThinking("discovery", event.data.content as string);
+              appendSubAgentThinking(
+                "discovery",
+                event.data.content as string,
+              );
             } else {
               flushSubAgentThinking("discovery", event.timestamp);
               addSubAgentEvent("discovery", event);
@@ -113,5 +162,5 @@ export function useIncidentStream(incidentId: string | undefined) {
       clearTimeout(retryTimerRef.current);
       setConnected(false);
     };
-  }, [incidentId]);
+  }, [incidentId, historyEvents, status]);
 }

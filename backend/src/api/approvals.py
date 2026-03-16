@@ -7,7 +7,6 @@ from src.api.schemas import ApprovalDecisionRequest, ApprovalResponse
 from src.db.connection import get_session
 from src.db.models import ApprovalRequest, Incident
 from src.lib.errors import ConflictError, NotFoundError, ValidationError
-from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.services.approval_service import ApprovalService
 
@@ -45,22 +44,18 @@ async def decide_approval(
             raise ConflictError(msg)
         raise NotFoundError(msg)
 
-    # Publish approval_decided SSE event
-    redis = get_redis()
-    try:
-        publisher = EventPublisher(redis)
-        channel = EventPublisher.channel_for_incident(str(approval.incident_id))
-        await publisher.publish(
-            channel=channel,
-            event_type="approval_decided",
-            data={
-                "approval_id": str(approval.id),
-                "decision": body.decision,
-                "decided_by": body.decided_by,
-            },
-        )
-    finally:
-        await redis.aclose()
+    # Publish approval_decided SSE event (use app-level publisher for persistence)
+    publisher = request.app.state.agent_runner.publisher
+    channel = EventPublisher.channel_for_incident(str(approval.incident_id))
+    await publisher.publish(
+        channel=channel,
+        event_type="approval_decided",
+        data={
+            "approval_id": str(approval.id),
+            "decision": body.decision,
+            "decided_by": body.decided_by,
+        },
+    )
 
     # Resume graph if approved
     if body.decision == "approved":

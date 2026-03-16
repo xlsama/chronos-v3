@@ -3,12 +3,14 @@ import uuid
 
 import orjson
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
 
 from src.api.schemas import (
+    EventResponse,
     IncidentCreate,
     IncidentResponse,
     MessageResponse,
@@ -121,6 +123,51 @@ async def get_incident_messages(
         .order_by(Message.created_at)
     )
     return result.scalars().all()
+
+
+def _message_to_event(m: Message) -> dict:
+    """Reconstruct SSE-compatible event dict from a persisted Message."""
+    metadata = orjson.loads(m.metadata_json) if m.metadata_json else {}
+
+    if m.event_type == "thinking":
+        data = {"content": m.content, **metadata}
+    elif m.event_type == "tool_call":
+        data = metadata
+    elif m.event_type == "tool_result":
+        data = {"output": m.content, **metadata}
+    elif m.event_type == "approval_required":
+        data = metadata
+    elif m.event_type == "ask_human":
+        data = {"question": m.content}
+    elif m.event_type == "summary":
+        data = {"summary_md": m.content}
+    elif m.event_type == "error":
+        data = {"message": m.content}
+    elif m.event_type == "approval_decided":
+        data = metadata
+    elif m.event_type == "user_message":
+        data = {"content": m.content}
+    else:
+        data = {"content": m.content}
+
+    return {
+        "event_type": m.event_type,
+        "data": data,
+        "timestamp": m.created_at.isoformat(),
+    }
+
+
+@router.get("/{incident_id}/events", response_model=list[EventResponse])
+async def get_incident_events(
+    incident_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(Message)
+        .where(Message.incident_id == incident_id)
+        .order_by(Message.created_at)
+    )
+    return [_message_to_event(m) for m in result.scalars()]
 
 
 @router.get("/{incident_id}/stream")

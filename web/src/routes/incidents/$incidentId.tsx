@@ -20,7 +20,7 @@ function IncidentDetailPage() {
     queryFn: () => getIncident(incidentId),
   });
 
-  useIncidentStream(incidentId);
+  useIncidentStream(incidentId, incident?.status);
 
   return (
     <div className="flex h-full flex-col">

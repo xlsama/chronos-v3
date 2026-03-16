@@ -306,5 +306,11 @@ class DocumentDetailResponse(DocumentResponse):
     content: str
 
 
+class EventResponse(BaseModel):
+    event_type: str
+    data: dict[str, Any]
+    timestamp: str
+
+
 class DocumentUpdate(BaseModel):
     content: str
