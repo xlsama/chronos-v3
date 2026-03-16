@@ -16,7 +16,6 @@ class ProjectService:
         name: str,
         slug: str | None = None,
         description: str | None = None,
-        service_md: str | None = None,
     ) -> Project:
         if not slug:
             slug = self._generate_slug(name)
@@ -25,7 +24,6 @@ class ProjectService:
             name=name,
             slug=slug,
             description=description,
-            service_md=service_md,
         )
         self.session.add(project)
         await self.session.commit()
@@ -47,12 +45,6 @@ class ProjectService:
         for key, value in kwargs.items():
             if value is not None and hasattr(project, key):
                 setattr(project, key, value)
-        await self.session.commit()
-        await self.session.refresh(project)
-        return project
-
-    async def update_service_md(self, project: Project, service_md: str) -> Project:
-        project.service_md = service_md
         await self.session.commit()
         await self.session.refresh(project)
         return project

@@ -1,36 +1,67 @@
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-# ── Connection ──
+class ProjectCreate(BaseModel):
+    name: str
+    slug: str | None = None
+    description: str | None = None
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+    description: str | None = None
+
+
+class ProjectResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    description: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
 
 class ConnectionCreate(BaseModel):
     name: str
-    type: Literal["ssh", "kubernetes"] = "ssh"
-    # SSH fields
+    type: Literal["ssh", "kubernetes", "postgres", "mysql", "redis", "http", "prometheus", "loki"] = "ssh"
+    description: str | None = None
     host: str = ""
     port: int = 22
     username: str = "root"
     password: str | None = None
     private_key: str | None = None
-    # K8s fields
     kubeconfig: str | None = None
     context: str | None = None
     namespace: str | None = None
+    capabilities: list[str] = Field(default_factory=list)
+    scope_metadata: dict[str, Any] = Field(default_factory=dict)
     project_id: uuid.UUID | None = None
+
+
+class ConnectionUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    status: str | None = None
 
 
 class ConnectionResponse(BaseModel):
     id: uuid.UUID
     name: str
     type: str
+    description: str | None
     host: str
     port: int
     username: str
     status: str
+    capabilities: list[str]
+    scope_metadata: dict[str, Any]
     project_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
@@ -43,28 +74,103 @@ class ConnectionTestResponse(BaseModel):
     message: str
 
 
-# ── Service ──
-
-
 class ServiceCreate(BaseModel):
-    connection_id: uuid.UUID
+    project_id: uuid.UUID
     name: str
-    port: int | None = None
-    namespace: str | None = None
+    slug: str | None = None
+    service_type: str = "custom"
+    description: str | None = None
+    business_context: str | None = None
+    owner: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    status: str = "unknown"
+    source: str = "manual"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ServiceUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+    service_type: str | None = None
+    description: str | None = None
+    business_context: str | None = None
+    owner: str | None = None
+    keywords: list[str] | None = None
+    status: str | None = None
+    source: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class ServiceResponse(BaseModel):
     id: uuid.UUID
-    connection_id: uuid.UUID
+    project_id: uuid.UUID
     name: str
-    port: int | None
-    namespace: str | None
+    slug: str
+    service_type: str
+    description: str | None
+    business_context: str | None
+    owner: str | None
+    keywords: list[str]
     status: str
-    discovery_method: str
+    source: str
+    service_metadata: dict[str, Any] = Field(alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class ServiceDependencyCreate(BaseModel):
+    project_id: uuid.UUID
+    from_service_id: uuid.UUID
+    to_service_id: uuid.UUID
+    dependency_type: str = "api_call"
+    description: str | None = None
+    confidence: int = 100
+
+
+class ServiceDependencyResponse(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    from_service_id: uuid.UUID
+    to_service_id: uuid.UUID
+    dependency_type: str
+    description: str | None
+    confidence: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ServiceConnectionBindingCreate(BaseModel):
+    project_id: uuid.UUID
+    service_id: uuid.UUID
+    connection_id: uuid.UUID
+    usage_type: str = "runtime_inspect"
+    priority: int = 100
+    notes: str | None = None
+
+
+class ServiceConnectionBindingResponse(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    service_id: uuid.UUID
+    connection_id: uuid.UUID
+    usage_type: str
+    priority: int
+    notes: str | None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ProjectTopologyResponse(BaseModel):
+    project: ProjectResponse
+    services: list[ServiceResponse]
+    dependencies: list[ServiceDependencyResponse]
+    connections: list[ConnectionResponse]
+    bindings: list[ServiceConnectionBindingResponse]
 
 
 class DiscoverServicesResponse(BaseModel):
@@ -72,14 +178,12 @@ class DiscoverServicesResponse(BaseModel):
     services: list[ServiceResponse]
 
 
-# ── MonitoringSource ──
-
 class MonitoringSourceCreate(BaseModel):
     project_id: uuid.UUID
     name: str
     source_type: Literal["prometheus", "loki"]
     endpoint: str
-    auth_header: str | None = None  # e.g. "Bearer xxx"
+    auth_header: str | None = None
 
 
 class MonitoringSourceResponse(BaseModel):
@@ -95,15 +199,13 @@ class MonitoringSourceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── Incident ──
-
 class IncidentCreate(BaseModel):
     title: str = ""
     description: str
     severity: Literal["low", "medium", "high", "critical"] = "medium"
     connection_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
-    attachment_ids: list[uuid.UUID] = []
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class AttachmentResponse(BaseModel):
@@ -129,7 +231,7 @@ class IncidentResponse(BaseModel):
     summary_md: str | None
     thread_id: str | None
     saved_to_memory: bool
-    attachments: list[AttachmentResponse] = []
+    attachments: list[AttachmentResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -150,10 +252,8 @@ class MessageResponse(BaseModel):
 
 class UserMessageRequest(BaseModel):
     content: str
-    attachment_ids: list[uuid.UUID] = []
+    attachment_ids: list[uuid.UUID] = Field(default_factory=list)
 
-
-# ── Approval ──
 
 class ApprovalResponse(BaseModel):
     id: uuid.UUID
@@ -175,39 +275,6 @@ class ApprovalDecisionRequest(BaseModel):
     decision: Literal["approved", "rejected"]
     decided_by: str = "admin"
 
-
-# ── Project ──
-
-class ProjectCreate(BaseModel):
-    name: str
-    slug: str | None = None
-    description: str | None = None
-    service_md: str | None = None
-
-
-class ProjectUpdate(BaseModel):
-    name: str | None = None
-    slug: str | None = None
-    description: str | None = None
-
-
-class ProjectServiceMdUpdate(BaseModel):
-    service_md: str
-
-
-class ProjectResponse(BaseModel):
-    id: uuid.UUID
-    name: str
-    slug: str
-    description: str | None
-    service_md: str | None
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-# ── Document ──
 
 class DocumentUpload(BaseModel):
     filename: str
