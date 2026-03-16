@@ -26,9 +26,20 @@ from src.lib.redis import get_redis
 from src.services.agent_runner import AgentRunner
 
 
+def _run_migrations():
+    import subprocess
+
+    subprocess.run(["alembic", "upgrade", "head"], check=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Chronos Ops Agent")
+
+    # Run database migrations
+    logger.info("Running database migrations...")
+    _run_migrations()
+    logger.info("Database migrations completed")
 
     settings = get_settings()
     os.makedirs(settings.upload_dir, exist_ok=True)

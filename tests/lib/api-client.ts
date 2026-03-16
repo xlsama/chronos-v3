@@ -32,8 +32,22 @@ export class ApiClient {
     name: string;
     service_type: string;
     project_id: string;
+    description?: string;
+    business_context?: string;
+    keywords?: string[];
   }) {
     return this.api("/api/services", { method: "POST", body: data });
+  }
+
+  async createDependency(data: {
+    project_id: string;
+    from_service_id: string;
+    to_service_id: string;
+    dependency_type?: string;
+    description?: string;
+    confidence?: number;
+  }) {
+    return this.api("/api/service-dependencies", { method: "POST", body: data });
   }
 
   async createBinding(data: {

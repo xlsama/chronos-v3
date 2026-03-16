@@ -1,4 +1,4 @@
-import type { ApiClient } from "./api-client.js";
+import type { ApiClient } from "../lib/api-client.js";
 
 export interface SeedData {
   project: { id: string; name: string };
