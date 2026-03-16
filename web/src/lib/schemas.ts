@@ -9,7 +9,7 @@ export const projectSchema = z.object({
 
 export type ProjectFormData = z.infer<typeof projectSchema>;
 
-// ── Infrastructure ──
+// ── Connection ──
 
 const sshSchema = z.object({
   type: z.literal("ssh"),
@@ -28,18 +28,17 @@ const k8sSchema = z.object({
   namespace: z.string().optional(),
 });
 
-export const infrastructureSchema = z.discriminatedUnion("type", [
+export const connectionSchema = z.discriminatedUnion("type", [
   sshSchema,
   k8sSchema,
 ]);
 
-export type InfrastructureFormData = z.infer<typeof infrastructureSchema>;
+export type ConnectionFormData = z.infer<typeof connectionSchema>;
 
 // ── Service ──
 
 export const serviceSchema = z.object({
   name: z.string().min(1, "名称不能为空"),
-  service_type: z.string(),
   port: z.coerce.number().int().min(1).max(65535).optional(),
   namespace: z.string().optional(),
 });

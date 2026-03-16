@@ -36,14 +36,14 @@ export async function waitForBackend(baseURL: string) {
   throw new Error("Backend did not become available within 30s");
 }
 
-/** Delete all infrastructures via API */
+/** Delete all connections via API */
 export async function cleanupTestData(baseURL: string) {
   try {
-    const res = await fetch(`${baseURL}/api/infrastructures`);
+    const res = await fetch(`${baseURL}/api/connections`);
     if (!res.ok) return;
-    const infras = (await res.json()) as { id: string }[];
-    for (const infra of infras) {
-      await fetch(`${baseURL}/api/infrastructures/${infra.id}`, {
+    const conns = (await res.json()) as { id: string }[];
+    for (const conn of conns) {
+      await fetch(`${baseURL}/api/connections/${conn.id}`, {
         method: "DELETE",
       });
     }

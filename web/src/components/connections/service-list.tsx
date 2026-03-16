@@ -1,43 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
-import { deleteService, getServicesByInfra } from "@/api/services";
-import { Badge } from "@/components/ui/badge";
+import { deleteService, getServicesByConnection } from "@/api/services";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const typeIcons: Record<string, string> = {
-  mysql: "🐬",
-  postgresql: "🐘",
-  redis: "🔴",
-  mongodb: "🍃",
-  elasticsearch: "🔍",
-  nginx: "🌐",
-  apache: "🪶",
-  cron_job: "⏰",
-  systemd: "⚙️",
-  docker_container: "🐳",
-  k8s_deployment: "☸️",
-  k8s_statefulset: "☸️",
-  java_app: "☕",
-  node_app: "💚",
-  python_app: "🐍",
-  custom: "📦",
-};
-
-export function ServiceList({ infraId }: { infraId: string }) {
+export function ServiceList({ connectionId }: { connectionId: string }) {
   const queryClient = useQueryClient();
 
   const { data: services, isLoading } = useQuery({
-    queryKey: ["services", infraId],
-    queryFn: () => getServicesByInfra(infraId),
+    queryKey: ["services", connectionId],
+    queryFn: () => getServicesByConnection(connectionId),
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteService,
     onSuccess: () => {
       toast.success("Service deleted");
-      queryClient.invalidateQueries({ queryKey: ["services", infraId] });
+      queryClient.invalidateQueries({ queryKey: ["services", connectionId] });
     },
   });
 
@@ -60,9 +40,8 @@ export function ServiceList({ infraId }: { infraId: string }) {
   }
 
   return (
-    <div data-testid={`service-list-${infraId}`} className="space-y-0.5">
+    <div data-testid={`service-list-${connectionId}`} className="space-y-0.5">
       {services.map((svc, index) => {
-        const icon = typeIcons[svc.service_type] ?? "📦";
         const isLast = index === services.length - 1;
 
         return (
@@ -74,11 +53,7 @@ export function ServiceList({ infraId }: { infraId: string }) {
             <span className="text-muted-foreground text-xs">
               {isLast ? "└──" : "├──"}
             </span>
-            <span>{icon}</span>
             <span className="font-medium text-sm">{svc.name}</span>
-            <Badge variant="outline" className="text-xs px-1.5 py-0">
-              {svc.service_type}
-            </Badge>
             {svc.port && (
               <span className="text-xs text-muted-foreground">:{svc.port}</span>
             )}

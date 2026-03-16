@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from src.api.infrastructures import get_crypto as infra_get_crypto
+from src.api.connections import get_crypto as conn_get_crypto
 from src.api.monitoring_sources import get_crypto as ms_get_crypto
 from src.db.connection import get_session
 from src.main import app
@@ -37,7 +37,7 @@ async def client(mock_session):
     test_crypto = CryptoService(key=TEST_KEY)
     app.dependency_overrides[get_session] = override_session
     app.dependency_overrides[ms_get_crypto] = lambda: test_crypto
-    app.dependency_overrides[infra_get_crypto] = lambda: test_crypto
+    app.dependency_overrides[conn_get_crypto] = lambda: test_crypto
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         with patch("src.api.monitoring_sources.get_settings", return_value=_mock_settings()):

@@ -2,15 +2,15 @@ import { test as base, type Page } from "@playwright/test";
 import {
   INCIDENT_ID,
   APPROVAL_ID,
-  INFRA_SSH_ID,
+  CONN_SSH_ID,
   createMockIncident,
   createMockIncidentList,
   createMockApprovalDecision,
-  createMockInfrastructure,
-  createMockInfrastructureList,
+  createMockConnection,
+  createMockConnectionList,
   createMockServiceList,
 } from "../helpers/mock-data";
-import type { Infrastructure, Service, SSEEvent } from "../../src/lib/types";
+import type { Connection, Service, SSEEvent } from "../../src/lib/types";
 import {
   fulfillSSE,
   createAgentFlowEvents,
@@ -181,22 +181,22 @@ class MockApiHelper {
     );
   }
 
-  // ── Infrastructure & Services ──
+  // ── Connection & Services ──
 
-  /** GET/POST/DELETE /api/infrastructures and sub-routes */
-  async setupInfrastructureRoutes(list?: Infrastructure[]) {
-    const infras = list ?? createMockInfrastructureList();
+  /** GET/POST/DELETE /api/connections and sub-routes */
+  async setupConnectionRoutes(list?: Connection[]) {
+    const conns = list ?? createMockConnectionList();
 
     // Must register more specific routes first (Playwright uses first-match)
-    // POST /api/infrastructures/:id/test
-    await this.page.route("**/api/infrastructures/*/test", async (route) => {
+    // POST /api/connections/:id/test
+    await this.page.route("**/api/connections/*/test", async (route) => {
       await route.fulfill({
         json: { success: true, message: "Connection successful" },
       });
     });
 
-    // DELETE /api/infrastructures/:id
-    await this.page.route("**/api/infrastructures/*", async (route) => {
+    // DELETE /api/connections/:id
+    await this.page.route("**/api/connections/*", async (route) => {
       const method = route.request().method();
       if (method === "DELETE") {
         await route.fulfill({ json: { ok: true } });
@@ -205,22 +205,22 @@ class MockApiHelper {
       }
     });
 
-    // GET (list) / POST (create) /api/infrastructures
-    await this.page.route("**/api/infrastructures", async (route) => {
+    // GET (list) / POST (create) /api/connections
+    await this.page.route("**/api/connections", async (route) => {
       const method = route.request().method();
       if (method === "GET") {
-        await route.fulfill({ json: infras });
+        await route.fulfill({ json: conns });
       } else if (method === "POST") {
-        await route.fulfill({ json: createMockInfrastructure() });
+        await route.fulfill({ json: createMockConnection() });
       } else {
         await route.continue();
       }
     });
   }
 
-  /** POST /api/infrastructures/:id/test with custom success/failure */
-  async setupInfrastructureTest(success = true) {
-    await this.page.route("**/api/infrastructures/*/test", async (route) => {
+  /** POST /api/connections/:id/test with custom success/failure */
+  async setupConnectionTest(success = true) {
+    await this.page.route("**/api/connections/*/test", async (route) => {
       await route.fulfill({
         json: {
           success,
@@ -230,15 +230,15 @@ class MockApiHelper {
     });
   }
 
-  /** GET /api/services/by-infra/:id, POST /api/services, DELETE /api/services/:id */
-  async setupServiceRoutes(infraId?: string, services?: Service[]) {
+  /** GET /api/services/by-connection/:id, POST /api/services, DELETE /api/services/:id */
+  async setupServiceRoutes(connId?: string, services?: Service[]) {
     const svcList = services ?? createMockServiceList();
-    const matchInfraId = infraId ?? INFRA_SSH_ID;
+    const matchConnId = connId ?? CONN_SSH_ID;
 
-    // Catch-all for /api/services/by-infra/* — uses URL to decide response
-    await this.page.route("**/api/services/by-infra/*", async (route) => {
+    // Catch-all for /api/services/by-connection/* — uses URL to decide response
+    await this.page.route("**/api/services/by-connection/*", async (route) => {
       const url = route.request().url();
-      if (url.includes(matchInfraId)) {
+      if (url.includes(matchConnId)) {
         await route.fulfill({ json: svcList });
       } else {
         await route.fulfill({ json: [] });
@@ -262,12 +262,10 @@ class MockApiHelper {
         await route.fulfill({
           json: {
             id: "svc-new",
-            infrastructure_id: matchInfraId,
+            connection_id: matchConnId,
             name: "new-service",
-            service_type: "custom",
             port: null,
             namespace: null,
-            config_json: null,
             status: "unknown",
             discovery_method: "manual",
             created_at: "2026-03-16T10:00:00Z",
@@ -281,15 +279,15 @@ class MockApiHelper {
   }
 
   /** POST /api/services/discover/:id */
-  async setupDiscoverServices(infraId?: string, result?: { discovered: number; services: Service[] }) {
-    const matchInfraId = infraId ?? INFRA_SSH_ID;
+  async setupDiscoverServices(connId?: string, result?: { discovered: number; services: Service[] }) {
+    const matchConnId = connId ?? CONN_SSH_ID;
     const discoverResult = result ?? {
       discovered: 3,
       services: createMockServiceList(),
     };
 
     await this.page.route(
-      `**/api/services/discover/${matchInfraId}`,
+      `**/api/services/discover/${matchConnId}`,
       async (route) => {
         await route.fulfill({ json: discoverResult });
       },

@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
-import { createInfrastructure } from "@/api/infrastructures";
-import { infrastructureSchema } from "@/lib/schemas";
+import { createConnection } from "@/api/connections";
+import { connectionSchema } from "@/lib/schemas";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,15 +34,15 @@ function fieldError(errors: unknown[]) {
   }));
 }
 
-export function CreateInfrastructureDialog() {
+export function CreateConnectionDialog() {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: createInfrastructure,
+    mutationFn: createConnection,
     onSuccess: () => {
-      toast.success("Infrastructure added");
-      queryClient.invalidateQueries({ queryKey: ["infrastructures"] });
+      toast.success("Connection added");
+      queryClient.invalidateQueries({ queryKey: ["connections"] });
       setOpen(false);
     },
   });
@@ -78,7 +78,7 @@ export function CreateInfrastructureDialog() {
               namespace: value.namespace || undefined,
             };
 
-      const result = infrastructureSchema.safeParse(payload);
+      const result = connectionSchema.safeParse(payload);
       if (!result.success) {
         for (const issue of result.error.issues) {
           const path = issue.path?.[0]?.toString();
@@ -107,11 +107,11 @@ export function CreateInfrastructureDialog() {
       }}
     >
       <DialogTrigger render={<Button size="sm" />}>
-        Add Infrastructure
+        Add Connection
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add Infrastructure</DialogTitle>
+          <DialogTitle>Add Connection</DialogTitle>
         </DialogHeader>
         <form
           onSubmit={(e) => {

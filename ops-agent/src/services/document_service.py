@@ -123,6 +123,57 @@ class DocumentService:
             segments=segments,
         )
 
+    async def get(self, document_id: uuid.UUID) -> ProjectDocument | None:
+        return await self.session.get(ProjectDocument, document_id)
+
+    async def update(
+        self,
+        document_id: uuid.UUID,
+        content: str,
+        project_slug: str,
+    ) -> ProjectDocument:
+        doc = await self.session.get(ProjectDocument, document_id)
+        if not doc:
+            raise ValueError("Document not found")
+
+        doc.content = content
+
+        # Delete old chunks
+        old_chunks = await self.session.execute(
+            select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+        )
+        for chunk in old_chunks.scalars().all():
+            await self.session.delete(chunk)
+        await self.session.flush()
+
+        # Re-chunk and embed
+        chunks_with_meta = [ChunkWithMetadata(content=c, metadata={}) for c in chunk_text(content)]
+        texts = [c.content for c in chunks_with_meta]
+        embeddings = await self.embedder.embed_texts(texts)
+
+        chunk_models = [
+            DocumentChunk(
+                document_id=doc.id,
+                project_id=doc.project_id,
+                chunk_index=i,
+                content=c.content,
+                embedding=emb,
+                chunk_metadata=c.metadata,
+            )
+            for i, (c, emb) in enumerate(zip(chunks_with_meta, embeddings))
+        ]
+        self.session.add_all(chunk_models)
+
+        # Update file on disk if it exists
+        file_path = Path("data/knowledge") / project_slug / doc.filename
+        if file_path.exists():
+            file_path.write_text(content, encoding="utf-8")
+
+        doc.status = "ready"
+        await self.session.commit()
+        await self.session.refresh(doc)
+        return doc
+
     async def list_by_project(self, project_id: uuid.UUID) -> list[ProjectDocument]:
         result = await self.session.execute(
             select(ProjectDocument)

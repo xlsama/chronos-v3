@@ -11,7 +11,7 @@ from src.api.approvals import router as approvals_router
 from src.api.attachments import router as attachments_router
 from src.api.documents import router as documents_router
 from src.api.incidents import router as incidents_router
-from src.api.infrastructures import router as infrastructures_router
+from src.api.connections import router as connections_router
 from src.api.projects import router as projects_router
 from src.api.asr import router as asr_router
 from src.api.monitoring_sources import router as monitoring_sources_router
@@ -77,7 +77,7 @@ async def health():
     return {"status": "ok"}
 
 
-app.include_router(infrastructures_router)
+app.include_router(connections_router)
 app.include_router(incidents_router)
 app.include_router(approvals_router)
 app.include_router(attachments_router)

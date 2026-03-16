@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Infrastructure, Service
+from src.db.models import Connection, Service
 from src.lib.logger import logger
 from src.tools.exec_tools import get_connector
 
@@ -15,21 +15,17 @@ class ServiceCatalog:
 
     async def create(
         self,
-        infrastructure_id: uuid.UUID,
+        connection_id: uuid.UUID,
         name: str,
-        service_type: str,
         port: int | None = None,
         namespace: str | None = None,
-        config_json: str | None = None,
         discovery_method: str = "manual",
     ) -> Service:
         svc = Service(
-            infrastructure_id=infrastructure_id,
+            connection_id=connection_id,
             name=name,
-            service_type=service_type,
             port=port,
             namespace=namespace,
-            config_json=config_json,
             discovery_method=discovery_method,
         )
         self.session.add(svc)
@@ -37,10 +33,10 @@ class ServiceCatalog:
         await self.session.refresh(svc)
         return svc
 
-    async def list_by_infra(self, infrastructure_id: uuid.UUID) -> list[Service]:
+    async def list_by_connection(self, connection_id: uuid.UUID) -> list[Service]:
         result = await self.session.execute(
             select(Service)
-            .where(Service.infrastructure_id == infrastructure_id)
+            .where(Service.connection_id == connection_id)
             .order_by(Service.name)
         )
         return list(result.scalars().all())
@@ -56,30 +52,30 @@ class ServiceCatalog:
         await self.session.commit()
         return True
 
-    async def auto_discover(self, infrastructure_id: uuid.UUID) -> list[Service]:
-        """Auto-discover services running on the infrastructure."""
-        infra = await self.session.get(Infrastructure, infrastructure_id)
-        if not infra:
-            raise ValueError(f"Infrastructure not found: {infrastructure_id}")
+    async def auto_discover(self, connection_id: uuid.UUID) -> list[Service]:
+        """Auto-discover services running on the connection."""
+        conn = await self.session.get(Connection, connection_id)
+        if not conn:
+            raise ValueError(f"Connection not found: {connection_id}")
 
-        connector = await get_connector(str(infrastructure_id))
+        connector = await get_connector(str(connection_id))
         discovered: list[Service] = []
 
-        if infra.type == "kubernetes":
-            discovered.extend(await self._discover_k8s(infrastructure_id, connector))
+        if conn.type == "kubernetes":
+            discovered.extend(await self._discover_k8s(connection_id, connector))
         else:
-            discovered.extend(await self._discover_ssh(infrastructure_id, connector))
+            discovered.extend(await self._discover_ssh(connection_id, connector))
 
         return discovered
 
-    async def _discover_ssh(self, infra_id: uuid.UUID, connector) -> list[Service]:
+    async def _discover_ssh(self, conn_id: uuid.UUID, connector) -> list[Service]:
         """Discover services via SSH commands."""
         discovered: list[Service] = []
 
         # Docker containers
         try:
             result = await connector.execute(
-                "docker ps --format '{{.Names}}\\t{{.Ports}}\\t{{.Image}}' 2>/dev/null"
+                "docker ps --format '{{.Names}}\\t{{.Ports}}' 2>/dev/null"
             )
             if result.exit_code == 0 and result.stdout.strip():
                 for line in result.stdout.strip().split("\n"):
@@ -87,10 +83,8 @@ class ServiceCatalog:
                     if len(parts) >= 1:
                         name = parts[0].strip()
                         port = self._extract_port(parts[1]) if len(parts) > 1 else None
-                        image = parts[2].strip() if len(parts) > 2 else ""
-                        svc_type = self._guess_type_from_image(image) or "docker_container"
                         svc = await self._create_if_not_exists(
-                            infra_id, name, svc_type, port
+                            conn_id, name, port
                         )
                         if svc:
                             discovered.append(svc)
@@ -110,7 +104,7 @@ class ServiceCatalog:
                         # Skip system services
                         if self._is_interesting_service(unit_name):
                             svc = await self._create_if_not_exists(
-                                infra_id, unit_name, "systemd"
+                                conn_id, unit_name
                             )
                             if svc:
                                 discovered.append(svc)
@@ -127,9 +121,8 @@ class ServiceCatalog:
                     if match and proc_match:
                         port = int(match.group(1))
                         proc_name = proc_match.group(1)
-                        svc_type = self._guess_service_type(proc_name, port)
                         svc = await self._create_if_not_exists(
-                            infra_id, proc_name, svc_type, port
+                            conn_id, proc_name, port
                         )
                         if svc:
                             discovered.append(svc)
@@ -149,7 +142,7 @@ class ServiceCatalog:
                             cmd = " ".join(parts[5:])
                             name = cmd.split("/")[-1].split()[0][:50]
                             svc = await self._create_if_not_exists(
-                                infra_id, f"cron-{name}", "cron_job"
+                                conn_id, f"cron-{name}"
                             )
                             if svc:
                                 discovered.append(svc)
@@ -158,7 +151,7 @@ class ServiceCatalog:
 
         return discovered
 
-    async def _discover_k8s(self, infra_id: uuid.UUID, connector) -> list[Service]:
+    async def _discover_k8s(self, conn_id: uuid.UUID, connector) -> list[Service]:
         """Discover services in Kubernetes."""
         discovered: list[Service] = []
 
@@ -173,7 +166,7 @@ class ServiceCatalog:
                     if len(parts) >= 2:
                         ns, name = parts[0], parts[1]
                         svc = await self._create_if_not_exists(
-                            infra_id, name, "k8s_deployment", namespace=ns
+                            conn_id, name, namespace=ns
                         )
                         if svc:
                             discovered.append(svc)
@@ -191,7 +184,7 @@ class ServiceCatalog:
                     if len(parts) >= 2:
                         ns, name = parts[0], parts[1]
                         svc = await self._create_if_not_exists(
-                            infra_id, name, "k8s_statefulset", namespace=ns
+                            conn_id, name, namespace=ns
                         )
                         if svc:
                             discovered.append(svc)
@@ -202,16 +195,15 @@ class ServiceCatalog:
 
     async def _create_if_not_exists(
         self,
-        infra_id: uuid.UUID,
+        conn_id: uuid.UUID,
         name: str,
-        service_type: str,
         port: int | None = None,
         namespace: str | None = None,
     ) -> Service | None:
-        """Create service if it doesn't already exist for this infra."""
+        """Create service if it doesn't already exist for this connection."""
         result = await self.session.execute(
             select(Service).where(
-                Service.infrastructure_id == infra_id,
+                Service.connection_id == conn_id,
                 Service.name == name,
             )
         )
@@ -219,9 +211,8 @@ class ServiceCatalog:
             return None
 
         svc = Service(
-            infrastructure_id=infra_id,
+            connection_id=conn_id,
             name=name,
-            service_type=service_type,
             port=port,
             namespace=namespace,
             discovery_method="auto_discovered",
@@ -250,52 +241,3 @@ class ServiceCatalog:
             "udisks2", "ModemManager", "NetworkManager",
         }
         return name not in skip
-
-    @staticmethod
-    def _guess_type_from_image(image: str) -> str | None:
-        """Guess fine-grained service type from Docker image name."""
-        image_lower = image.lower().split(":")[0].split("/")[-1]  # e.g. "mysql" from "library/mysql:8"
-        mapping = {
-            "mysql": "mysql", "mariadb": "mysql",
-            "postgres": "postgresql", "postgresql": "postgresql",
-            "redis": "redis",
-            "mongo": "mongodb", "mongodb": "mongodb",
-            "elasticsearch": "elasticsearch", "opensearch": "elasticsearch",
-            "nginx": "nginx",
-            "httpd": "apache", "apache": "apache",
-        }
-        for keyword, svc_type in mapping.items():
-            if keyword in image_lower:
-                return svc_type
-        return None
-
-    @staticmethod
-    def _guess_service_type(proc_name: str, port: int) -> str:
-        port_map = {
-            3306: "mysql",
-            5432: "postgresql",
-            27017: "mongodb",
-            6379: "redis",
-            9200: "elasticsearch",
-        }
-        if port in port_map:
-            return port_map[port]
-
-        name_map = {
-            "mysql": "mysql", "mariadb": "mysql",
-            "postgres": "postgresql",
-            "redis": "redis",
-            "mongo": "mongodb",
-            "elasticsearch": "elasticsearch",
-            "nginx": "nginx",
-            "httpd": "apache", "apache": "apache",
-            "java": "java_app",
-            "node": "node_app",
-            "python": "python_app", "gunicorn": "python_app", "uvicorn": "python_app",
-        }
-        proc_lower = proc_name.lower()
-        for keyword, svc_type in name_map.items():
-            if keyword in proc_lower:
-                return svc_type
-
-        return "custom"

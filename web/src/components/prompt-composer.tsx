@@ -38,6 +38,8 @@ export function PromptComposer({
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const objectUrlsRef = useRef<string[]>([]);
 
+  const preRecordTextRef = useRef("");
+
   const { state: voiceState, interimText, analyserNode, startRecording, stopRecording, cancelRecording } =
     useVoiceInput({
       onTranscript: useCallback((transcript: string) => {
@@ -46,9 +48,18 @@ export function PromptComposer({
           return prev + separator + transcript;
         });
       }, []),
+      onCancel: useCallback(() => {
+        setText(preRecordTextRef.current);
+      }, []),
     });
 
   const isRecording = voiceState === "recording" || voiceState === "connecting";
+
+  useEffect(() => {
+    if (voiceState === "connecting") {
+      preRecordTextRef.current = text;
+    }
+  }, [voiceState, text]);
 
   useEffect(() => {
     return () => {
@@ -166,14 +177,20 @@ export function PromptComposer({
           </div>
         )}
 
-        <AnimatePresence mode="wait">
-          {isRecording ? (
+        <PromptInputTextarea
+          placeholder={placeholder}
+          onPaste={handlePaste}
+          disabled={isRecording}
+          data-testid="prompt-textarea"
+        />
+
+        <AnimatePresence>
+          {isRecording && (
             <motion.div
-              key="recording"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-3 overflow-hidden px-4 py-3"
+              className="flex items-center gap-3 overflow-hidden border-t px-4 py-2"
             >
               <AudioVisualizer analyserNode={analyserNode} className="shrink-0" />
               <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">
@@ -181,14 +198,6 @@ export function PromptComposer({
                   ? "正在连接..."
                   : interimText || "正在聆听..."}
               </span>
-            </motion.div>
-          ) : (
-            <motion.div key="textarea" initial={false}>
-              <PromptInputTextarea
-                placeholder={placeholder}
-                onPaste={handlePaste}
-                data-testid="prompt-textarea"
-              />
             </motion.div>
           )}
         </AnimatePresence>

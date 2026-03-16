@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from src.db.connection import get_session_factory
-from src.db.models import Infrastructure, Project
+from src.db.models import Connection, Project
 from src.db.vector_store import VectorStore
 from src.lib.embedder import Embedder
 from src.lib.reranker import Reranker
@@ -71,36 +71,34 @@ async def search_knowledge_base(query: str, project_id: str) -> str:
         if project.service_md:
             sections.append(f"## 项目架构文档 (SERVICE.md)\n\n{project.service_md}")
 
-        # Query infrastructure + services for structured data
-        infra_result = await session.execute(
-            select(Infrastructure)
-            .options(selectinload(Infrastructure.services))
-            .where(Infrastructure.project_id == uuid.UUID(project_id))
+        # Query connections + services for structured data
+        conn_result = await session.execute(
+            select(Connection)
+            .options(selectinload(Connection.services))
+            .where(Connection.project_id == uuid.UUID(project_id))
         )
-        infras = infra_result.scalars().all()
+        conns = conn_result.scalars().all()
 
-        if infras:
-            infra_lines = []
-            for infra in infras:
-                infra_lines.append(
-                    f"### {infra.name} (type: {infra.type}, id: {infra.id})"
+        if conns:
+            conn_lines = []
+            for conn in conns:
+                conn_lines.append(
+                    f"### {conn.name} (type: {conn.type}, id: {conn.id})"
                 )
-                infra_lines.append(f"- 状态: {infra.status}")
-                if infra.host:
-                    infra_lines.append(f"- 主机: {infra.host}:{infra.port}")
-                if infra.services:
-                    infra_lines.append("- 服务列表:")
-                    for svc in infra.services:
-                        svc_info = f"  - **{svc.name}** (type: {svc.service_type}, status: {svc.status})"
-                        if svc.port:
-                            svc_info += f", port: {svc.port}"
+                conn_lines.append(f"- 状态: {conn.status}")
+                if conn.host:
+                    conn_lines.append(f"- 主机: {conn.host}:{conn.port}")
+                if conn.services:
+                    conn_lines.append("- 服务列表:")
+                    for svc in conn.services:
+                        svc_info = f"  - **{svc.name}** (port: {svc.port}, status: {svc.status})"
                         if svc.namespace:
                             svc_info += f", namespace: {svc.namespace}"
-                        infra_lines.append(svc_info)
+                        conn_lines.append(svc_info)
                 else:
-                    infra_lines.append("- 服务列表: (暂无)")
+                    conn_lines.append("- 服务列表: (暂无)")
             sections.append(
-                "## 关联基础设施与服务\n\n" + "\n".join(infra_lines)
+                "## 关联连接与服务\n\n" + "\n".join(conn_lines)
             )
 
         # Vector search for relevant document chunks

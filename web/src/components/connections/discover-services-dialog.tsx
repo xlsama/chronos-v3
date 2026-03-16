@@ -14,15 +14,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-export function DiscoverServicesDialog({ infraId }: { infraId: string }) {
+export function DiscoverServicesDialog({ connectionId }: { connectionId: string }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: () => discoverServices(infraId),
+    mutationFn: () => discoverServices(connectionId),
     onSuccess: (data) => {
       toast.success(`Discovered ${data.discovered} services`);
-      queryClient.invalidateQueries({ queryKey: ["services", infraId] });
+      queryClient.invalidateQueries({ queryKey: ["services", connectionId] });
       setOpen(false);
     },
     onError: () => {
@@ -45,7 +45,7 @@ export function DiscoverServicesDialog({ infraId }: { infraId: string }) {
           <DialogTitle>Auto-discover Services</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          This will scan the infrastructure for running services (Docker
+          This will scan the connection for running services (Docker
           containers, systemd units, listening ports, cron jobs, K8s workloads)
           and add them automatically.
         </p>

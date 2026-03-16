@@ -12,8 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SkillsIndexRouteImport } from './routes/skills/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
-import { Route as InfrastructureIndexRouteImport } from './routes/infrastructure/index'
 import { Route as IncidentsIndexRouteImport } from './routes/incidents/index'
+import { Route as ConnectionsIndexRouteImport } from './routes/connections/index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
 import { Route as IncidentsIncidentIdRouteImport } from './routes/incidents/$incidentId'
 
@@ -32,14 +32,14 @@ const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
   path: '/projects/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InfrastructureIndexRoute = InfrastructureIndexRouteImport.update({
-  id: '/infrastructure/',
-  path: '/infrastructure/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IncidentsIndexRoute = IncidentsIndexRouteImport.update({
   id: '/incidents/',
   path: '/incidents/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConnectionsIndexRoute = ConnectionsIndexRouteImport.update({
+  id: '/connections/',
+  path: '/connections/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
@@ -57,8 +57,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/connections/': typeof ConnectionsIndexRoute
   '/incidents/': typeof IncidentsIndexRoute
-  '/infrastructure/': typeof InfrastructureIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/skills/': typeof SkillsIndexRoute
 }
@@ -66,8 +66,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/connections': typeof ConnectionsIndexRoute
   '/incidents': typeof IncidentsIndexRoute
-  '/infrastructure': typeof InfrastructureIndexRoute
   '/projects': typeof ProjectsIndexRoute
   '/skills': typeof SkillsIndexRoute
 }
@@ -76,8 +76,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/connections/': typeof ConnectionsIndexRoute
   '/incidents/': typeof IncidentsIndexRoute
-  '/infrastructure/': typeof InfrastructureIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/skills/': typeof SkillsIndexRoute
 }
@@ -87,8 +87,8 @@ export interface FileRouteTypes {
     | '/'
     | '/incidents/$incidentId'
     | '/projects/$projectId'
+    | '/connections/'
     | '/incidents/'
-    | '/infrastructure/'
     | '/projects/'
     | '/skills/'
   fileRoutesByTo: FileRoutesByTo
@@ -96,8 +96,8 @@ export interface FileRouteTypes {
     | '/'
     | '/incidents/$incidentId'
     | '/projects/$projectId'
+    | '/connections'
     | '/incidents'
-    | '/infrastructure'
     | '/projects'
     | '/skills'
   id:
@@ -105,8 +105,8 @@ export interface FileRouteTypes {
     | '/'
     | '/incidents/$incidentId'
     | '/projects/$projectId'
+    | '/connections/'
     | '/incidents/'
-    | '/infrastructure/'
     | '/projects/'
     | '/skills/'
   fileRoutesById: FileRoutesById
@@ -115,8 +115,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   IncidentsIncidentIdRoute: typeof IncidentsIncidentIdRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
+  ConnectionsIndexRoute: typeof ConnectionsIndexRoute
   IncidentsIndexRoute: typeof IncidentsIndexRoute
-  InfrastructureIndexRoute: typeof InfrastructureIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
   SkillsIndexRoute: typeof SkillsIndexRoute
 }
@@ -144,18 +144,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/infrastructure/': {
-      id: '/infrastructure/'
-      path: '/infrastructure'
-      fullPath: '/infrastructure/'
-      preLoaderRoute: typeof InfrastructureIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/incidents/': {
       id: '/incidents/'
       path: '/incidents'
       fullPath: '/incidents/'
       preLoaderRoute: typeof IncidentsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/connections/': {
+      id: '/connections/'
+      path: '/connections'
+      fullPath: '/connections/'
+      preLoaderRoute: typeof ConnectionsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/$projectId': {
@@ -179,8 +179,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   IncidentsIncidentIdRoute: IncidentsIncidentIdRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
+  ConnectionsIndexRoute: ConnectionsIndexRoute,
   IncidentsIndexRoute: IncidentsIndexRoute,
-  InfrastructureIndexRoute: InfrastructureIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
   SkillsIndexRoute: SkillsIndexRoute,
 }

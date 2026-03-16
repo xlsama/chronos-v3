@@ -17,7 +17,7 @@ const mainItems = [
 ] as const;
 
 const contextItems = [
-  { to: "/infrastructure", label: "基础设施", icon: LayoutGrid },
+  { to: "/connections", label: "连接", icon: LayoutGrid },
   { to: "/projects", label: "知识库", icon: Library },
 ] as const;
 

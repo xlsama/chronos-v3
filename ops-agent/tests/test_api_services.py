@@ -33,12 +33,10 @@ async def client(mock_session):
 def _mock_service(**overrides):
     defaults = {
         "id": uuid.uuid4(),
-        "infrastructure_id": uuid.uuid4(),
+        "connection_id": uuid.uuid4(),
         "name": "nginx",
-        "service_type": "docker_container",
         "port": 80,
         "namespace": None,
-        "config_json": None,
         "status": "unknown",
         "discovery_method": "manual",
         "created_at": datetime.now(timezone.utc),
@@ -52,8 +50,8 @@ def _mock_service(**overrides):
 
 
 async def test_create_service(client: AsyncClient, mock_session):
-    infra_id = uuid.uuid4()
-    mock_svc = _mock_service(infrastructure_id=infra_id)
+    conn_id = uuid.uuid4()
+    mock_svc = _mock_service(connection_id=conn_id)
 
     with patch("src.api.services.ServiceCatalog") as mock_catalog_cls:
         mock_catalog = AsyncMock()
@@ -61,28 +59,26 @@ async def test_create_service(client: AsyncClient, mock_session):
         mock_catalog_cls.return_value = mock_catalog
 
         response = await client.post("/api/services", json={
-            "infrastructure_id": str(infra_id),
+            "connection_id": str(conn_id),
             "name": "nginx",
-            "service_type": "docker_container",
             "port": 80,
         })
 
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "nginx"
-    assert data["service_type"] == "docker_container"
 
 
 async def test_list_services_by_infra(client: AsyncClient, mock_session):
-    infra_id = uuid.uuid4()
-    mock_svc = _mock_service(infrastructure_id=infra_id)
+    conn_id = uuid.uuid4()
+    mock_svc = _mock_service(connection_id=conn_id)
 
     with patch("src.api.services.ServiceCatalog") as mock_catalog_cls:
         mock_catalog = AsyncMock()
-        mock_catalog.list_by_infra.return_value = [mock_svc]
+        mock_catalog.list_by_connection.return_value = [mock_svc]
         mock_catalog_cls.return_value = mock_catalog
 
-        response = await client.get(f"/api/services/by-infra/{infra_id}")
+        response = await client.get(f"/api/services/by-connection/{conn_id}")
 
     assert response.status_code == 200
     data = response.json()
@@ -133,15 +129,15 @@ async def test_delete_service_not_found(client: AsyncClient, mock_session):
 
 
 async def test_discover_services(client: AsyncClient, mock_session):
-    infra_id = uuid.uuid4()
-    mock_svc = _mock_service(infrastructure_id=infra_id, discovery_method="auto_discovered")
+    conn_id = uuid.uuid4()
+    mock_svc = _mock_service(connection_id=conn_id, discovery_method="auto_discovered")
 
     with patch("src.api.services.ServiceCatalog") as mock_catalog_cls:
         mock_catalog = AsyncMock()
         mock_catalog.auto_discover.return_value = [mock_svc]
         mock_catalog_cls.return_value = mock_catalog
 
-        response = await client.post(f"/api/services/discover/{infra_id}")
+        response = await client.post(f"/api/services/discover/{conn_id}")
 
     assert response.status_code == 200
     data = response.json()

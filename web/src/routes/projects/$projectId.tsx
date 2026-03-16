@@ -35,7 +35,7 @@ function ProjectDetailPage() {
   return (
     <div className="h-full">
       <div className="border-b px-6 py-4">
-        <h1 className="text-xl font-semibold">{project.name}</h1>
+        <h1 className="text-base font-medium">{project.name}</h1>
         {project.description && (
           <p className="mt-1 text-sm text-muted-foreground">
             {project.description}
@@ -44,8 +44,8 @@ function ProjectDetailPage() {
       </div>
 
       <Tabs defaultValue="service-md">
-        <div className="border-b px-6">
-          <TabsList variant="line">
+        <div className="px-6 pt-4">
+          <TabsList>
             <TabsTrigger value="service-md">SERVICE.md</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>

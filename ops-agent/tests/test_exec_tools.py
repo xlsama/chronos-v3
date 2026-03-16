@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.connectors.ssh import SSHResult
-from src.tools.exec_tools import exec_read, exec_write, list_infrastructures
+from src.tools.exec_tools import exec_read, exec_write, list_connections
 from src.tools.safety import CommandType
 
 
@@ -19,7 +19,7 @@ def mock_ssh():
 async def test_exec_read_success(mock_ssh):
     mock_ssh.execute.return_value = SSHResult(exit_code=0, stdout="Filesystem  Size\n/dev/sda1   50G", stderr="")
 
-    result = await exec_read(infra_id="infra-1", command="df -h")
+    result = await exec_read(connection_id="infra-1", command="df -h")
 
     assert result["exit_code"] == 0
     assert "Filesystem" in result["stdout"]
@@ -27,7 +27,7 @@ async def test_exec_read_success(mock_ssh):
 
 
 async def test_exec_read_blocked_command(mock_ssh):
-    result = await exec_read(infra_id="infra-1", command="rm -rf /")
+    result = await exec_read(connection_id="infra-1", command="rm -rf /")
 
     assert result["error"] is not None
     assert "blocked" in result["error"].lower()
@@ -35,7 +35,7 @@ async def test_exec_read_blocked_command(mock_ssh):
 
 
 async def test_exec_read_rejects_write_command(mock_ssh):
-    result = await exec_read(infra_id="infra-1", command="systemctl restart nginx")
+    result = await exec_read(connection_id="infra-1", command="systemctl restart nginx")
 
     assert result["error"] is not None
     assert "write" in result["error"].lower() or "read" in result["error"].lower()
@@ -45,14 +45,14 @@ async def test_exec_read_rejects_write_command(mock_ssh):
 async def test_exec_write_success(mock_ssh):
     mock_ssh.execute.return_value = SSHResult(exit_code=0, stdout="done", stderr="")
 
-    result = await exec_write(infra_id="infra-1", command="systemctl restart nginx")
+    result = await exec_write(connection_id="infra-1", command="systemctl restart nginx")
 
     assert result["exit_code"] == 0
     mock_ssh.execute.assert_called_once_with("systemctl restart nginx")
 
 
 async def test_exec_write_blocked_command(mock_ssh):
-    result = await exec_write(infra_id="infra-1", command="rm -rf /")
+    result = await exec_write(connection_id="infra-1", command="rm -rf /")
 
     assert result["error"] is not None
     mock_ssh.execute.assert_not_called()
@@ -62,15 +62,15 @@ async def test_exec_read_long_output_compressed(mock_ssh):
     long_output = "x" * 20000
     mock_ssh.execute.return_value = SSHResult(exit_code=0, stdout=long_output, stderr="")
 
-    result = await exec_read(infra_id="infra-1", command="cat /var/log/syslog")
+    result = await exec_read(connection_id="infra-1", command="cat /var/log/syslog")
 
     assert len(result["stdout"]) <= 10000
 
 
-# ── list_infrastructures tests ──
+# ── list_connections tests ──
 
 
-def _make_infra(name, infra_type="ssh", host="10.0.0.1", status="online", project_id=None):
+def _make_conn(name, infra_type="ssh", host="10.0.0.1", status="online", project_id=None):
     infra = MagicMock()
     infra.id = uuid.uuid4()
     infra.name = name
@@ -83,7 +83,7 @@ def _make_infra(name, infra_type="ssh", host="10.0.0.1", status="online", projec
 
 @pytest.fixture
 def mock_db_session():
-    """Mock DB session for list_infrastructures tests."""
+    """Mock DB session for list_connections tests."""
     with patch("src.db.connection.get_session_factory") as mock_factory:
         mock_session = AsyncMock()
         mock_ctx = AsyncMock()
@@ -93,14 +93,14 @@ def mock_db_session():
         yield mock_session
 
 
-async def test_list_infrastructures_returns_safe_fields(mock_db_session):
-    """list_infrastructures should return only safe fields, no passwords or keys."""
-    infra = _make_infra("web-server-1", host="192.168.1.10")
+async def test_list_connections_returns_safe_fields(mock_db_session):
+    """list_connections should return only safe fields, no passwords or keys."""
+    infra = _make_conn("web-server-1", host="192.168.1.10")
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [infra]
     mock_db_session.execute.return_value = mock_result
 
-    result = await list_infrastructures()
+    result = await list_connections()
 
     assert len(result) == 1
     item = result[0]
@@ -115,15 +115,15 @@ async def test_list_infrastructures_returns_safe_fields(mock_db_session):
     assert "conn_config" not in item
 
 
-async def test_list_infrastructures_filters_by_project(mock_db_session):
-    """list_infrastructures should filter by project_id when provided."""
+async def test_list_connections_filters_by_project(mock_db_session):
+    """list_connections should filter by project_id when provided."""
     project_id = str(uuid.uuid4())
-    infra = _make_infra("proj-server", project_id=uuid.UUID(project_id))
+    infra = _make_conn("proj-server", project_id=uuid.UUID(project_id))
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [infra]
     mock_db_session.execute.return_value = mock_result
 
-    result = await list_infrastructures(project_id=project_id)
+    result = await list_connections(project_id=project_id)
 
     assert len(result) == 1
     assert result[0]["project_id"] == project_id
@@ -131,14 +131,14 @@ async def test_list_infrastructures_filters_by_project(mock_db_session):
     mock_db_session.execute.assert_called_once()
 
 
-async def test_list_infrastructures_excludes_offline(mock_db_session):
-    """list_infrastructures query should exclude offline infrastructures."""
+async def test_list_connections_excludes_offline(mock_db_session):
+    """list_connections query should exclude offline connections."""
     # Return empty (offline ones filtered by query)
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = []
     mock_db_session.execute.return_value = mock_result
 
-    result = await list_infrastructures()
+    result = await list_connections()
 
     assert result == []
     mock_db_session.execute.assert_called_once()

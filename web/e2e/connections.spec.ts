@@ -1,35 +1,35 @@
 import { test, expect } from "./fixtures/mock-api";
-import { INFRA_SSH_ID, INFRA_K8S_ID } from "./helpers/mock-data";
+import { CONN_SSH_ID, CONN_K8S_ID } from "./helpers/mock-data";
 
-test.describe("Infrastructure 页面", () => {
+test.describe("Connections 页面", () => {
   test("显示基础设施列表", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
-    await page.goto("/infrastructure");
+    await mockApi.setupConnectionRoutes();
+    await page.goto("/connections");
 
     await expect(page.getByText("Production Server")).toBeVisible();
     await expect(page.getByText("K8s Production")).toBeVisible();
 
     // Type badges
-    const badges = page.getByTestId("infra-type-badge");
+    const badges = page.getByTestId("conn-type-badge");
     await expect(badges.nth(0)).toContainText("SSH");
     await expect(badges.nth(1)).toContainText("K8s");
   });
 
   test("空列表显示提示", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes([]);
-    await page.goto("/infrastructure");
+    await mockApi.setupConnectionRoutes([]);
+    await page.goto("/connections");
 
-    await expect(page.getByText("No infrastructure configured")).toBeVisible();
+    await expect(page.getByText("No connections configured")).toBeVisible();
   });
 
   test("创建 SSH 基础设施", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
-    await page.goto("/infrastructure");
+    await mockApi.setupConnectionRoutes();
+    await page.goto("/connections");
 
     // Open dialog
-    await page.getByRole("button", { name: "Add Infrastructure" }).click();
+    await page.getByRole("button", { name: "Add Connection" }).click();
     await expect(
-      page.getByRole("heading", { name: "Add Infrastructure" }),
+      page.getByRole("heading", { name: "Add Connection" }),
     ).toBeVisible();
 
     // Fill SSH form (SSH is default type)
@@ -40,15 +40,15 @@ test.describe("Infrastructure 页面", () => {
     await page.getByRole("button", { name: "Add", exact: true }).click();
 
     // Verify toast
-    await expect(page.getByText("Infrastructure added")).toBeVisible();
+    await expect(page.getByText("Connection added")).toBeVisible();
   });
 
   test("创建 K8s 基础设施", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
-    await page.goto("/infrastructure");
+    await mockApi.setupConnectionRoutes();
+    await page.goto("/connections");
 
     // Open dialog
-    await page.getByRole("button", { name: "Add Infrastructure" }).click();
+    await page.getByRole("button", { name: "Add Connection" }).click();
 
     // Switch to Kubernetes type
     await page.getByRole("combobox").click();
@@ -63,42 +63,42 @@ test.describe("Infrastructure 页面", () => {
     // Submit
     await page.getByRole("button", { name: "Add", exact: true }).click();
 
-    await expect(page.getByText("Infrastructure added")).toBeVisible();
+    await expect(page.getByText("Connection added")).toBeVisible();
   });
 
   test("测试连接", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
-    await page.goto("/infrastructure");
+    await mockApi.setupConnectionRoutes();
+    await page.goto("/connections");
 
     await expect(page.getByText("Production Server")).toBeVisible();
 
-    // Click test button on SSH infra
-    await page.getByTestId(`infra-test-${INFRA_SSH_ID}`).click();
+    // Click test button on SSH connection
+    await page.getByTestId(`conn-test-${CONN_SSH_ID}`).click();
 
     await expect(page.getByText("Connection test completed")).toBeVisible();
   });
 
   test("删除基础设施", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
-    await page.goto("/infrastructure");
+    await mockApi.setupConnectionRoutes();
+    await page.goto("/connections");
 
     await expect(page.getByText("Production Server")).toBeVisible();
 
     // Click delete button
-    await page.getByTestId(`infra-delete-${INFRA_SSH_ID}`).click();
+    await page.getByTestId(`conn-delete-${CONN_SSH_ID}`).click();
 
-    await expect(page.getByText("Infrastructure deleted")).toBeVisible();
+    await expect(page.getByText("Connection deleted")).toBeVisible();
   });
 
   test("展开显示服务列表", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
+    await mockApi.setupConnectionRoutes();
     await mockApi.setupServiceRoutes();
-    await page.goto("/infrastructure");
+    await page.goto("/connections");
 
     await expect(page.getByText("Production Server")).toBeVisible();
 
-    // Expand SSH infra
-    await page.getByTestId(`infra-expand-${INFRA_SSH_ID}`).click();
+    // Expand SSH connection
+    await page.getByTestId(`conn-expand-${CONN_SSH_ID}`).click();
 
     // Wait for services to load
     await expect(page.getByText("nginx")).toBeVisible();
@@ -107,12 +107,12 @@ test.describe("Infrastructure 页面", () => {
   });
 
   test("手动添加服务", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
+    await mockApi.setupConnectionRoutes();
     await mockApi.setupServiceRoutes();
-    await page.goto("/infrastructure");
+    await page.goto("/connections");
 
-    // Expand infra
-    await page.getByTestId(`infra-expand-${INFRA_SSH_ID}`).click();
+    // Expand connection
+    await page.getByTestId(`conn-expand-${CONN_SSH_ID}`).click();
     await expect(page.getByText("Services", { exact: true })).toBeVisible();
 
     // Click Add button
@@ -131,13 +131,13 @@ test.describe("Infrastructure 页面", () => {
   });
 
   test("自动发现服务", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
+    await mockApi.setupConnectionRoutes();
     await mockApi.setupServiceRoutes();
     await mockApi.setupDiscoverServices();
-    await page.goto("/infrastructure");
+    await page.goto("/connections");
 
-    // Expand infra
-    await page.getByTestId(`infra-expand-${INFRA_SSH_ID}`).click();
+    // Expand connection
+    await page.getByTestId(`conn-expand-${CONN_SSH_ID}`).click();
     await expect(page.getByText("Services", { exact: true })).toBeVisible();
 
     // Click Discover button
@@ -153,12 +153,12 @@ test.describe("Infrastructure 页面", () => {
   });
 
   test("空服务列表提示", async ({ page, mockApi }) => {
-    await mockApi.setupInfrastructureRoutes();
-    await mockApi.setupServiceRoutes(INFRA_SSH_ID, []);
-    await page.goto("/infrastructure");
+    await mockApi.setupConnectionRoutes();
+    await mockApi.setupServiceRoutes(CONN_SSH_ID, []);
+    await page.goto("/connections");
 
-    // Expand infra
-    await page.getByTestId(`infra-expand-${INFRA_SSH_ID}`).click();
+    // Expand connection
+    await page.getByTestId(`conn-expand-${CONN_SSH_ID}`).click();
 
     await expect(page.getByText("No services discovered")).toBeVisible();
   });

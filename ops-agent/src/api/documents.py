@@ -1,9 +1,12 @@
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from src.api.schemas import DocumentResponse, DocumentUpload
+from src.api.schemas import DocumentDetailResponse, DocumentResponse, DocumentUpdate, DocumentUpload
 from src.db.connection import get_session
 from src.lib.embedder import Embedder
 from src.lib.errors import NotFoundError
@@ -109,3 +112,86 @@ async def delete_document(
     except ValueError as e:
         raise NotFoundError(str(e))
     return {"ok": True}
+
+
+@router.get("/api/documents/{document_id}", response_model=DocumentDetailResponse)
+async def get_document(
+    document_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    service = DocumentService(session=session, embedder=None)
+    doc = await service.get(document_id)
+    if not doc:
+        raise NotFoundError("Document not found")
+    return doc
+
+
+@router.get("/api/documents/{document_id}/file")
+async def get_document_file(
+    document_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    """Serve the original binary file (PDF, image, etc.) for preview."""
+    from sqlalchemy import select as sa_select
+    from src.db.models import ProjectDocument
+
+    stmt = sa_select(ProjectDocument).options(
+        selectinload(ProjectDocument.project)
+    ).where(ProjectDocument.id == document_id)
+    result = await session.execute(stmt)
+    doc = result.scalar_one_or_none()
+
+    if not doc:
+        raise NotFoundError("Document not found")
+
+    file_path = Path("data/knowledge") / doc.project.slug / doc.filename
+    if not file_path.exists():
+        raise NotFoundError("File not found on disk")
+
+    # Determine media type from extension
+    ext = file_path.suffix.lower()
+    media_types = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+    }
+    media_type = media_types.get(ext, "application/octet-stream")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=doc.filename,
+        media_type=media_type,
+    )
+
+
+@router.put("/api/documents/{document_id}", response_model=DocumentDetailResponse)
+async def update_document(
+    document_id: uuid.UUID,
+    body: DocumentUpdate,
+    session: AsyncSession = Depends(get_session),
+    embedder: Embedder = Depends(get_embedder),
+):
+    # Load doc with project relationship for slug
+    from sqlalchemy import select as sa_select
+    from src.db.models import ProjectDocument
+
+    stmt = sa_select(ProjectDocument).options(
+        selectinload(ProjectDocument.project)
+    ).where(ProjectDocument.id == document_id)
+    result = await session.execute(stmt)
+    doc = result.scalar_one_or_none()
+
+    if not doc:
+        raise NotFoundError("Document not found")
+
+    service = DocumentService(session=session, embedder=embedder)
+    updated = await service.update(
+        document_id=document_id,
+        content=body.content,
+        project_slug=doc.project.slug,
+    )
+    return updated

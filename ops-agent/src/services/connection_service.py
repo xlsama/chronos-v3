@@ -3,11 +3,11 @@ import uuid
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Infrastructure
+from src.db.models import Connection
 from src.services.crypto import CryptoService
 
 
-class InfrastructureService:
+class ConnectionService:
     def __init__(self, session: AsyncSession, crypto: CryptoService):
         self.session = session
         self.crypto = crypto
@@ -27,7 +27,7 @@ class InfrastructureService:
         context: str | None = None,
         namespace: str | None = None,
         project_id: uuid.UUID | None = None,
-    ) -> Infrastructure:
+    ) -> Connection:
         conn_config = None
         if type == "kubernetes" and kubeconfig:
             config_data = {"kubeconfig": kubeconfig}
@@ -37,7 +37,7 @@ class InfrastructureService:
                 config_data["namespace"] = namespace
             conn_config = self.crypto.encrypt(orjson.dumps(config_data).decode())
 
-        infra = Infrastructure(
+        conn = Connection(
             name=name,
             type=type,
             host=host,
@@ -48,27 +48,27 @@ class InfrastructureService:
             conn_config=conn_config,
             project_id=project_id,
         )
-        self.session.add(infra)
+        self.session.add(conn)
         await self.session.commit()
-        await self.session.refresh(infra)
-        return infra
+        await self.session.refresh(conn)
+        return conn
 
     def get_decrypted_credentials(
-        self, infra: Infrastructure
+        self, conn: Connection
     ) -> tuple[str | None, str | None]:
         password = (
-            self.crypto.decrypt(infra.encrypted_password)
-            if infra.encrypted_password
+            self.crypto.decrypt(conn.encrypted_password)
+            if conn.encrypted_password
             else None
         )
         private_key = (
-            self.crypto.decrypt(infra.encrypted_private_key)
-            if infra.encrypted_private_key
+            self.crypto.decrypt(conn.encrypted_private_key)
+            if conn.encrypted_private_key
             else None
         )
         return password, private_key
 
-    def get_decrypted_conn_config(self, infra: Infrastructure) -> dict | None:
-        if not infra.conn_config:
+    def get_decrypted_conn_config(self, conn: Connection) -> dict | None:
+        if not conn.conn_config:
             return None
-        return orjson.loads(self.crypto.decrypt(infra.conn_config))
+        return orjson.loads(self.crypto.decrypt(conn.conn_config))

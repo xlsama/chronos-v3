@@ -5,12 +5,45 @@ import dayjs from "@/lib/dayjs";
 import { getProjects } from "@/api/projects";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Card,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+
+const GRADIENTS = [
+  "from-violet-500 to-purple-600",
+  "from-blue-500 to-cyan-500",
+  "from-emerald-500 to-teal-600",
+  "from-orange-500 to-amber-500",
+  "from-pink-500 to-rose-600",
+  "from-indigo-500 to-blue-600",
+  "from-fuchsia-500 to-pink-600",
+  "from-cyan-500 to-sky-600",
+  "from-lime-500 to-green-600",
+  "from-red-500 to-orange-600",
+];
+
+function getGradient(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash << 5) - hash + name.charCodeAt(i);
+    hash |= 0;
+  }
+  return GRADIENTS[Math.abs(hash) % GRADIENTS.length];
+}
+
+function getInitial(name: string) {
+  return name.charAt(0).toUpperCase();
+}
 
 export function ProjectList() {
   const { data: projects, isLoading } = useQuery({
@@ -20,15 +53,18 @@ export function ProjectList() {
 
   if (isLoading) {
     return (
-      <div className="divide-y">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 p-4">
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-            <Skeleton className="h-3 w-24" />
-          </div>
+      <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className="pt-0 overflow-hidden">
+            <Skeleton className="h-24 rounded-none" />
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-full" />
+            </CardHeader>
+            <CardFooter>
+              <Skeleton className="h-3 w-24" />
+            </CardFooter>
+          </Card>
         ))}
       </div>
     );
@@ -49,23 +85,34 @@ export function ProjectList() {
   }
 
   return (
-    <div className="divide-y">
+    <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {projects.map((project) => (
         <Link
           key={project.id}
           to="/projects/$projectId"
           params={{ projectId: project.id }}
-          className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+          className="no-underline"
         >
-          <div className="flex-1 space-y-1">
-            <p className="font-medium">{project.name}</p>
-            <p className="text-sm text-muted-foreground line-clamp-1">
-              {project.description || project.slug}
-            </p>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {dayjs(project.created_at).fromNow()}
-          </span>
+          <Card className="pt-0 overflow-hidden transition-colors hover:bg-accent/50">
+            <div
+              className={`flex h-24 items-center justify-center bg-gradient-to-br ${getGradient(project.name)}`}
+            >
+              <span className="text-3xl font-bold text-white">
+                {getInitial(project.name)}
+              </span>
+            </div>
+            <CardHeader>
+              <CardTitle className="line-clamp-1">{project.name}</CardTitle>
+              <CardDescription className="line-clamp-2">
+                {project.description || project.slug}
+              </CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <span className="text-xs text-muted-foreground">
+                {dayjs(project.created_at).fromNow()}
+              </span>
+            </CardFooter>
+          </Card>
         </Link>
       ))}
     </div>

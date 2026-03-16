@@ -21,10 +21,10 @@ test.describe("Agent 自主发现基础设施 - Real E2E", () => {
     page,
   }) => {
     // ── Phase 1: 创建 SSH 基础设施 ──
-    await page.goto("/infrastructure");
+    await page.goto("/connections");
     await readingPause();
 
-    await page.getByRole("button", { name: "Add Infrastructure" }).click();
+    await page.getByRole("button", { name: "Add Connection" }).click();
     await thinkingPause();
 
     // Fill SSH form
@@ -61,7 +61,7 @@ test.describe("Agent 自主发现基础设施 - Real E2E", () => {
 
     // Submit
     await page.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(page.getByText("Infrastructure added")).toBeVisible({
+    await expect(page.getByText("Connection added")).toBeVisible({
       timeout: 10_000,
     });
 
@@ -99,11 +99,11 @@ test.describe("Agent 自主发现基础设施 - Real E2E", () => {
       timeout: 30_000,
     });
 
-    // Wait for list_infrastructures tool call
+    // Wait for list_connections tool call
     await expect(
       page
         .getByTestId("tool-name")
-        .filter({ hasText: "list_infrastructures" })
+        .filter({ hasText: "list_connections" })
         .first(),
     ).toBeVisible({ timeout: 60_000 });
 

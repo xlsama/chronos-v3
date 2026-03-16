@@ -173,19 +173,18 @@ class TestSearchKnowledgeBase:
         # Mock infrastructure with services
         mock_svc = MagicMock()
         mock_svc.name = "nginx"
-        mock_svc.service_type = "docker_container"
         mock_svc.status = "running"
         mock_svc.port = 80
         mock_svc.namespace = None
 
-        mock_infra = MagicMock()
-        mock_infra.name = "prod-web-01"
-        mock_infra.type = "ssh"
-        mock_infra.id = uuid.uuid4()
-        mock_infra.status = "online"
-        mock_infra.host = "10.0.0.1"
-        mock_infra.port = 22
-        mock_infra.services = [mock_svc]
+        mock_conn = MagicMock()
+        mock_conn.name = "prod-web-01"
+        mock_conn.type = "ssh"
+        mock_conn.id = uuid.uuid4()
+        mock_conn.status = "online"
+        mock_conn.host = "10.0.0.1"
+        mock_conn.port = 22
+        mock_conn.services = [mock_svc]
 
         with (
             patch("src.tools.knowledge_tools.get_session_ctx") as mock_get_session,
@@ -198,7 +197,7 @@ class TestSearchKnowledgeBase:
             mock_session.get.return_value = mock_project
 
             mock_result = MagicMock()
-            mock_result.scalars.return_value.all.return_value = [mock_infra]
+            mock_result.scalars.return_value.all.return_value = [mock_conn]
             mock_session.execute.return_value = mock_result
 
             mock_emb = AsyncMock()
@@ -213,5 +212,4 @@ class TestSearchKnowledgeBase:
 
         assert "prod-web-01" in result
         assert "nginx" in result
-        assert "docker" in result
-        assert "关联基础设施" in result
+        assert "关联连接" in result

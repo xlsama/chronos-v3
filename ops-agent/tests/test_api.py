@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from src.api.infrastructures import get_crypto
+from src.api.connections import get_crypto
 from src.db.connection import get_session
 from src.main import app
 from src.services.crypto import CryptoService
@@ -44,28 +44,28 @@ async def test_health(client: AsyncClient):
     assert response.json() == {"status": "ok"}
 
 
-# ── Infrastructures ──
+# ── Connections ──
 
 
-async def test_create_infrastructure(client: AsyncClient, mock_session):
-    mock_infra = MagicMock()
-    mock_infra.id = uuid.uuid4()
-    mock_infra.name = "Web Server"
-    mock_infra.type = "ssh"
-    mock_infra.host = "192.168.1.10"
-    mock_infra.port = 22
-    mock_infra.username = "root"
-    mock_infra.status = "unknown"
-    mock_infra.project_id = None
-    mock_infra.created_at = datetime.now(timezone.utc)
-    mock_infra.updated_at = datetime.now(timezone.utc)
+async def test_create_connection(client: AsyncClient, mock_session):
+    mock_conn = MagicMock()
+    mock_conn.id = uuid.uuid4()
+    mock_conn.name = "Web Server"
+    mock_conn.type = "ssh"
+    mock_conn.host = "192.168.1.10"
+    mock_conn.port = 22
+    mock_conn.username = "root"
+    mock_conn.status = "unknown"
+    mock_conn.project_id = None
+    mock_conn.created_at = datetime.now(timezone.utc)
+    mock_conn.updated_at = datetime.now(timezone.utc)
 
-    with patch("src.api.infrastructures.InfrastructureService") as mock_svc_cls:
+    with patch("src.api.connections.ConnectionService") as mock_svc_cls:
         mock_svc = AsyncMock()
-        mock_svc.create.return_value = mock_infra
+        mock_svc.create.return_value = mock_conn
         mock_svc_cls.return_value = mock_svc
 
-        response = await client.post("/api/infrastructures", json={
+        response = await client.post("/api/connections", json={
             "name": "Web Server",
             "host": "192.168.1.10",
             "password": "secret123",
@@ -88,7 +88,7 @@ async def test_create_incident(client: AsyncClient, mock_session):
     mock_incident.description = "Disk is 95% full"
     mock_incident.status = "open"
     mock_incident.severity = "high"
-    mock_incident.infrastructure_id = None
+    mock_incident.connection_id = None
     mock_incident.project_id = None
     mock_incident.summary_md = None
     mock_incident.thread_id = None

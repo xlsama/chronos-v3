@@ -18,7 +18,7 @@ def test_ops_state_init():
     state = {
         "messages": [],
         "incident_id": "inc-1",
-        "infrastructure_id": "infra-1",
+        "connection_id": "conn-1",
         "project_id": "",
         "title": "Disk full",
         "description": "Server disk is 95% full",
@@ -66,7 +66,7 @@ def test_route_decision_needs_approval():
         tool_calls=[
             {
                 "name": "exec_write_tool",
-                "args": {"infra_id": "i1", "command": "systemctl restart nginx"},
+                "args": {"connection_id": "c1", "command": "systemctl restart nginx"},
                 "id": "tc1",
             }
         ],
@@ -81,7 +81,7 @@ def test_route_decision_continue():
         tool_calls=[
             {
                 "name": "exec_read_tool",
-                "args": {"infra_id": "i1", "command": "df -h"},
+                "args": {"connection_id": "c1", "command": "df -h"},
                 "id": "tc1",
             }
         ],
@@ -99,7 +99,7 @@ async def test_human_approval_node_sets_pending():
         tool_calls=[
             {
                 "name": "exec_write_tool",
-                "args": {"infra_id": "i1", "command": "systemctl restart nginx"},
+                "args": {"connection_id": "c1", "command": "systemctl restart nginx"},
                 "id": "tc1",
             }
         ],

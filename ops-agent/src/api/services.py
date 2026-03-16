@@ -21,13 +21,13 @@ async def create_service(
     return svc
 
 
-@router.get("/by-infra/{infra_id}", response_model=list[ServiceResponse])
-async def list_services_by_infra(
-    infra_id: uuid.UUID,
+@router.get("/by-connection/{connection_id}", response_model=list[ServiceResponse])
+async def list_services_by_connection(
+    connection_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
 ):
     catalog = ServiceCatalog(session)
-    return await catalog.list_by_infra(infra_id)
+    return await catalog.list_by_connection(connection_id)
 
 
 @router.get("/{service_id}", response_model=ServiceResponse)
@@ -54,13 +54,13 @@ async def delete_service(
     return {"ok": True}
 
 
-@router.post("/discover/{infra_id}", response_model=DiscoverServicesResponse)
+@router.post("/discover/{connection_id}", response_model=DiscoverServicesResponse)
 async def discover_services(
-    infra_id: uuid.UUID,
+    connection_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
 ):
     catalog = ServiceCatalog(session)
-    services = await catalog.auto_discover(infra_id)
+    services = await catalog.auto_discover(connection_id)
     await session.commit()
     return DiscoverServicesResponse(
         discovered=len(services),

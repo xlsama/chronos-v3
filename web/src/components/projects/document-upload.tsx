@@ -7,7 +7,7 @@ import { Upload } from "lucide-react";
 import { uploadDocument, uploadDocumentFile } from "@/api/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -170,13 +170,12 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
                   }
                 >
                   <FieldLabel>Content</FieldLabel>
-                  <Textarea
-                    placeholder="Paste document content here..."
+                  <MarkdownEditor
                     value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
+                    onChange={field.handleChange}
                     onBlur={field.handleBlur}
-                    rows={8}
-                    className="font-mono"
+                    minHeight={160}
+                    placeholder="Paste document content here..."
                   />
                   <FieldError
                     errors={field.state.meta.errors.map((e) => ({

@@ -15,7 +15,7 @@ class IncidentService:
         description: str,
         title: str = "",
         severity: str = "medium",
-        infrastructure_id: uuid.UUID | None = None,
+        connection_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
         attachment_ids: list[uuid.UUID] | None = None,
     ) -> Incident:
@@ -28,7 +28,7 @@ class IncidentService:
             description=description,
             status="open",
             severity=severity,
-            infrastructure_id=infrastructure_id,
+            connection_id=connection_id,
             project_id=project_id,
         )
         self.session.add(incident)

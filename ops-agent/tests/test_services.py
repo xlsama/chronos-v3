@@ -1,4 +1,4 @@
-"""Tests for infrastructure, incident, approval, and incident history services.
+"""Tests for connection, incident, approval, and incident history services.
 
 These are unit tests using in-memory mocks instead of a real database.
 """
@@ -9,16 +9,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.services.infrastructure_service import InfrastructureService
+from src.services.connection_service import ConnectionService
 from src.services.incident_service import IncidentService
 from src.services.approval_service import ApprovalService
 from src.services.incident_history_service import IncidentHistoryService
 
 
-# ── Infrastructure Service ──
+# ── Connection Service ──
 
 
-class TestInfrastructureService:
+class TestConnectionService:
     @pytest.fixture
     def service(self):
         session = AsyncMock()
@@ -26,9 +26,9 @@ class TestInfrastructureService:
         crypto = MagicMock()
         crypto.encrypt.side_effect = lambda x: f"enc:{x}"
         crypto.decrypt.side_effect = lambda x: x.replace("enc:", "")
-        return InfrastructureService(session=session, crypto=crypto)
+        return ConnectionService(session=session, crypto=crypto)
 
-    async def test_create_encrypts_password(self, service: InfrastructureService):
+    async def test_create_encrypts_password(self, service: ConnectionService):
         result = await service.create(
             name="Web Server",
             host="192.168.1.10",
@@ -43,7 +43,7 @@ class TestInfrastructureService:
         service.session.add.assert_called_once()
         service.session.commit.assert_called_once()
 
-    async def test_create_encrypts_private_key(self, service: InfrastructureService):
+    async def test_create_encrypts_private_key(self, service: ConnectionService):
         result = await service.create(
             name="Web Server",
             host="192.168.1.10",
@@ -53,17 +53,17 @@ class TestInfrastructureService:
         assert result.encrypted_private_key == "enc:ssh-rsa AAAA..."
         assert result.encrypted_password is None
 
-    async def test_get_decrypted_credentials(self, service: InfrastructureService):
-        infra = MagicMock()
-        infra.encrypted_password = "enc:mypassword"
-        infra.encrypted_private_key = None
+    async def test_get_decrypted_credentials(self, service: ConnectionService):
+        conn = MagicMock()
+        conn.encrypted_password = "enc:mypassword"
+        conn.encrypted_private_key = None
 
-        password, key = service.get_decrypted_credentials(infra)
+        password, key = service.get_decrypted_credentials(conn)
 
         assert password == "mypassword"
         assert key is None
 
-    async def test_create_k8s_encrypts_kubeconfig(self, service: InfrastructureService):
+    async def test_create_k8s_encrypts_kubeconfig(self, service: ConnectionService):
         result = await service.create(
             name="K8s Cluster",
             type="kubernetes",
@@ -79,7 +79,7 @@ class TestInfrastructureService:
         service.crypto.encrypt.assert_called()
         service.session.add.assert_called_once()
 
-    async def test_create_k8s_without_kubeconfig(self, service: InfrastructureService):
+    async def test_create_k8s_without_kubeconfig(self, service: ConnectionService):
         result = await service.create(
             name="K8s Cluster",
             type="kubernetes",
@@ -87,26 +87,26 @@ class TestInfrastructureService:
 
         assert result.conn_config is None
 
-    async def test_get_decrypted_conn_config(self, service: InfrastructureService):
+    async def test_get_decrypted_conn_config(self, service: ConnectionService):
         import orjson
 
         config_data = {"kubeconfig": "apiVersion: v1\nclusters: []", "context": "my-ctx"}
         encrypted = f"enc:{orjson.dumps(config_data).decode()}"
 
-        infra = MagicMock()
-        infra.conn_config = encrypted
+        conn = MagicMock()
+        conn.conn_config = encrypted
 
-        result = service.get_decrypted_conn_config(infra)
+        result = service.get_decrypted_conn_config(conn)
 
         assert result is not None
         assert result["kubeconfig"] == "apiVersion: v1\nclusters: []"
         assert result["context"] == "my-ctx"
 
-    async def test_get_decrypted_conn_config_none(self, service: InfrastructureService):
-        infra = MagicMock()
-        infra.conn_config = None
+    async def test_get_decrypted_conn_config_none(self, service: ConnectionService):
+        conn = MagicMock()
+        conn.conn_config = None
 
-        result = service.get_decrypted_conn_config(infra)
+        result = service.get_decrypted_conn_config(conn)
 
         assert result is None
 
@@ -134,15 +134,15 @@ class TestIncidentService:
         service.session.add.assert_called_once()
         service.session.commit.assert_called_once()
 
-    async def test_create_incident_with_infrastructure(self, service: IncidentService):
-        infra_id = uuid.uuid4()
+    async def test_create_incident_with_connection(self, service: IncidentService):
+        conn_id = uuid.uuid4()
         result = await service.create(
             title="High CPU",
             description="CPU usage > 90%",
-            infrastructure_id=infra_id,
+            connection_id=conn_id,
         )
 
-        assert result.infrastructure_id == infra_id
+        assert result.connection_id == conn_id
 
     async def test_update_status(self, service: IncidentService):
         incident = MagicMock()

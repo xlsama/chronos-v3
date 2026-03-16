@@ -6,89 +6,89 @@ from src.connectors.k8s import K8sConnector
 from src.connectors.ssh import SSHConnector
 from src.tools.safety import CommandSafety, CommandType
 
-# Registry of connectors by infrastructure ID
+# Registry of connectors by connection ID
 _connector_registry: dict[str, SSHConnector | K8sConnector] = {}
 
 
-def register_connector(infra_id: str, connector: SSHConnector | K8sConnector):
-    _connector_registry[infra_id] = connector
+def register_connector(connection_id: str, connector: SSHConnector | K8sConnector):
+    _connector_registry[connection_id] = connector
 
 
-async def get_connector(infra_id: str) -> SSHConnector | K8sConnector:
+async def get_connector(connection_id: str) -> SSHConnector | K8sConnector:
     # 1. Check registry cache
-    if infra_id in _connector_registry:
-        return _connector_registry[infra_id]
+    if connection_id in _connector_registry:
+        return _connector_registry[connection_id]
 
     # 2. Cache miss → query DB → create connector by type → cache
     from src.config import get_settings
     from src.db.connection import get_session_factory
-    from src.db.models import Infrastructure
+    from src.db.models import Connection
     from src.services.crypto import CryptoService
 
     factory = get_session_factory()
     async with factory() as session:
-        infra = await session.get(Infrastructure, uuid.UUID(infra_id))
-        if not infra:
-            raise ValueError(f"Infrastructure not found: {infra_id}")
+        conn = await session.get(Connection, uuid.UUID(connection_id))
+        if not conn:
+            raise ValueError(f"Connection not found: {connection_id}")
 
         crypto = CryptoService(key=get_settings().encryption_key)
 
-        if infra.type == "kubernetes":
-            if not infra.conn_config:
-                raise ValueError(f"K8s infrastructure missing conn_config: {infra_id}")
-            config = orjson.loads(crypto.decrypt(infra.conn_config))
+        if conn.type == "kubernetes":
+            if not conn.conn_config:
+                raise ValueError(f"K8s connection missing conn_config: {connection_id}")
+            config = orjson.loads(crypto.decrypt(conn.conn_config))
             connector = K8sConnector(
                 kubeconfig=config["kubeconfig"],
                 context=config.get("context"),
                 namespace=config.get("namespace", "default"),
             )
         else:  # ssh (default)
-            password = crypto.decrypt(infra.encrypted_password) if infra.encrypted_password else None
+            password = crypto.decrypt(conn.encrypted_password) if conn.encrypted_password else None
             private_key = (
-                crypto.decrypt(infra.encrypted_private_key) if infra.encrypted_private_key else None
+                crypto.decrypt(conn.encrypted_private_key) if conn.encrypted_private_key else None
             )
             connector = SSHConnector(
-                host=infra.host,
-                port=infra.port,
-                username=infra.username,
+                host=conn.host,
+                port=conn.port,
+                username=conn.username,
                 password=password,
                 private_key=private_key,
             )
 
-        _connector_registry[infra_id] = connector
+        _connector_registry[connection_id] = connector
         return connector
 
 
-async def list_infrastructures(project_id: str = "") -> list[dict]:
-    """List available infrastructures, excluding offline ones and sensitive fields."""
+async def list_connections(project_id: str = "") -> list[dict]:
+    """List available connections, excluding offline ones and sensitive fields."""
     from sqlalchemy import select
 
     from src.db.connection import get_session_factory
-    from src.db.models import Infrastructure
+    from src.db.models import Connection
 
     factory = get_session_factory()
     async with factory() as session:
-        stmt = select(Infrastructure).where(Infrastructure.status != "offline")
+        stmt = select(Connection).where(Connection.status != "offline")
         if project_id:
-            stmt = stmt.where(Infrastructure.project_id == uuid.UUID(project_id))
+            stmt = stmt.where(Connection.project_id == uuid.UUID(project_id))
 
         result = await session.execute(stmt)
-        infras = result.scalars().all()
+        conns = result.scalars().all()
 
         return [
             {
-                "id": str(infra.id),
-                "name": infra.name,
-                "type": infra.type,
-                "host": infra.host,
-                "status": infra.status,
-                "project_id": str(infra.project_id) if infra.project_id else "",
+                "id": str(conn.id),
+                "name": conn.name,
+                "type": conn.type,
+                "host": conn.host,
+                "status": conn.status,
+                "project_id": str(conn.project_id) if conn.project_id else "",
             }
-            for infra in infras
+            for conn in conns
         ]
 
 
-async def exec_read(infra_id: str, command: str) -> dict:
+async def exec_read(connection_id: str, command: str) -> dict:
     cmd_type = CommandSafety.classify(command)
 
     if cmd_type == CommandType.BLOCKED:
@@ -97,7 +97,7 @@ async def exec_read(infra_id: str, command: str) -> dict:
     if cmd_type == CommandType.WRITE:
         return {"error": "This is a write command. Use exec_write instead, which requires approval."}
 
-    connector = await get_connector(infra_id)
+    connector = await get_connector(connection_id)
     result = await connector.execute(command)
 
     return {
@@ -108,13 +108,13 @@ async def exec_read(infra_id: str, command: str) -> dict:
     }
 
 
-async def exec_write(infra_id: str, command: str) -> dict:
+async def exec_write(connection_id: str, command: str) -> dict:
     cmd_type = CommandSafety.classify(command)
 
     if cmd_type == CommandType.BLOCKED:
         return {"error": "Command blocked: this command is too dangerous to execute"}
 
-    connector = await get_connector(infra_id)
+    connector = await get_connector(connection_id)
     result = await connector.execute(command)
 
     return {

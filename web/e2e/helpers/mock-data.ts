@@ -1,7 +1,7 @@
 import type {
   Incident,
   ApprovalRequest,
-  Infrastructure,
+  Connection,
   Service,
 } from "../../src/lib/types";
 
@@ -18,7 +18,7 @@ export function createMockIncident(
     description: "生产环境 502 错误",
     status: "investigating",
     severity: "high",
-    infrastructure_id: "infra-001",
+    connection_id: "infra-001",
     project_id: "proj-001",
     summary_md: null,
     thread_id: "thread-001",
@@ -44,16 +44,16 @@ export function createMockIncidentList(): Incident[] {
   ];
 }
 
-// ── Infrastructure & Service ──
+// ── Connection & Service ──
 
-export const INFRA_SSH_ID = "infra-ssh-001";
-export const INFRA_K8S_ID = "infra-k8s-002";
+export const CONN_SSH_ID = "infra-ssh-001";
+export const CONN_K8S_ID = "infra-k8s-002";
 
-export function createMockInfrastructure(
-  overrides?: Partial<Infrastructure>,
-): Infrastructure {
+export function createMockConnection(
+  overrides?: Partial<Connection>,
+): Connection {
   return {
-    id: INFRA_SSH_ID,
+    id: CONN_SSH_ID,
     name: "Production Server",
     type: "ssh",
     host: "192.168.1.10",
@@ -67,11 +67,11 @@ export function createMockInfrastructure(
   };
 }
 
-export function createMockK8sInfrastructure(
-  overrides?: Partial<Infrastructure>,
-): Infrastructure {
+export function createMockK8sConnection(
+  overrides?: Partial<Connection>,
+): Connection {
   return {
-    id: INFRA_K8S_ID,
+    id: CONN_K8S_ID,
     name: "K8s Production",
     type: "kubernetes",
     host: "",
@@ -85,19 +85,17 @@ export function createMockK8sInfrastructure(
   };
 }
 
-export function createMockInfrastructureList(): Infrastructure[] {
-  return [createMockInfrastructure(), createMockK8sInfrastructure()];
+export function createMockConnectionList(): Connection[] {
+  return [createMockConnection(), createMockK8sConnection()];
 }
 
 export function createMockService(overrides?: Partial<Service>): Service {
   return {
     id: "svc-001",
-    infrastructure_id: INFRA_SSH_ID,
+    connection_id: CONN_SSH_ID,
     name: "nginx",
-    service_type: "nginx",
     port: 80,
     namespace: null,
-    config_json: null,
     status: "unknown",
     discovery_method: "auto_discovered",
     created_at: "2026-03-16T10:00:00Z",
@@ -112,13 +110,11 @@ export function createMockServiceList(): Service[] {
     createMockService({
       id: "svc-002",
       name: "redis",
-      service_type: "redis",
       port: 6379,
     }),
     createMockService({
       id: "svc-003",
       name: "postgres",
-      service_type: "postgresql",
       port: 5432,
     }),
   ];

@@ -1,8 +1,23 @@
 import { request } from "@/lib/request";
-import type { ProjectDocument } from "@/lib/types";
+import type { ProjectDocument, ProjectDocumentDetail } from "@/lib/types";
 
 export function getDocuments(projectId: string) {
   return request<ProjectDocument[]>(`/projects/${projectId}/documents`);
+}
+
+export function getDocument(documentId: string) {
+  return request<ProjectDocumentDetail>(`/documents/${documentId}`);
+}
+
+export function updateDocument(documentId: string, content: string) {
+  return request<ProjectDocumentDetail>(`/documents/${documentId}`, {
+    method: "PUT",
+    body: { content },
+  });
+}
+
+export function getDocumentFileUrl(documentId: string) {
+  return `/api/documents/${documentId}/file`;
 }
 
 export function uploadDocument(

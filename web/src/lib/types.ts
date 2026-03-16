@@ -1,4 +1,4 @@
-export interface Infrastructure {
+export interface Connection {
   id: string;
   name: string;
   type: string; // ssh, kubernetes
@@ -13,22 +13,14 @@ export interface Infrastructure {
 
 export interface Service {
   id: string;
-  infrastructure_id: string;
+  connection_id: string;
   name: string;
-  service_type: string;
   port: number | null;
   namespace: string | null;
-  config_json: string | null;
   status: string;
   discovery_method: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface ServiceDependency {
-  id: string;
-  service_id: string;
-  depends_on_id: string;
 }
 
 export interface MonitoringSource {
@@ -58,7 +50,7 @@ export interface Incident {
   description: string;
   status: string;
   severity: string;
-  infrastructure_id: string | null;
+  connection_id: string | null;
   project_id: string | null;
   summary_md: string | null;
   thread_id: string | null;
@@ -116,6 +108,10 @@ export interface ProjectDocument {
   doc_type: string;
   status: string;
   created_at: string;
+}
+
+export interface ProjectDocumentDetail extends ProjectDocument {
+  content: string;
 }
 
 export type SeverityLevel = "low" | "medium" | "high" | "critical";

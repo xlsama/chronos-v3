@@ -18,7 +18,7 @@ async def asr_stream(ws: WebSocket):
     session = ASRProxySession(settings)
 
     try:
-        await session.connect()
+        await asyncio.wait_for(session.connect(), timeout=10)
     except Exception as e:
         logger.error(f"ASR: failed to connect upstream: {e}")
         await ws.send_json({"type": "error", "message": "ASR 服务连接失败"})
@@ -54,10 +54,28 @@ async def asr_stream(ws: WebSocket):
             except Exception:
                 pass
 
+    audio_task = asyncio.create_task(forward_audio())
+    results_task = asyncio.create_task(forward_results())
+
     try:
-        await asyncio.gather(forward_audio(), forward_results())
+        done, pending = await asyncio.wait(
+            [audio_task, results_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            # Give remaining task a few seconds to finish gracefully
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=5)
+            except (asyncio.TimeoutError, Exception):
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
     except Exception as e:
         logger.error(f"ASR: session error: {e}")
+        audio_task.cancel()
+        results_task.cancel()
     finally:
         await session.close()
         try:

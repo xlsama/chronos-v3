@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { updateProjectServiceMd } from "@/api/projects";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { Project } from "@/lib/types";
 
 interface ServiceMdEditorProps {
@@ -38,12 +38,11 @@ export function ServiceMdEditor({ project }: ServiceMdEditorProps) {
           {mutation.isPending ? "Saving..." : "Save"}
         </Button>
       </div>
-      <Textarea
+      <MarkdownEditor
         value={content}
-        onChange={(e) => setContent(e.target.value)}
-        rows={20}
-        placeholder="# SERVICE.md&#10;&#10;Describe your infrastructure and services here..."
-        className="font-mono"
+        onChange={setContent}
+        minHeight={400}
+        placeholder="Describe your infrastructure and services here..."
       />
     </div>
   );

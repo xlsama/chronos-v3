@@ -5,6 +5,7 @@ type VoiceState = "idle" | "connecting" | "recording" | "error";
 
 interface UseVoiceInputOptions {
   onTranscript: (text: string) => void;
+  onCancel?: () => void;
 }
 
 interface UseVoiceInputReturn {
@@ -18,6 +19,7 @@ interface UseVoiceInputReturn {
 
 export function useVoiceInput({
   onTranscript,
+  onCancel,
 }: UseVoiceInputOptions): UseVoiceInputReturn {
   const [state, setState] = useState<VoiceState>("idle");
   const [interimText, setInterimText] = useState("");
@@ -27,10 +29,11 @@ export function useVoiceInput({
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
-  const finalTextRef = useRef("");
   const cancelledRef = useRef(false);
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
 
   const cleanup = useCallback(() => {
     workletNodeRef.current?.disconnect();
@@ -55,14 +58,12 @@ export function useVoiceInput({
 
     setAnalyserNode(null);
     setInterimText("");
-    finalTextRef.current = "";
   }, []);
 
   const startRecording = useCallback(async () => {
     if (state !== "idle") return;
 
     cancelledRef.current = false;
-    finalTextRef.current = "";
     setInterimText("");
     setState("connecting");
 
@@ -152,17 +153,14 @@ export function useVoiceInput({
         const msg = JSON.parse(e.data);
         if (msg.type === "result") {
           if (msg.is_end) {
-            if (msg.text) {
-              finalTextRef.current += msg.text;
+            if (msg.text && !cancelledRef.current) {
+              onTranscriptRef.current(msg.text);
             }
             setInterimText("");
           } else {
             setInterimText(msg.text || "");
           }
         } else if (msg.type === "finished") {
-          if (!cancelledRef.current && finalTextRef.current) {
-            onTranscriptRef.current(finalTextRef.current);
-          }
           cleanup();
           setState("idle");
         } else if (msg.type === "error") {
@@ -189,15 +187,13 @@ export function useVoiceInput({
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: "stop" }));
     }
-    if (!cancelledRef.current && finalTextRef.current) {
-      onTranscriptRef.current(finalTextRef.current);
-    }
     cleanup();
     setState("idle");
   }, [cleanup]);
 
   const cancelRecording = useCallback(() => {
     cancelledRef.current = true;
+    onCancelRef.current?.();
     cleanup();
     setState("idle");
   }, [cleanup]);

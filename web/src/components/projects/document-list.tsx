@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FileText, Trash2 } from "lucide-react";
@@ -13,6 +14,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { DocumentViewer } from "./document-viewer";
 
 interface DocumentListProps {
   projectId: string;
@@ -26,6 +28,7 @@ const statusColors: Record<string, string> = {
 
 export function DocumentList({ projectId }: DocumentListProps) {
   const queryClient = useQueryClient();
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ["documents", projectId],
@@ -75,35 +78,48 @@ export function DocumentList({ projectId }: DocumentListProps) {
   }
 
   return (
-    <div className="divide-y rounded-lg border">
-      {documents.map((doc) => (
-        <div key={doc.id} className="flex items-center gap-3 p-3">
-          <FileText className="h-4 w-4 text-muted-foreground" />
-          <div className="flex-1">
-            <p className="text-sm font-medium">{doc.filename}</p>
-            <p className="text-xs text-muted-foreground">
-              {doc.doc_type} &middot;{" "}
-              {dayjs(doc.created_at).fromNow()}
-            </p>
+    <>
+      <div className="divide-y rounded-lg border">
+        {documents.map((doc) => (
+          <div
+            key={doc.id}
+            className="flex cursor-pointer items-center gap-3 p-3 hover:bg-muted/50"
+            onClick={() => setSelectedDocId(doc.id)}
+          >
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">{doc.filename}</p>
+              <p className="text-xs text-muted-foreground">
+                {doc.doc_type} &middot;{" "}
+                {dayjs(doc.created_at).fromNow()}
+              </p>
+            </div>
+            <Badge
+              className={
+                statusColors[doc.status] ??
+                "bg-gray-100 text-gray-800 border-transparent"
+              }
+            >
+              {doc.status}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteMutation.mutate(doc.id);
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
           </div>
-          <Badge
-            className={
-              statusColors[doc.status] ??
-              "bg-gray-100 text-gray-800 border-transparent"
-            }
-          >
-            {doc.status}
-          </Badge>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => deleteMutation.mutate(doc.id)}
-            disabled={deleteMutation.isPending}
-          >
-            <Trash2 className="h-4 w-4 text-destructive" />
-          </Button>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+      <DocumentViewer
+        documentId={selectedDocId}
+        onClose={() => setSelectedDocId(null)}
+      />
+    </>
   );
 }

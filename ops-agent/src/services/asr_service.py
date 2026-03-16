@@ -1,4 +1,5 @@
 import base64
+import json
 
 import orjson
 import websockets
@@ -26,16 +27,16 @@ class ASRProxySession:
 
     async def send_audio(self, data: bytes) -> None:
         if self._ws is not None:
-            payload = {
+            msg = json.dumps({
                 "type": "input_audio_buffer.append",
                 "audio": base64.b64encode(data).decode("ascii"),
-            }
-            await self._ws.send(orjson.dumps(payload))
+            })
+            await self._ws.send(msg)
 
     async def finish_session(self) -> None:
         if self._ws is None:
             return
-        await self._ws.send(orjson.dumps({"type": "session.finish"}))
+        await self._ws.send(json.dumps({"type": "session.finish"}))
 
     async def receive_results(self):
         """Async generator yielding parsed result dicts from DashScope Realtime API."""

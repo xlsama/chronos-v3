@@ -5,9 +5,9 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-# ── Infrastructure ──
+# ── Connection ──
 
-class InfrastructureCreate(BaseModel):
+class ConnectionCreate(BaseModel):
     name: str
     type: Literal["ssh", "kubernetes"] = "ssh"
     # SSH fields
@@ -23,7 +23,7 @@ class InfrastructureCreate(BaseModel):
     project_id: uuid.UUID | None = None
 
 
-class InfrastructureResponse(BaseModel):
+class ConnectionResponse(BaseModel):
     id: uuid.UUID
     name: str
     type: str
@@ -45,31 +45,20 @@ class ConnectionTestResponse(BaseModel):
 
 # ── Service ──
 
-SERVICE_TYPES = Literal[
-    "mysql", "postgresql", "redis", "mongodb", "elasticsearch",
-    "nginx", "apache", "cron_job", "systemd",
-    "docker_container", "k8s_deployment", "k8s_statefulset",
-    "java_app", "node_app", "python_app", "custom",
-]
-
 
 class ServiceCreate(BaseModel):
-    infrastructure_id: uuid.UUID
+    connection_id: uuid.UUID
     name: str
-    service_type: SERVICE_TYPES
     port: int | None = None
     namespace: str | None = None
-    config_json: str | None = None
 
 
 class ServiceResponse(BaseModel):
     id: uuid.UUID
-    infrastructure_id: uuid.UUID
+    connection_id: uuid.UUID
     name: str
-    service_type: str
     port: int | None
     namespace: str | None
-    config_json: str | None
     status: str
     discovery_method: str
     created_at: datetime
@@ -112,7 +101,7 @@ class IncidentCreate(BaseModel):
     title: str = ""
     description: str
     severity: Literal["low", "medium", "high", "critical"] = "medium"
-    infrastructure_id: uuid.UUID | None = None
+    connection_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     attachment_ids: list[uuid.UUID] = []
 
@@ -135,7 +124,7 @@ class IncidentResponse(BaseModel):
     description: str
     status: str
     severity: str
-    infrastructure_id: uuid.UUID | None
+    connection_id: uuid.UUID | None
     project_id: uuid.UUID | None
     summary_md: str | None
     thread_id: str | None
@@ -235,3 +224,11 @@ class DocumentResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class DocumentDetailResponse(DocumentResponse):
+    content: str
+
+
+class DocumentUpdate(BaseModel):
+    content: str

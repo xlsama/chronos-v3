@@ -27,7 +27,7 @@ function IncidentDetailPage() {
       {/* Header */}
       <div className="border-b px-6 py-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">
+          <h1 className="text-base font-medium">
             {incident?.title ?? "Loading..."}
           </h1>
           <span

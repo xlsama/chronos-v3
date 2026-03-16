@@ -15,7 +15,7 @@ EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
 def _build_search_tool(project_id: str):
     @tool
     async def search_knowledge_base_tool(query: str) -> str:
-        """Search the project knowledge base for architecture docs, services, and infrastructure info."""
+        """Search the project knowledge base for architecture docs, services, and connection info."""
         return await search_knowledge_base(query=query, project_id=project_id)
 
     return search_knowledge_base_tool

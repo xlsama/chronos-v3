@@ -25,12 +25,12 @@ class Project(Base):
     documents: Mapped[list["ProjectDocument"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
-    infrastructures: Mapped[list["Infrastructure"]] = relationship(back_populates="project")
+    connections: Mapped[list["Connection"]] = relationship(back_populates="project")
     incidents: Mapped[list["Incident"]] = relationship(back_populates="project")
 
 
-class Infrastructure(Base):
-    __tablename__ = "infrastructures"
+class Connection(Base):
+    __tablename__ = "connections"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
@@ -52,9 +52,9 @@ class Infrastructure(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    project: Mapped["Project | None"] = relationship(back_populates="infrastructures")
+    project: Mapped["Project | None"] = relationship(back_populates="connections")
     services: Mapped[list["Service"]] = relationship(
-        back_populates="infrastructure", cascade="all, delete-orphan"
+        back_populates="connection", cascade="all, delete-orphan"
     )
 
 
@@ -66,8 +66,8 @@ class Incident(Base):
     description: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="open")  # open, investigating, resolved, closed
     severity: Mapped[str] = mapped_column(String(20), default="medium")  # low, medium, high, critical
-    infrastructure_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("infrastructures.id"), nullable=True, index=True
+    connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("connections.id"), nullable=True, index=True
     )
     project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True, index=True
@@ -180,14 +180,12 @@ class Service(Base):
     __tablename__ = "services"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    infrastructure_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("infrastructures.id", ondelete="CASCADE"), index=True
+    connection_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("connections.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(255))
-    service_type: Mapped[str] = mapped_column(String(50))  # mysql, postgresql, redis, mongodb, elasticsearch, nginx, apache, cron_job, systemd, docker_container, k8s_deployment, k8s_statefulset, java_app, node_app, python_app, custom
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     namespace: Mapped[str | None] = mapped_column(String(255), nullable=True)  # K8s namespace
-    config_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # Extra config as JSON
     status: Mapped[str] = mapped_column(String(20), default="unknown")  # unknown, running, stopped, error
     discovery_method: Mapped[str] = mapped_column(String(20), default="manual")  # manual, auto_discovered
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -195,27 +193,7 @@ class Service(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    infrastructure: Mapped["Infrastructure"] = relationship(back_populates="services")
-    depends_on: Mapped[list["ServiceDependency"]] = relationship(
-        back_populates="service",
-        foreign_keys="ServiceDependency.service_id",
-        cascade="all, delete-orphan",
-    )
-
-
-class ServiceDependency(Base):
-    __tablename__ = "service_dependencies"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    service_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("services.id", ondelete="CASCADE"), index=True
-    )
-    depends_on_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("services.id", ondelete="CASCADE"), index=True
-    )
-
-    service: Mapped["Service"] = relationship(foreign_keys=[service_id], back_populates="depends_on")
-    dependency: Mapped["Service"] = relationship(foreign_keys=[depends_on_id])
+    connection: Mapped["Connection"] = relationship(back_populates="services")
 
 
 class MonitoringSource(Base):

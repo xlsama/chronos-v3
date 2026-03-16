@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronRight, Server, Trash2, Wifi, WifiOff } from "lucide-react";
 import {
-  deleteInfrastructure,
-  getInfrastructures,
-  testInfrastructure,
-} from "@/api/infrastructures";
+  deleteConnection,
+  getConnections,
+  testConnection,
+} from "@/api/connections";
 import { cn } from "@/lib/utils";
-import type { Infrastructure } from "@/lib/types";
+import type { Connection } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,35 +40,35 @@ const typeLabels: Record<string, string> = {
   kubernetes: "K8s",
 };
 
-function InfrastructureItem({ infra }: { infra: Infrastructure }) {
+function ConnectionItem({ conn }: { conn: Connection }) {
   const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
 
   const testMutation = useMutation({
-    mutationFn: testInfrastructure,
+    mutationFn: testConnection,
     onSuccess: () => {
       toast.success("Connection test completed");
-      queryClient.invalidateQueries({ queryKey: ["infrastructures"] });
+      queryClient.invalidateQueries({ queryKey: ["connections"] });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteInfrastructure,
+    mutationFn: deleteConnection,
     onSuccess: () => {
-      toast.success("Infrastructure deleted");
-      queryClient.invalidateQueries({ queryKey: ["infrastructures"] });
+      toast.success("Connection deleted");
+      queryClient.invalidateQueries({ queryKey: ["connections"] });
     },
   });
 
-  const status = statusConfig[infra.status] ?? statusConfig.unknown;
+  const status = statusConfig[conn.status] ?? statusConfig.unknown;
   const StatusIcon = status.icon;
-  const typeIcon = infra.type === "kubernetes" ? "☸️" : "🖥️";
+  const typeIcon = conn.type === "kubernetes" ? "☸️" : "🖥️";
 
   return (
-    <div data-testid={`infra-item-${infra.id}`} className="border-b last:border-b-0">
+    <div data-testid={`conn-item-${conn.id}`} className="border-b last:border-b-0">
       <div className="flex items-center gap-3 p-4">
         <button
-          data-testid={`infra-expand-${infra.id}`}
+          data-testid={`conn-expand-${conn.id}`}
           onClick={() => setExpanded(!expanded)}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -82,37 +82,37 @@ function InfrastructureItem({ infra }: { infra: Infrastructure }) {
         <span className="text-lg">{typeIcon}</span>
         <StatusIcon className={cn("h-4 w-4", status.color)} />
         <div className="flex-1 space-y-0.5">
-          <p className="font-medium">{infra.name}</p>
+          <p className="font-medium">{conn.name}</p>
           <p className="text-sm text-muted-foreground">
-            {infra.type === "kubernetes"
+            {conn.type === "kubernetes"
               ? "Kubernetes Cluster"
-              : `${infra.username}@${infra.host}:${infra.port}`}
+              : `${conn.username}@${conn.host}:${conn.port}`}
           </p>
         </div>
-        <Badge data-testid="infra-type-badge" variant="outline" className="text-xs">
-          {typeLabels[infra.type] ?? infra.type}
+        <Badge data-testid="conn-type-badge" variant="outline" className="text-xs">
+          {typeLabels[conn.type] ?? conn.type}
         </Badge>
         <Badge
           className={
-            statusBadgeColors[infra.status] ?? statusBadgeColors.unknown
+            statusBadgeColors[conn.status] ?? statusBadgeColors.unknown
           }
         >
-          {infra.status}
+          {conn.status}
         </Badge>
         <Button
-          data-testid={`infra-test-${infra.id}`}
+          data-testid={`conn-test-${conn.id}`}
           variant="outline"
           size="sm"
-          onClick={() => testMutation.mutate(infra.id)}
+          onClick={() => testMutation.mutate(conn.id)}
           disabled={testMutation.isPending}
         >
           {testMutation.isPending ? "Testing..." : "Test"}
         </Button>
         <Button
-          data-testid={`infra-delete-${infra.id}`}
+          data-testid={`conn-delete-${conn.id}`}
           variant="ghost"
           size="sm"
-          onClick={() => deleteMutation.mutate(infra.id)}
+          onClick={() => deleteMutation.mutate(conn.id)}
           disabled={deleteMutation.isPending}
         >
           <Trash2 className="h-4 w-4 text-destructive" />
@@ -125,20 +125,20 @@ function InfrastructureItem({ infra }: { infra: Infrastructure }) {
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Services
             </span>
-            <CreateServiceDialog infraId={infra.id} />
-            <DiscoverServicesDialog infraId={infra.id} />
+            <CreateServiceDialog connectionId={conn.id} />
+            <DiscoverServicesDialog connectionId={conn.id} />
           </div>
-          <ServiceList infraId={infra.id} />
+          <ServiceList connectionId={conn.id} />
         </div>
       )}
     </div>
   );
 }
 
-export function InfrastructureList() {
-  const { data: infrastructures, isLoading } = useQuery({
-    queryKey: ["infrastructures"],
-    queryFn: getInfrastructures,
+export function ConnectionList() {
+  const { data: connections, isLoading } = useQuery({
+    queryKey: ["connections"],
+    queryFn: getConnections,
   });
 
   if (isLoading) {
@@ -160,14 +160,14 @@ export function InfrastructureList() {
     );
   }
 
-  if (!infrastructures?.length) {
+  if (!connections?.length) {
     return (
       <Empty className="py-12">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <Server />
           </EmptyMedia>
-          <EmptyTitle>No infrastructure configured</EmptyTitle>
+          <EmptyTitle>No connections configured</EmptyTitle>
           <EmptyDescription>Add one to get started.</EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -176,8 +176,8 @@ export function InfrastructureList() {
 
   return (
     <div>
-      {infrastructures.map((infra) => (
-        <InfrastructureItem key={infra.id} infra={infra} />
+      {connections.map((conn) => (
+        <ConnectionItem key={conn.id} conn={conn} />
       ))}
     </div>
   );

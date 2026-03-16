@@ -40,3 +40,5 @@ htmlcov/
 
 # Alembic
 alembic/versions/*.pyc
+
+.ruff_cache

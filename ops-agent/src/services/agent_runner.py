@@ -23,7 +23,7 @@ class AgentRunner:
         title: str,
         description: str,
         severity: str,
-        infrastructure_id: str,
+        connection_id: str,
         project_id: str = "",
     ) -> str:
         thread_id = str(uuid.uuid4())
@@ -52,7 +52,7 @@ class AgentRunner:
         initial_state = {
             "messages": [HumanMessage(content=f"事件: {title}\n\n{description}")],
             "incident_id": incident_id,
-            "infrastructure_id": infrastructure_id,
+            "connection_id": connection_id,
             "project_id": project_id,
             "title": title,
             "description": description,

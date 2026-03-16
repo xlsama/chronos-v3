@@ -10,7 +10,7 @@ function IncidentsPage() {
   return (
     <div className="h-full">
       <div className="flex items-center justify-between border-b px-6 py-4">
-        <h1 className="text-xl font-semibold">事件</h1>
+        <h1 className="text-base font-medium">事件</h1>
         <CreateIncidentDialog />
       </div>
       <IncidentList />
