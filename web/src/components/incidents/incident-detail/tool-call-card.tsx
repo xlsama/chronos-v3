@@ -1,40 +1,77 @@
-import { cn } from "@/lib/utils";
-import { Terminal } from "lucide-react";
+import { useState } from "react";
+import { Terminal, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface ToolCallCardProps {
   name: string;
   args?: Record<string, unknown>;
   output?: string;
-  isResult?: boolean;
+  isExecuting?: boolean;
+  relativeTime?: string;
+  connectionInfo?: string;
 }
 
 export function ToolCallCard({
   name,
   args,
   output,
-  isResult,
+  isExecuting,
+  relativeTime,
+  connectionInfo,
 }: ToolCallCardProps) {
+  const [argsExpanded, setArgsExpanded] = useState(false);
+
   return (
     <div
-      className={cn(
-        "rounded-lg border p-3",
-        isResult ? "border-green-200 bg-green-50/50" : "border-blue-200 bg-blue-50/50",
-      )}
+      className="rounded-lg border border-blue-200 bg-blue-50/50 p-3"
       data-testid="tool-call-card"
     >
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Terminal className="h-4 w-4" />
-        <span data-testid="tool-name">{isResult ? "Result" : "Tool Call"}: {name}</span>
+      {/* Header */}
+      <div className="flex items-center gap-2 text-sm">
+        <Terminal className="h-4 w-4 shrink-0 text-blue-700" />
+        <span className="font-medium text-blue-900" data-testid="tool-name">{name}</span>
+        {connectionInfo && (
+          <Badge variant="secondary" className="text-xs">
+            {connectionInfo}
+          </Badge>
+        )}
+        {relativeTime && (
+          <span className="ml-auto text-xs text-muted-foreground">{relativeTime}</span>
+        )}
       </div>
 
-      {args && (
-        <pre className="mt-2 overflow-x-auto rounded bg-background p-2 text-xs">
-          {JSON.stringify(args, null, 2)}
-        </pre>
+      {/* Args — collapsible */}
+      {args && Object.keys(args).length > 0 && (
+        <div className="mt-2">
+          <button
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setArgsExpanded(!argsExpanded)}
+          >
+            {argsExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            参数
+          </button>
+          {argsExpanded && (
+            <pre className="mt-1 overflow-x-auto rounded bg-background p-2 text-xs">
+              {JSON.stringify(args, null, 2)}
+            </pre>
+          )}
+        </div>
       )}
 
+      {/* Executing state */}
+      {isExecuting && (
+        <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          执行中...
+        </div>
+      )}
+
+      {/* Result */}
       {output && (
-        <pre className="mt-2 max-h-60 overflow-auto rounded bg-background p-2 text-xs" data-testid="tool-output">
+        <pre
+          className="mt-2 max-h-60 overflow-auto rounded border-l-2 border-green-400 bg-background p-2 text-xs"
+          data-testid="tool-output"
+        >
           {output}
         </pre>
       )}

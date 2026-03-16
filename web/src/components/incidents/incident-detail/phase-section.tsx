@@ -5,6 +5,7 @@ import type { PhaseStatus } from "@/stores/incident-stream";
 
 interface PhaseSectionProps {
   title: string;
+  subtitle?: string;
   status: PhaseStatus;
   icon: LucideIcon;
   children: React.ReactNode;
@@ -32,6 +33,7 @@ function StatusIndicator({ status }: { status: PhaseStatus }) {
 
 export function PhaseSection({
   title,
+  subtitle,
   status,
   icon: Icon,
   children,
@@ -58,6 +60,9 @@ export function PhaseSection({
         )}
         <Icon className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">{title}</span>
+        {subtitle && (
+          <span className="text-xs text-muted-foreground">&middot; {subtitle}</span>
+        )}
         <span className="ml-auto">
           <StatusIndicator status={status} />
         </span>

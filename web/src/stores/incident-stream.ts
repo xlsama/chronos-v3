@@ -182,6 +182,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
       if (event.event_type === "user_message") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
+        mainEvents.push(event);
         continue;
       }
 

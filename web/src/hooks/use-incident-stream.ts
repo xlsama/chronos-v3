@@ -119,6 +119,8 @@ export function useIncidentStream(
               flushSubAgentThinking(agent, event.timestamp);
               addSubAgentEvent(agent, event);
             }
+          } else if (event.event_type === "user_message") {
+            addEvent(event);
           } else if (event.event_type === "approval_decided") {
             setApprovalDecided(
               event.data.approval_id as string,

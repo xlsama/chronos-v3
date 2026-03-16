@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
-import { Upload } from "lucide-react";
+import { Upload, Eye, EyeOff, FileKey2 } from "lucide-react";
 import { createConnection, updateConnection } from "@/api/connections";
 import { connectionSchema } from "@/lib/schemas";
 import type { Connection } from "@/lib/types";
@@ -200,6 +200,7 @@ function ConnectionForm({
   const type = useStore(form.store, (s) => s.values.type);
   const authMethod = useStore(form.store, (s) => s.values.auth_method);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <form
@@ -369,13 +370,31 @@ function ConnectionForm({
               <form.Field name="password">
                 {(field) => (
                   <Field>
-                    <FieldLabel>Password</FieldLabel>
-                    <Input
-                      type="password"
-                      placeholder={isEdit ? "留空保持当前密码" : ""}
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    />
+                    <FieldLabel>密码</FieldLabel>
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        placeholder={isEdit ? "••••••••" : ""}
+                        value={field.state.value}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        className="pr-9"
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowPassword(!showPassword)}
+                        tabIndex={-1}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    {isEdit && !field.state.value && (
+                      <p className="text-xs text-muted-foreground">留空保持当前密码</p>
+                    )}
                   </Field>
                 )}
               </form.Field>
@@ -383,7 +402,13 @@ function ConnectionForm({
               <form.Field name="private_key">
                 {(field) => (
                   <Field>
-                    <FieldLabel>Private Key</FieldLabel>
+                    <FieldLabel>私钥</FieldLabel>
+                    {isEdit && !field.state.value && (
+                      <div className="flex items-center gap-2 rounded-md border p-2 text-sm text-muted-foreground">
+                        <FileKey2 className="h-4 w-4" />
+                        <span>已配置私钥，留空保持不变</span>
+                      </div>
+                    )}
                     <Textarea
                       rows={6}
                       className="font-mono text-xs"

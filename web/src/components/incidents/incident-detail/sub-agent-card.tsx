@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown, ChevronRight, Search, BookOpen, Crosshair } from "lucide-react";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
+import { formatDuration } from "@/lib/utils";
 
 const AGENT_CONFIG: Record<
   string,
@@ -29,12 +30,29 @@ export function SubAgentCard({
   const [expanded, setExpanded] = useState(false);
 
   const hasEvents = events.length > 0 || !!streamingContent;
-  const status = isStreaming ? "检索中..." : "完成";
   const config = AGENT_CONFIG[agentName] ?? {
     label: agentName,
     icon: Search,
   };
   const Icon = config.icon;
+
+  const { toolCallCount, duration } = useMemo(() => {
+    const count = events.filter((e) => e.event_type === "tool_call").length;
+    let dur = "";
+    if (events.length >= 2) {
+      dur = formatDuration(events[0].timestamp, events[events.length - 1].timestamp);
+    }
+    return { toolCallCount: count, duration: dur };
+  }, [events]);
+
+  const statusText = isStreaming
+    ? "检索中..."
+    : [
+        duration && duration !== "0s" ? duration : null,
+        toolCallCount > 0 ? `${toolCallCount} 次调用` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "完成";
 
   return (
     <div
@@ -52,7 +70,7 @@ export function SubAgentCard({
         )}
         <Icon className="h-4 w-4" />
         <span>{config.label}</span>
-        <span className="ml-auto text-xs text-blue-600">{status}</span>
+        <span className="ml-auto text-xs text-blue-600">{statusText}</span>
       </button>
 
       <AnimatePresence initial={false}>
