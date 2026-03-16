@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FileText, Trash2 } from "lucide-react";
+import dayjs from "@/lib/dayjs";
 import { deleteDocument, getDocuments } from "@/api/documents";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,7 +83,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
             <p className="text-sm font-medium">{doc.filename}</p>
             <p className="text-xs text-muted-foreground">
               {doc.doc_type} &middot;{" "}
-              {new Date(doc.created_at).toLocaleString()}
+              {dayjs(doc.created_at).fromNow()}
             </p>
           </div>
           <Badge

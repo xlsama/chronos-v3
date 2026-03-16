@@ -2,17 +2,21 @@ import { test as base, type Page } from "@playwright/test";
 import {
   INCIDENT_ID,
   APPROVAL_ID,
+  INFRA_SSH_ID,
   createMockIncident,
   createMockIncidentList,
   createMockApprovalDecision,
+  createMockInfrastructure,
+  createMockInfrastructureList,
+  createMockServiceList,
 } from "../helpers/mock-data";
+import type { Infrastructure, Service, SSEEvent } from "../../src/lib/types";
 import {
   fulfillSSE,
   createAgentFlowEvents,
   createPostApprovalEvents,
   createResumeEvents,
 } from "../helpers/sse-mock";
-import type { SSEEvent } from "../../src/lib/types";
 
 class MockApiHelper {
   /** Resolve function to unblock the SSE reconnection waiting for approval */
@@ -100,7 +104,13 @@ class MockApiHelper {
    * Connection 2: blocks until approval is given → sends resume events → closes
    * Connection 3+: hang (no more events)
    */
-  async setupLiveSSEStream() {
+  async setupLiveSSEStream(
+    preApprovalEvents?: SSEEvent[],
+    resumeEvents?: SSEEvent[],
+  ) {
+    const pre = preApprovalEvents ?? createAgentFlowEvents();
+    const resume = resumeEvents ?? createResumeEvents();
+
     const approvedPromise = new Promise<void>((resolve) => {
       this._approvedResolve = resolve;
     });
@@ -115,12 +125,12 @@ class MockApiHelper {
         if (connectionCount === 1) {
           // Phase 1: send all pre-approval events
           // Set retry: 100ms so EventSource reconnects quickly for tests
-          await fulfillSSE(route, createAgentFlowEvents(), { retryMs: 100 });
+          await fulfillSSE(route, pre, { retryMs: 100 });
           // Connection closes → EventSource will auto-reconnect in ~100ms
         } else if (connectionCount === 2) {
           // Phase 2: wait for approval, then send resume events
           await approvedPromise;
-          await fulfillSSE(route, createResumeEvents());
+          await fulfillSSE(route, resume);
         }
         // Connection 3+: hang forever (no more events to send)
       },
@@ -131,11 +141,12 @@ class MockApiHelper {
    * Approval handler for live SSE tests.
    * After fulfilling the approval response, unblocks the waiting SSE reconnection.
    */
-  async setupApproveDecideLive() {
+  async setupApproveDecideLive(approvalId?: string) {
+    const id = approvalId ?? APPROVAL_ID;
     await this.page.route(
-      `**/api/approvals/${APPROVAL_ID}/decide`,
+      `**/api/approvals/${id}/decide`,
       async (route) => {
-        await route.fulfill({ json: createMockApprovalDecision() });
+        await route.fulfill({ json: createMockApprovalDecision({ id }) });
         // Signal the SSE handler to send resume events
         this._approvedResolve?.();
       },
@@ -166,6 +177,121 @@ class MockApiHelper {
         await route.fulfill({
           json: { ok: true, incident_history_id: "history-001" },
         });
+      },
+    );
+  }
+
+  // ── Infrastructure & Services ──
+
+  /** GET/POST/DELETE /api/infrastructures and sub-routes */
+  async setupInfrastructureRoutes(list?: Infrastructure[]) {
+    const infras = list ?? createMockInfrastructureList();
+
+    // Must register more specific routes first (Playwright uses first-match)
+    // POST /api/infrastructures/:id/test
+    await this.page.route("**/api/infrastructures/*/test", async (route) => {
+      await route.fulfill({
+        json: { success: true, message: "Connection successful" },
+      });
+    });
+
+    // DELETE /api/infrastructures/:id
+    await this.page.route("**/api/infrastructures/*", async (route) => {
+      const method = route.request().method();
+      if (method === "DELETE") {
+        await route.fulfill({ json: { ok: true } });
+      } else {
+        await route.continue();
+      }
+    });
+
+    // GET (list) / POST (create) /api/infrastructures
+    await this.page.route("**/api/infrastructures", async (route) => {
+      const method = route.request().method();
+      if (method === "GET") {
+        await route.fulfill({ json: infras });
+      } else if (method === "POST") {
+        await route.fulfill({ json: createMockInfrastructure() });
+      } else {
+        await route.continue();
+      }
+    });
+  }
+
+  /** POST /api/infrastructures/:id/test with custom success/failure */
+  async setupInfrastructureTest(success = true) {
+    await this.page.route("**/api/infrastructures/*/test", async (route) => {
+      await route.fulfill({
+        json: {
+          success,
+          message: success ? "Connection successful" : "Connection failed",
+        },
+      });
+    });
+  }
+
+  /** GET /api/services/by-infra/:id, POST /api/services, DELETE /api/services/:id */
+  async setupServiceRoutes(infraId?: string, services?: Service[]) {
+    const svcList = services ?? createMockServiceList();
+    const matchInfraId = infraId ?? INFRA_SSH_ID;
+
+    // Catch-all for /api/services/by-infra/* — uses URL to decide response
+    await this.page.route("**/api/services/by-infra/*", async (route) => {
+      const url = route.request().url();
+      if (url.includes(matchInfraId)) {
+        await route.fulfill({ json: svcList });
+      } else {
+        await route.fulfill({ json: [] });
+      }
+    });
+
+    // DELETE /api/services/:id
+    await this.page.route("**/api/services/*", async (route) => {
+      const method = route.request().method();
+      if (method === "DELETE") {
+        await route.fulfill({ json: { ok: true } });
+      } else {
+        await route.continue();
+      }
+    });
+
+    // POST /api/services (create)
+    await this.page.route("**/api/services", async (route) => {
+      const method = route.request().method();
+      if (method === "POST") {
+        await route.fulfill({
+          json: {
+            id: "svc-new",
+            infrastructure_id: matchInfraId,
+            name: "new-service",
+            service_type: "process",
+            port: null,
+            namespace: null,
+            config_json: null,
+            status: "unknown",
+            discovery_method: "manual",
+            created_at: "2026-03-16T10:00:00Z",
+            updated_at: "2026-03-16T10:00:00Z",
+          },
+        });
+      } else {
+        await route.continue();
+      }
+    });
+  }
+
+  /** POST /api/services/discover/:id */
+  async setupDiscoverServices(infraId?: string, result?: { discovered: number; services: Service[] }) {
+    const matchInfraId = infraId ?? INFRA_SSH_ID;
+    const discoverResult = result ?? {
+      discovered: 3,
+      services: createMockServiceList(),
+    };
+
+    await this.page.route(
+      `**/api/services/discover/${matchInfraId}`,
+      async (route) => {
+        await route.fulfill({ json: discoverResult });
       },
     );
   }

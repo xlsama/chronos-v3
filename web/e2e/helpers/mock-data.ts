@@ -1,7 +1,13 @@
-import type { Incident, ApprovalRequest } from "../../src/lib/types";
+import type {
+  Incident,
+  ApprovalRequest,
+  Infrastructure,
+  Service,
+} from "../../src/lib/types";
 
 export const INCIDENT_ID = "inc-test-001";
 export const APPROVAL_ID = "approval-001";
+export const APPROVAL_ID_OOM = "approval-oom-001";
 
 export function createMockIncident(
   overrides?: Partial<Incident>,
@@ -37,6 +43,88 @@ export function createMockIncidentList(): Incident[] {
     }),
   ];
 }
+
+// ── Infrastructure & Service ──
+
+export const INFRA_SSH_ID = "infra-ssh-001";
+export const INFRA_K8S_ID = "infra-k8s-002";
+
+export function createMockInfrastructure(
+  overrides?: Partial<Infrastructure>,
+): Infrastructure {
+  return {
+    id: INFRA_SSH_ID,
+    name: "Production Server",
+    type: "ssh",
+    host: "192.168.1.10",
+    port: 22,
+    username: "root",
+    status: "online",
+    project_id: null,
+    created_at: "2026-03-16T08:00:00Z",
+    updated_at: "2026-03-16T08:00:00Z",
+    ...overrides,
+  };
+}
+
+export function createMockK8sInfrastructure(
+  overrides?: Partial<Infrastructure>,
+): Infrastructure {
+  return {
+    id: INFRA_K8S_ID,
+    name: "K8s Production",
+    type: "kubernetes",
+    host: "",
+    port: 0,
+    username: "",
+    status: "online",
+    project_id: null,
+    created_at: "2026-03-16T09:00:00Z",
+    updated_at: "2026-03-16T09:00:00Z",
+    ...overrides,
+  };
+}
+
+export function createMockInfrastructureList(): Infrastructure[] {
+  return [createMockInfrastructure(), createMockK8sInfrastructure()];
+}
+
+export function createMockService(overrides?: Partial<Service>): Service {
+  return {
+    id: "svc-001",
+    infrastructure_id: INFRA_SSH_ID,
+    name: "nginx",
+    service_type: "docker",
+    port: 80,
+    namespace: null,
+    config_json: null,
+    status: "unknown",
+    discovery_method: "auto_discovered",
+    created_at: "2026-03-16T10:00:00Z",
+    updated_at: "2026-03-16T10:00:00Z",
+    ...overrides,
+  };
+}
+
+export function createMockServiceList(): Service[] {
+  return [
+    createMockService(),
+    createMockService({
+      id: "svc-002",
+      name: "redis",
+      service_type: "cache",
+      port: 6379,
+    }),
+    createMockService({
+      id: "svc-003",
+      name: "postgres",
+      service_type: "database",
+      port: 5432,
+    }),
+  ];
+}
+
+// ── Approval ──
 
 export function createMockApprovalDecision(
   overrides?: Partial<ApprovalRequest>,

@@ -3,14 +3,15 @@ from langgraph.prebuilt import ToolNode
 
 from src.agent.nodes.gather_context import gather_context_node
 from src.agent.nodes.human_approval import human_approval_node
-from src.agent.nodes.main_agent import build_tools, main_agent_node, route_decision
+from src.agent.nodes.main_agent import build_all_tools, main_agent_node, route_decision
 from src.agent.nodes.summarize import summarize_node
 from src.agent.state import OpsState
 
 
 def build_graph():
-    tools = build_tools()
-    tool_node = ToolNode(tools)
+    # ToolNode gets ALL tools (including conditional ones)
+    all_tools = build_all_tools()
+    tool_node = ToolNode(all_tools)
 
     graph = StateGraph(OpsState)
 

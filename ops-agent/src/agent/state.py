@@ -1,7 +1,3 @@
-import operator
-import uuid
-from typing import Annotated, Any
-
 from langgraph.graph import MessagesState
 
 
@@ -17,4 +13,6 @@ class OpsState(MessagesState):
     pending_tool_call: dict | None
     summary_md: str | None
     incident_history_summary: str | None
+    has_prometheus: bool
+    has_loki: bool
     _event_channel: str

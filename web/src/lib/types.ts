@@ -1,11 +1,43 @@
 export interface Infrastructure {
   id: string;
   name: string;
+  type: string; // ssh, kubernetes
   host: string;
   port: number;
   username: string;
   status: string;
   project_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Service {
+  id: string;
+  infrastructure_id: string;
+  name: string;
+  service_type: string;
+  port: number | null;
+  namespace: string | null;
+  config_json: string | null;
+  status: string;
+  discovery_method: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceDependency {
+  id: string;
+  service_id: string;
+  depends_on_id: string;
+}
+
+export interface MonitoringSource {
+  id: string;
+  project_id: string;
+  name: string;
+  source_type: string;
+  endpoint: string;
+  status: string;
   created_at: string;
   updated_at: string;
 }

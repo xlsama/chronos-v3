@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
+import dayjs from "@/lib/dayjs";
 import { getIncidents } from "@/api/incidents";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -85,7 +86,7 @@ export function IncidentList() {
             {incident.status}
           </Badge>
           <span className="text-xs text-muted-foreground">
-            {new Date(incident.created_at).toLocaleString()}
+            {dayjs(incident.created_at).fromNow()}
           </span>
         </Link>
       ))}

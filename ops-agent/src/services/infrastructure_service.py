@@ -1,5 +1,6 @@
 import uuid
 
+import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Infrastructure
@@ -14,20 +15,37 @@ class InfrastructureService:
     async def create(
         self,
         name: str,
-        host: str,
+        type: str = "ssh",
+        # SSH fields
+        host: str = "",
         port: int = 22,
         username: str = "root",
         password: str | None = None,
         private_key: str | None = None,
+        # K8s fields
+        kubeconfig: str | None = None,
+        context: str | None = None,
+        namespace: str | None = None,
         project_id: uuid.UUID | None = None,
     ) -> Infrastructure:
+        conn_config = None
+        if type == "kubernetes" and kubeconfig:
+            config_data = {"kubeconfig": kubeconfig}
+            if context:
+                config_data["context"] = context
+            if namespace:
+                config_data["namespace"] = namespace
+            conn_config = self.crypto.encrypt(orjson.dumps(config_data).decode())
+
         infra = Infrastructure(
             name=name,
+            type=type,
             host=host,
             port=port,
             username=username,
             encrypted_password=self.crypto.encrypt(password) if password else None,
             encrypted_private_key=self.crypto.encrypt(private_key) if private_key else None,
+            conn_config=conn_config,
             project_id=project_id,
         )
         self.session.add(infra)
@@ -49,3 +67,8 @@ class InfrastructureService:
             else None
         )
         return password, private_key
+
+    def get_decrypted_conn_config(self, infra: Infrastructure) -> dict | None:
+        if not infra.conn_config:
+            return None
+        return orjson.loads(self.crypto.decrypt(infra.conn_config))

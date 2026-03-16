@@ -1,5 +1,6 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
-import { Sidebar } from "@/components/layout/sidebar";
+import { AppSidebar } from "@/components/layout/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createRootRoute({
@@ -8,12 +9,12 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   return (
-    <div className="flex h-screen">
-      <Sidebar />
+    <SidebarProvider>
+      <AppSidebar />
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
       <Toaster />
-    </div>
+    </SidebarProvider>
   );
 }

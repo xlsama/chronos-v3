@@ -16,7 +16,7 @@ from src.api.schemas import (
 )
 from src.config import get_settings
 from src.db.connection import get_session, get_session_factory
-from src.db.models import Incident, Message
+from src.db.models import Attachment, Incident, Message
 from src.lib.errors import NotFoundError
 from src.lib.logger import logger
 from src.lib.redis import get_redis
@@ -89,7 +89,7 @@ async def list_incidents(
     status: str | None = None,
     session: AsyncSession = Depends(get_session),
 ):
-    query = select(Incident).order_by(Incident.created_at.desc())
+    query = select(Incident).options(selectinload(Incident.attachments)).order_by(Incident.created_at.desc())
     if status:
         query = query.where(Incident.status == status)
     result = await session.execute(query)
@@ -154,6 +154,14 @@ async def send_user_message(
     incident = await session.get(Incident, incident_id)
     if not incident:
         raise NotFoundError("Incident not found")
+
+    if body.attachment_ids:
+        result = await session.execute(
+            select(Attachment).where(Attachment.id.in_(body.attachment_ids))
+        )
+        for attachment in result.scalars():
+            attachment.incident_id = incident_id
+        await session.flush()
 
     service = IncidentService(session=session)
     message = await service.save_message(

@@ -1,12 +1,14 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Server, Trash2, Wifi, WifiOff } from "lucide-react";
+import { ChevronRight, Server, Trash2, Wifi, WifiOff } from "lucide-react";
 import {
   deleteInfrastructure,
   getInfrastructures,
   testInfrastructure,
 } from "@/api/infrastructures";
 import { cn } from "@/lib/utils";
+import type { Infrastructure } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +19,9 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { ServiceList } from "./service-list";
+import { CreateServiceDialog } from "./create-service-dialog";
+import { DiscoverServicesDialog } from "./discover-services-dialog";
 
 const statusConfig: Record<string, { color: string; icon: typeof Wifi }> = {
   online: { color: "text-green-500", icon: Wifi },
@@ -30,13 +35,14 @@ const statusBadgeColors: Record<string, string> = {
   unknown: "bg-gray-100 text-gray-800 border-transparent",
 };
 
-export function InfrastructureList() {
-  const queryClient = useQueryClient();
+const typeLabels: Record<string, string> = {
+  ssh: "SSH",
+  kubernetes: "K8s",
+};
 
-  const { data: infrastructures, isLoading } = useQuery({
-    queryKey: ["infrastructures"],
-    queryFn: getInfrastructures,
-  });
+function InfrastructureItem({ infra }: { infra: Infrastructure }) {
+  const [expanded, setExpanded] = useState(false);
+  const queryClient = useQueryClient();
 
   const testMutation = useMutation({
     mutationFn: testInfrastructure,
@@ -52,6 +58,87 @@ export function InfrastructureList() {
       toast.success("Infrastructure deleted");
       queryClient.invalidateQueries({ queryKey: ["infrastructures"] });
     },
+  });
+
+  const status = statusConfig[infra.status] ?? statusConfig.unknown;
+  const StatusIcon = status.icon;
+  const typeIcon = infra.type === "kubernetes" ? "☸️" : "🖥️";
+
+  return (
+    <div data-testid={`infra-item-${infra.id}`} className="border-b last:border-b-0">
+      <div className="flex items-center gap-3 p-4">
+        <button
+          data-testid={`infra-expand-${infra.id}`}
+          onClick={() => setExpanded(!expanded)}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronRight
+            className={cn(
+              "h-4 w-4 transition-transform",
+              expanded && "rotate-90",
+            )}
+          />
+        </button>
+        <span className="text-lg">{typeIcon}</span>
+        <StatusIcon className={cn("h-4 w-4", status.color)} />
+        <div className="flex-1 space-y-0.5">
+          <p className="font-medium">{infra.name}</p>
+          <p className="text-sm text-muted-foreground">
+            {infra.type === "kubernetes"
+              ? "Kubernetes Cluster"
+              : `${infra.username}@${infra.host}:${infra.port}`}
+          </p>
+        </div>
+        <Badge data-testid="infra-type-badge" variant="outline" className="text-xs">
+          {typeLabels[infra.type] ?? infra.type}
+        </Badge>
+        <Badge
+          className={
+            statusBadgeColors[infra.status] ?? statusBadgeColors.unknown
+          }
+        >
+          {infra.status}
+        </Badge>
+        <Button
+          data-testid={`infra-test-${infra.id}`}
+          variant="outline"
+          size="sm"
+          onClick={() => testMutation.mutate(infra.id)}
+          disabled={testMutation.isPending}
+        >
+          {testMutation.isPending ? "Testing..." : "Test"}
+        </Button>
+        <Button
+          data-testid={`infra-delete-${infra.id}`}
+          variant="ghost"
+          size="sm"
+          onClick={() => deleteMutation.mutate(infra.id)}
+          disabled={deleteMutation.isPending}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </div>
+
+      {expanded && (
+        <div className="pb-3">
+          <div className="flex items-center gap-2 pl-12 pb-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Services
+            </span>
+            <CreateServiceDialog infraId={infra.id} />
+            <DiscoverServicesDialog infraId={infra.id} />
+          </div>
+          <ServiceList infraId={infra.id} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function InfrastructureList() {
+  const { data: infrastructures, isLoading } = useQuery({
+    queryKey: ["infrastructures"],
+    queryFn: getInfrastructures,
   });
 
   if (isLoading) {
@@ -88,46 +175,10 @@ export function InfrastructureList() {
   }
 
   return (
-    <div className="divide-y">
-      {infrastructures.map((infra) => {
-        const status = statusConfig[infra.status] ?? statusConfig.unknown;
-        const StatusIcon = status.icon;
-
-        return (
-          <div key={infra.id} className="flex items-center gap-4 p-4">
-            <StatusIcon className={cn("h-4 w-4", status.color)} />
-            <div className="flex-1 space-y-0.5">
-              <p className="font-medium">{infra.name}</p>
-              <p className="text-sm text-muted-foreground">
-                {infra.username}@{infra.host}:{infra.port}
-              </p>
-            </div>
-            <Badge
-              className={
-                statusBadgeColors[infra.status] ?? statusBadgeColors.unknown
-              }
-            >
-              {infra.status}
-            </Badge>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => testMutation.mutate(infra.id)}
-              disabled={testMutation.isPending}
-            >
-              {testMutation.isPending ? "Testing..." : "Test"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => deleteMutation.mutate(infra.id)}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </div>
-        );
-      })}
+    <div>
+      {infrastructures.map((infra) => (
+        <InfrastructureItem key={infra.id} infra={infra} />
+      ))}
     </div>
   );
 }

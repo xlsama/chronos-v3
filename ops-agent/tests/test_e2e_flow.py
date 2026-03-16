@@ -12,7 +12,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from src.agent.graph import compile_graph
 from src.connectors.ssh import SSHResult
-from src.tools.exec_tools import _ssh_registry, register_ssh_connector
+from src.tools.exec_tools import _connector_registry, register_connector
 
 INFRA_ID = "test-infra-001"
 
@@ -114,11 +114,11 @@ def make_mock_ssh() -> AsyncMock:
 
 
 @pytest.fixture(autouse=True)
-def cleanup_ssh_registry():
+def cleanup_connector_registry():
     """Ensure ssh registry is clean before/after each test."""
-    _ssh_registry.clear()
+    _connector_registry.clear()
     yield
-    _ssh_registry.clear()
+    _connector_registry.clear()
 
 
 async def test_full_agent_flow():
@@ -127,7 +127,7 @@ async def test_full_agent_flow():
 
     # Register mock SSH
     mock_ssh = make_mock_ssh()
-    register_ssh_connector(INFRA_ID, mock_ssh)
+    register_connector(INFRA_ID, mock_ssh)
 
     fake_llm = FakeLLM(build_fake_responses())
     mock_summarize_llm = AsyncMock()
@@ -210,7 +210,7 @@ async def test_agent_runner_with_events():
 
     # Mock SSH
     mock_ssh = make_mock_ssh()
-    register_ssh_connector(INFRA_ID, mock_ssh)
+    register_connector(INFRA_ID, mock_ssh)
 
     # Only one response: exec_read then complete
     fake_responses = [
@@ -301,7 +301,7 @@ async def test_agent_runner_creates_approval_record():
     checkpointer = MemorySaver()
 
     mock_ssh = make_mock_ssh()
-    register_ssh_connector(INFRA_ID, mock_ssh)
+    register_connector(INFRA_ID, mock_ssh)
 
     # Responses that trigger approval
     fake_responses = [

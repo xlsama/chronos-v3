@@ -20,10 +20,14 @@ export function getIncidentMessages(incidentId: string) {
   return request<Message[]>(`/incidents/${incidentId}/messages`);
 }
 
-export function sendIncidentMessage(incidentId: string, content: string) {
+export function sendIncidentMessage(
+  incidentId: string,
+  content: string,
+  attachmentIds?: string[],
+) {
   return request(`/incidents/${incidentId}/messages`, {
     method: "POST",
-    body: { content },
+    body: { content, attachment_ids: attachmentIds },
   });
 }
 

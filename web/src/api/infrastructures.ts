@@ -7,10 +7,15 @@ export function getInfrastructures() {
 
 export function createInfrastructure(data: {
   name: string;
-  host: string;
-  port: number;
-  username: string;
+  type?: string;
+  host?: string;
+  port?: number;
+  username?: string;
   password?: string;
+  private_key?: string;
+  kubeconfig?: string;
+  context?: string;
+  namespace?: string;
 }) {
   return request<Infrastructure>("/infrastructures", {
     method: "POST",

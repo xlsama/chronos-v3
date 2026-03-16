@@ -34,11 +34,15 @@ class Infrastructure(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
-    host: Mapped[str] = mapped_column(String(255))
+    type: Mapped[str] = mapped_column(String(50), default="ssh")  # ssh, kubernetes
+    # SSH fields (kept for backward compatibility)
+    host: Mapped[str] = mapped_column(String(255), default="")
     port: Mapped[int] = mapped_column(default=22)
     username: Mapped[str] = mapped_column(String(100), default="root")
     encrypted_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     encrypted_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Generic encrypted config (used by K8s and future types)
+    conn_config: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="unknown")  # unknown, online, offline
     project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True
@@ -49,6 +53,9 @@ class Infrastructure(Base):
     )
 
     project: Mapped["Project | None"] = relationship(back_populates="infrastructures")
+    services: Mapped[list["Service"]] = relationship(
+        back_populates="infrastructure", cascade="all, delete-orphan"
+    )
 
 
 class Incident(Base):
@@ -166,6 +173,68 @@ class ApprovalRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     incident: Mapped["Incident"] = relationship(back_populates="approval_requests")
+
+
+class Service(Base):
+    __tablename__ = "services"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    infrastructure_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("infrastructures.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
+    service_type: Mapped[str] = mapped_column(String(50))  # process, docker, systemd, k8s_deployment, k8s_statefulset, cron_job, database, cache, queue
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    namespace: Mapped[str | None] = mapped_column(String(255), nullable=True)  # K8s namespace
+    config_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # Extra config as JSON
+    status: Mapped[str] = mapped_column(String(20), default="unknown")  # unknown, running, stopped, error
+    discovery_method: Mapped[str] = mapped_column(String(20), default="manual")  # manual, auto_discovered
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    infrastructure: Mapped["Infrastructure"] = relationship(back_populates="services")
+    depends_on: Mapped[list["ServiceDependency"]] = relationship(
+        back_populates="service",
+        foreign_keys="ServiceDependency.service_id",
+        cascade="all, delete-orphan",
+    )
+
+
+class ServiceDependency(Base):
+    __tablename__ = "service_dependencies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("services.id", ondelete="CASCADE"), index=True
+    )
+    depends_on_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("services.id", ondelete="CASCADE"), index=True
+    )
+
+    service: Mapped["Service"] = relationship(foreign_keys=[service_id], back_populates="depends_on")
+    dependency: Mapped["Service"] = relationship(foreign_keys=[depends_on_id])
+
+
+class MonitoringSource(Base):
+    __tablename__ = "monitoring_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
+    source_type: Mapped[str] = mapped_column(String(50))  # prometheus, loki
+    endpoint: Mapped[str] = mapped_column(String(500))
+    conn_config: Mapped[str | None] = mapped_column(Text, nullable=True)  # Encrypted JSON (auth headers, etc.)
+    status: Mapped[str] = mapped_column(String(20), default="unknown")  # unknown, online, offline
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    project: Mapped["Project"] = relationship()
 
 
 class IncidentHistory(Base):

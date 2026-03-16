@@ -13,6 +13,8 @@ from src.api.documents import router as documents_router
 from src.api.incidents import router as incidents_router
 from src.api.infrastructures import router as infrastructures_router
 from src.api.projects import router as projects_router
+from src.api.monitoring_sources import router as monitoring_sources_router
+from src.api.services import router as services_router
 from src.config import get_settings
 from src.lib.errors import AppError
 from src.lib.logger import logger
@@ -77,3 +79,5 @@ app.include_router(approvals_router)
 app.include_router(attachments_router)
 app.include_router(projects_router)
 app.include_router(documents_router)
+app.include_router(services_router)
+app.include_router(monitoring_sources_router)

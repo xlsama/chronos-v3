@@ -10,6 +10,7 @@ from src.api.schemas import (
     InfrastructureResponse,
 )
 from src.config import get_settings
+from src.connectors.k8s import K8sConnector
 from src.connectors.ssh import SSHConnector
 from src.db.connection import get_session
 from src.db.models import Infrastructure
@@ -76,15 +77,25 @@ async def test_connection(
         raise NotFoundError("Infrastructure not found")
 
     service = InfrastructureService(session=session, crypto=crypto)
-    password, private_key = service.get_decrypted_credentials(infra)
 
-    connector = SSHConnector(
-        host=infra.host,
-        port=infra.port,
-        username=infra.username,
-        password=password,
-        private_key=private_key,
-    )
+    if infra.type == "kubernetes":
+        config = service.get_decrypted_conn_config(infra)
+        if not config:
+            return ConnectionTestResponse(success=False, message="Missing kubeconfig")
+        connector = K8sConnector(
+            kubeconfig=config["kubeconfig"],
+            context=config.get("context"),
+            namespace=config.get("namespace", "default"),
+        )
+    else:  # ssh
+        password, private_key = service.get_decrypted_credentials(infra)
+        connector = SSHConnector(
+            host=infra.host,
+            port=infra.port,
+            username=infra.username,
+            password=password,
+            private_key=private_key,
+        )
 
     ok = await connector.test_connection()
 

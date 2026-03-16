@@ -8,17 +8,24 @@ from pydantic import BaseModel
 
 class InfrastructureCreate(BaseModel):
     name: str
-    host: str
+    type: str = "ssh"  # ssh, kubernetes
+    # SSH fields
+    host: str = ""
     port: int = 22
     username: str = "root"
     password: str | None = None
     private_key: str | None = None
+    # K8s fields
+    kubeconfig: str | None = None
+    context: str | None = None
+    namespace: str | None = None
     project_id: uuid.UUID | None = None
 
 
 class InfrastructureResponse(BaseModel):
     id: uuid.UUID
     name: str
+    type: str
     host: str
     port: int
     username: str
@@ -33,6 +40,61 @@ class InfrastructureResponse(BaseModel):
 class ConnectionTestResponse(BaseModel):
     success: bool
     message: str
+
+
+# ── Service ──
+
+class ServiceCreate(BaseModel):
+    infrastructure_id: uuid.UUID
+    name: str
+    service_type: str
+    port: int | None = None
+    namespace: str | None = None
+    config_json: str | None = None
+
+
+class ServiceResponse(BaseModel):
+    id: uuid.UUID
+    infrastructure_id: uuid.UUID
+    name: str
+    service_type: str
+    port: int | None
+    namespace: str | None
+    config_json: str | None
+    status: str
+    discovery_method: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DiscoverServicesResponse(BaseModel):
+    discovered: int
+    services: list[ServiceResponse]
+
+
+# ── MonitoringSource ──
+
+class MonitoringSourceCreate(BaseModel):
+    project_id: uuid.UUID
+    name: str
+    source_type: str  # prometheus, loki
+    endpoint: str
+    auth_header: str | None = None  # e.g. "Bearer xxx"
+
+
+class MonitoringSourceResponse(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    name: str
+    source_type: str
+    endpoint: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ── Incident ──
@@ -90,6 +152,7 @@ class MessageResponse(BaseModel):
 
 class UserMessageRequest(BaseModel):
     content: str
+    attachment_ids: list[uuid.UUID] = []
 
 
 # ── Approval ──

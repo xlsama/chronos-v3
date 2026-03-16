@@ -1,41 +1,78 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { AlertTriangle, BookOpen, Server } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, BookOpen, Server, Zap } from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 
-const navItems = [
-  { to: "/incidents", label: "Incidents", icon: AlertTriangle },
-  { to: "/infrastructure", label: "Infrastructure", icon: Server },
-  { to: "/projects", label: "Projects", icon: BookOpen },
+const mainItems = [
+  { to: "/incidents", label: "事件", icon: AlertTriangle },
 ] as const;
 
-export function Sidebar() {
+const contextItems = [
+  { to: "/infrastructure", label: "基础设施", icon: Server },
+  { to: "/projects", label: "知识库", icon: BookOpen },
+] as const;
+
+const bottomItems = [
+  { to: "/skills", label: "技能", icon: Zap },
+] as const;
+
+export function AppSidebar() {
   const { location } = useRouterState();
 
-  return (
-    <aside className="flex h-screen w-60 flex-col border-r bg-sidebar text-sidebar-foreground">
-      <div className="flex h-14 items-center border-b px-4">
-        <h1 className="text-lg font-semibold">Chronos</h1>
-      </div>
-      <nav className="flex-1 space-y-1 p-2">
-        {navItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.to);
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-              )}
+  const renderGroup = (
+    items: ReadonlyArray<{
+      readonly to: string;
+      readonly label: string;
+      readonly icon: React.ComponentType<{ className?: string }>;
+    }>,
+  ) => (
+    <SidebarMenu>
+      {items.map((item) => {
+        const isActive = location.pathname.startsWith(item.to);
+        return (
+          <SidebarMenuItem key={item.to}>
+            <SidebarMenuButton
+              isActive={isActive}
+              tooltip={item.label}
+              render={<Link to={item.to} />}
             >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+              <item.icon />
+              <span>{item.label}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        );
+      })}
+    </SidebarMenu>
+  );
+
+  return (
+    <Sidebar>
+      <SidebarHeader>
+        <div className="flex h-8 items-center px-2">
+          <h1 className="text-lg font-semibold">Chronos</h1>
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>{renderGroup(mainItems)}</SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>上下文</SidebarGroupLabel>
+          <SidebarGroupContent>{renderGroup(contextItems)}</SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupContent>{renderGroup(bottomItems)}</SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
   );
 }

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { FolderOpen } from "lucide-react";
+import dayjs from "@/lib/dayjs";
 import { getProjects } from "@/api/projects";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -63,7 +64,7 @@ export function ProjectList() {
             </p>
           </div>
           <span className="text-xs text-muted-foreground">
-            {new Date(project.created_at).toLocaleString()}
+            {dayjs(project.created_at).fromNow()}
           </span>
         </Link>
       ))}

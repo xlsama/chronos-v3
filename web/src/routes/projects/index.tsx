@@ -10,7 +10,7 @@ function ProjectsPage() {
   return (
     <div className="h-full">
       <div className="flex items-center justify-between border-b px-6 py-4">
-        <h1 className="text-xl font-semibold">Projects</h1>
+        <h1 className="text-xl font-semibold">知识库</h1>
         <CreateProjectDialog />
       </div>
       <ProjectList />

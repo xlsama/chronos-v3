@@ -212,6 +212,7 @@ function PromptInputAction({
       <TooltipTrigger
         disabled={disabled}
         onClick={(event) => event.stopPropagation()}
+        render={<span />}
       >
         {children}
       </TooltipTrigger>

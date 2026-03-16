@@ -63,6 +63,53 @@ class TestInfrastructureService:
         assert password == "mypassword"
         assert key is None
 
+    async def test_create_k8s_encrypts_kubeconfig(self, service: InfrastructureService):
+        result = await service.create(
+            name="K8s Cluster",
+            type="kubernetes",
+            kubeconfig="apiVersion: v1\nclusters: []",
+            context="my-context",
+            namespace="production",
+        )
+
+        assert result.name == "K8s Cluster"
+        assert result.type == "kubernetes"
+        assert result.conn_config is not None
+        assert result.conn_config.startswith("enc:")
+        service.crypto.encrypt.assert_called()
+        service.session.add.assert_called_once()
+
+    async def test_create_k8s_without_kubeconfig(self, service: InfrastructureService):
+        result = await service.create(
+            name="K8s Cluster",
+            type="kubernetes",
+        )
+
+        assert result.conn_config is None
+
+    async def test_get_decrypted_conn_config(self, service: InfrastructureService):
+        import orjson
+
+        config_data = {"kubeconfig": "apiVersion: v1\nclusters: []", "context": "my-ctx"}
+        encrypted = f"enc:{orjson.dumps(config_data).decode()}"
+
+        infra = MagicMock()
+        infra.conn_config = encrypted
+
+        result = service.get_decrypted_conn_config(infra)
+
+        assert result is not None
+        assert result["kubeconfig"] == "apiVersion: v1\nclusters: []"
+        assert result["context"] == "my-ctx"
+
+    async def test_get_decrypted_conn_config_none(self, service: InfrastructureService):
+        infra = MagicMock()
+        infra.conn_config = None
+
+        result = service.get_decrypted_conn_config(infra)
+
+        assert result is None
+
 
 # ── Incident Service ──
 

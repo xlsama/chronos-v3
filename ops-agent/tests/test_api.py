@@ -51,6 +51,7 @@ async def test_create_infrastructure(client: AsyncClient, mock_session):
     mock_infra = MagicMock()
     mock_infra.id = uuid.uuid4()
     mock_infra.name = "Web Server"
+    mock_infra.type = "ssh"
     mock_infra.host = "192.168.1.10"
     mock_infra.port = 22
     mock_infra.username = "root"

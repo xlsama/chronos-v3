@@ -1,47 +1,51 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Send } from "lucide-react";
+import { useCallback } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { uploadFiles } from "@/api/attachments";
 import { sendIncidentMessage } from "@/api/incidents";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PromptComposer } from "@/components/prompt-composer";
 
 interface UserInputBarProps {
   incidentId: string;
 }
 
 export function UserInputBar({ incidentId }: UserInputBarProps) {
-  const [message, setMessage] = useState("");
+  const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: (content: string) => sendIncidentMessage(incidentId, content),
-    onSuccess: () => setMessage(""),
+    mutationFn: async ({
+      content,
+      files,
+    }: {
+      content: string;
+      files: File[];
+    }) => {
+      let attachmentIds: string[] | undefined;
+      if (files.length > 0) {
+        const attachments = await uploadFiles(files);
+        attachmentIds = attachments.map((a) => a.id);
+      }
+      return sendIncidentMessage(incidentId, content, attachmentIds);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incidents", incidentId] });
+    },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (message.trim()) {
-      mutation.mutate(message.trim());
-    }
-  };
+  const handleSubmit = useCallback(
+    (text: string, files: File[]) => {
+      mutation.mutate({ content: text, files });
+    },
+    [mutation],
+  );
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex items-center gap-2 border-t p-4"
-    >
-      <Input
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
+    <div className="border-t p-4">
+      <PromptComposer
+        onSubmit={handleSubmit}
+        isLoading={mutation.isPending}
+        disabled={mutation.isPending}
         placeholder="Send a message to the agent..."
-        className="flex-1"
       />
-      <Button
-        type="submit"
-        size="sm"
-        disabled={!message.trim() || mutation.isPending}
-      >
-        <Send className="h-4 w-4" />
-      </Button>
-    </form>
+    </div>
   );
 }

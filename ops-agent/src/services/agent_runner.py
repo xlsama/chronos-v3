@@ -31,6 +31,24 @@ class AgentRunner:
 
         config = {"configurable": {"thread_id": thread_id}}
 
+        # Check monitoring sources for the project
+        has_prometheus = False
+        has_loki = False
+        if project_id:
+            try:
+                from src.services.crypto import CryptoService
+                from src.config import get_settings
+                from src.services.monitoring_source_service import MonitoringSourceService
+
+                async with get_session_factory()() as session:
+                    crypto = CryptoService(key=get_settings().encryption_key)
+                    ms_service = MonitoringSourceService(session=session, crypto=crypto)
+                    has_prometheus, has_loki = await ms_service.has_source_types(
+                        uuid.UUID(project_id)
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to check monitoring sources: {e}")
+
         initial_state = {
             "messages": [HumanMessage(content=f"事件: {title}\n\n{description}")],
             "incident_id": incident_id,
@@ -44,6 +62,8 @@ class AgentRunner:
             "pending_tool_call": None,
             "summary_md": None,
             "incident_history_summary": None,
+            "has_prometheus": has_prometheus,
+            "has_loki": has_loki,
             "_event_channel": channel,
         }
 
