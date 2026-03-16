@@ -1,9 +1,11 @@
 import uuid
 
 import orjson
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Connection
+from src.db.models import Connection, Project
+from src.lib.errors import ValidationError
 from src.services.crypto import CryptoService
 
 
@@ -15,6 +17,7 @@ class ConnectionService:
     async def create(
         self,
         name: str,
+        project_id: uuid.UUID,
         type: str = "ssh",
         description: str | None = None,
         # SSH fields
@@ -29,8 +32,28 @@ class ConnectionService:
         namespace: str | None = None,
         capabilities: list[str] | None = None,
         scope_metadata: dict | None = None,
-        project_id: uuid.UUID | None = None,
     ) -> Connection:
+        project = await self.session.get(Project, project_id)
+        if not project:
+            raise ValidationError("Project not found")
+
+        if type not in {"ssh", "kubernetes"}:
+            raise ValidationError(f"Unsupported connection type: {type}")
+
+        if type == "ssh" and not host:
+            raise ValidationError("SSH connection requires host")
+
+        if type == "kubernetes" and not kubeconfig:
+            raise ValidationError("Kubernetes connection requires kubeconfig")
+
+        duplicate_stmt = select(Connection).where(
+            Connection.project_id == project_id,
+            Connection.name == name,
+        )
+        duplicate = (await self.session.execute(duplicate_stmt)).scalar_one_or_none()
+        if duplicate:
+            raise ValidationError("Connection name already exists in this project")
+
         conn_config = None
         scope_metadata = dict(scope_metadata or {})
 
@@ -88,11 +111,5 @@ class ConnectionService:
         defaults: dict[str, list[str]] = {
             "ssh": ["shell", "logs"],
             "kubernetes": ["k8s_exec", "logs"],
-            "postgres": ["sql_read"],
-            "mysql": ["sql_read"],
-            "redis": ["runtime_inspect"],
-            "http": ["http_probe"],
-            "prometheus": ["metrics"],
-            "loki": ["logs"],
         }
         return defaults.get(conn_type, ["runtime_inspect"])

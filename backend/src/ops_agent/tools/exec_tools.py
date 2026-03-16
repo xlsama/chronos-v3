@@ -42,7 +42,7 @@ async def get_connector(connection_id: str) -> SSHConnector | K8sConnector:
                 context=config.get("context"),
                 namespace=config.get("namespace", "default"),
             )
-        else:  # ssh (default)
+        elif conn.type == "ssh":
             password = crypto.decrypt(conn.encrypted_password) if conn.encrypted_password else None
             private_key = (
                 crypto.decrypt(conn.encrypted_private_key) if conn.encrypted_private_key else None
@@ -54,23 +54,27 @@ async def get_connector(connection_id: str) -> SSHConnector | K8sConnector:
                 password=password,
                 private_key=private_key,
             )
+        else:
+            raise ValueError(f"Unsupported connection type for exec tools: {conn.type}")
 
         _connector_registry[connection_id] = connector
         return connector
 
 
 async def list_connections(project_id: str = "") -> list[dict]:
-    """List available connections, excluding offline ones and sensitive fields."""
+    """List available project-scoped connections, excluding offline ones."""
     from sqlalchemy import select
 
     from src.db.connection import get_session_factory
     from src.db.models import Connection
 
+    if not project_id:
+        return []
+
     factory = get_session_factory()
     async with factory() as session:
         stmt = select(Connection).where(Connection.status != "offline")
-        if project_id:
-            stmt = stmt.where(Connection.project_id == uuid.UUID(project_id))
+        stmt = stmt.where(Connection.project_id == uuid.UUID(project_id))
 
         result = await session.execute(stmt)
         conns = result.scalars().all()

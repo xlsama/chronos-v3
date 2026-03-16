@@ -3,7 +3,8 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import ServiceConnectionBinding
+from src.db.models import Connection, Service, ServiceConnectionBinding
+from src.lib.errors import ValidationError
 
 
 class ServiceBindingService:
@@ -19,6 +20,26 @@ class ServiceBindingService:
         priority: int = 100,
         notes: str | None = None,
     ) -> ServiceConnectionBinding:
+        service = await self.session.get(Service, service_id)
+        connection = await self.session.get(Connection, connection_id)
+        if not service or not connection:
+            raise ValidationError("Service binding references unknown service or connection")
+        if service.project_id != project_id or connection.project_id != project_id:
+            raise ValidationError("Service binding must stay inside one project")
+
+        existing = (
+            await self.session.execute(
+                select(ServiceConnectionBinding).where(
+                    ServiceConnectionBinding.project_id == project_id,
+                    ServiceConnectionBinding.service_id == service_id,
+                    ServiceConnectionBinding.connection_id == connection_id,
+                    ServiceConnectionBinding.usage_type == usage_type,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise ValidationError("Service binding already exists")
+
         binding = ServiceConnectionBinding(
             project_id=project_id,
             service_id=service_id,

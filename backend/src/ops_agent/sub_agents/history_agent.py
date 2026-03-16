@@ -7,18 +7,18 @@ from langchain_openai import ChatOpenAI
 
 from src.ops_agent.prompts.history_agent import HISTORY_AGENT_SYSTEM_PROMPT
 from src.config import get_settings
-from src.ops_agent.tools.history_tools import search_incident_history
+from src.ops_agent.tools.history_tools import search_incident_history as _search_incident_history
 
 EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
 
 
 def _build_search_tool(project_id: str):
     @tool
-    async def search_incident_history_tool(query: str) -> str:
+    async def search_incident_history(query: str) -> str:
         """Search historical incident records for similar past events."""
-        return await search_incident_history(query=query, project_id=project_id)
+        return await _search_incident_history(query=query, project_id=project_id)
 
-    return search_incident_history_tool
+    return search_incident_history
 
 
 async def run_history_agent(

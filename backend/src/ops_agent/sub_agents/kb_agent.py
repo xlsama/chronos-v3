@@ -7,18 +7,18 @@ from langchain_openai import ChatOpenAI
 
 from src.ops_agent.prompts.kb_agent import KB_AGENT_SYSTEM_PROMPT
 from src.config import get_settings
-from src.ops_agent.tools.knowledge_tools import search_knowledge_base
+from src.ops_agent.tools.knowledge_tools import search_knowledge_base as _search_knowledge_base
 
 EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
 
 
 def _build_search_tool(project_id: str):
     @tool
-    async def search_knowledge_base_tool(query: str) -> str:
+    async def search_knowledge_base(query: str) -> str:
         """Search the project knowledge base for architecture docs, services, and connection info."""
-        return await search_knowledge_base(query=query, project_id=project_id)
+        return await _search_knowledge_base(query=query, project_id=project_id)
 
-    return search_knowledge_base_tool
+    return search_knowledge_base
 
 
 async def run_kb_agent(

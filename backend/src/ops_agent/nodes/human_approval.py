@@ -19,7 +19,7 @@ async def human_approval_node(state: OpsState) -> dict:
     # Initial entry: extract pending write tool call
     last_message = state["messages"][-1]
     write_calls = [
-        tc for tc in last_message.tool_calls if tc["name"] == "exec_write_tool"
+        tc for tc in last_message.tool_calls if tc["name"] == "exec_write"
     ]
 
     return {

@@ -1,14 +1,14 @@
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronRight, Server, Trash2, Wifi, WifiOff } from "lucide-react";
+import { Server, Trash2, Wifi, WifiOff } from "lucide-react";
 import {
   deleteConnection,
   getConnections,
   testConnection,
 } from "@/api/connections";
+import { getProjects } from "@/api/projects";
 import { cn } from "@/lib/utils";
-import type { Connection } from "@/lib/types";
+import type { Connection, Project } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,8 +19,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ServiceList } from "./service-list";
-import { DiscoverServicesDialog } from "./discover-services-dialog";
 
 const statusConfig: Record<string, { color: string; icon: typeof Wifi }> = {
   online: { color: "text-green-500", icon: Wifi },
@@ -39,8 +37,13 @@ const typeLabels: Record<string, string> = {
   kubernetes: "K8s",
 };
 
-function ConnectionItem({ conn }: { conn: Connection }) {
-  const [expanded, setExpanded] = useState(false);
+function ConnectionItem({
+  conn,
+  projectName,
+}: {
+  conn: Connection;
+  projectName?: string;
+}) {
   const queryClient = useQueryClient();
 
   const testMutation = useMutation({
@@ -66,18 +69,6 @@ function ConnectionItem({ conn }: { conn: Connection }) {
   return (
     <div data-testid={`conn-item-${conn.id}`} className="border-b last:border-b-0">
       <div className="flex items-center gap-3 p-4">
-        <button
-          data-testid={`conn-expand-${conn.id}`}
-          onClick={() => setExpanded(!expanded)}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronRight
-            className={cn(
-              "h-4 w-4 transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
-        </button>
         <span className="text-lg">{typeIcon}</span>
         <StatusIcon className={cn("h-4 w-4", status.color)} />
         <div className="flex-1 space-y-0.5">
@@ -101,6 +92,11 @@ function ConnectionItem({ conn }: { conn: Connection }) {
         >
           {conn.status}
         </Badge>
+        {projectName && (
+          <Badge variant="secondary" className="text-xs">
+            {projectName}
+          </Badge>
+        )}
         <Button
           data-testid={`conn-test-${conn.id}`}
           variant="outline"
@@ -120,18 +116,6 @@ function ConnectionItem({ conn }: { conn: Connection }) {
           <Trash2 className="h-4 w-4 text-destructive" />
         </Button>
       </div>
-
-      {expanded && (
-        <div className="pb-3">
-          <div className="flex items-center gap-2 pl-12 pb-2">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Bound services
-            </span>
-            <DiscoverServicesDialog connectionId={conn.id} />
-          </div>
-          <ServiceList connectionId={conn.id} />
-        </div>
-      )}
     </div>
   );
 }
@@ -141,6 +125,19 @@ export function ConnectionList() {
     queryKey: ["connections"],
     queryFn: getConnections,
   });
+
+  const { data: projects } = useQuery({
+    queryKey: ["projects"],
+    queryFn: getProjects,
+  });
+
+  const projectsById = (projects ?? []).reduce<Record<string, Project>>(
+    (acc, p) => {
+      acc[p.id] = p;
+      return acc;
+    },
+    {},
+  );
 
   if (isLoading) {
     return (
@@ -178,7 +175,11 @@ export function ConnectionList() {
   return (
     <div>
       {connections.map((conn) => (
-        <ConnectionItem key={conn.id} conn={conn} />
+        <ConnectionItem
+          key={conn.id}
+          conn={conn}
+          projectName={conn.project_id ? projectsById[conn.project_id]?.name : undefined}
+        />
       ))}
     </div>
   );

@@ -81,7 +81,6 @@ export interface Incident {
   description: string;
   status: string;
   severity: string;
-  connection_id: string | null;
   project_id: string | null;
   summary_md: string | null;
   thread_id: string | null;

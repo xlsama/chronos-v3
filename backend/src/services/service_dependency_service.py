@@ -3,7 +3,8 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import ServiceDependency
+from src.db.models import Service, ServiceDependency
+from src.lib.errors import ValidationError
 
 
 class ServiceDependencyService:
@@ -19,6 +20,28 @@ class ServiceDependencyService:
         description: str | None = None,
         confidence: int = 100,
     ) -> ServiceDependency:
+        from_service = await self.session.get(Service, from_service_id)
+        to_service = await self.session.get(Service, to_service_id)
+        if not from_service or not to_service:
+            raise ValidationError("Service dependency references unknown service")
+        if from_service.project_id != project_id or to_service.project_id != project_id:
+            raise ValidationError("Service dependency must stay inside one project")
+        if from_service_id == to_service_id:
+            raise ValidationError("Service cannot depend on itself")
+
+        existing = (
+            await self.session.execute(
+                select(ServiceDependency).where(
+                    ServiceDependency.project_id == project_id,
+                    ServiceDependency.from_service_id == from_service_id,
+                    ServiceDependency.to_service_id == to_service_id,
+                    ServiceDependency.dependency_type == dependency_type,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise ValidationError("Service dependency already exists")
+
         dependency = ServiceDependency(
             project_id=project_id,
             from_service_id=from_service_id,

@@ -30,7 +30,7 @@ class ProjectResponse(BaseModel):
 
 class ConnectionCreate(BaseModel):
     name: str
-    type: Literal["ssh", "kubernetes", "postgres", "mysql", "redis", "http", "prometheus", "loki"] = "ssh"
+    type: Literal["ssh", "kubernetes"] = "ssh"
     description: str | None = None
     host: str = ""
     port: int = 22
@@ -42,7 +42,7 @@ class ConnectionCreate(BaseModel):
     namespace: str | None = None
     capabilities: list[str] = Field(default_factory=list)
     scope_metadata: dict[str, Any] = Field(default_factory=dict)
-    project_id: uuid.UUID | None = None
+    project_id: uuid.UUID
 
 
 class ConnectionUpdate(BaseModel):
@@ -62,7 +62,7 @@ class ConnectionResponse(BaseModel):
     status: str
     capabilities: list[str]
     scope_metadata: dict[str, Any]
-    project_id: uuid.UUID | None
+    project_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
 
@@ -206,7 +206,6 @@ class IncidentCreate(BaseModel):
     title: str = ""
     description: str
     severity: Literal["low", "medium", "high", "critical"] = "medium"
-    connection_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     attachment_ids: list[uuid.UUID] = Field(default_factory=list)
 

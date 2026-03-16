@@ -33,7 +33,6 @@ async def _start_agent_background(
     title: str,
     description: str,
     severity: str,
-    connection_id: str,
     project_id: str,
 ) -> None:
     try:
@@ -42,7 +41,6 @@ async def _start_agent_background(
             title=title,
             description=description,
             severity=severity,
-            connection_id=connection_id,
             project_id=project_id,
         )
         # Write thread_id back + set status to investigating
@@ -77,7 +75,6 @@ async def create_incident(
         incident.title,
         body.description,
         body.severity,
-        str(body.connection_id or ""),
         str(body.project_id or ""),
     )
 

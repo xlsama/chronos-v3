@@ -1,22 +1,20 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowRight, Link2, Plug, Plus, Trash2, Workflow } from "lucide-react";
+import { LayoutGrid, Plus, Search } from "lucide-react";
+import type { Connection as FlowConnection, Edge, Node } from "@xyflow/react";
 import { deleteConnection } from "@/api/connections";
 import { createServiceBinding, deleteServiceBinding } from "@/api/service-bindings";
 import { createServiceDependency, deleteServiceDependency } from "@/api/service-dependencies";
 import { getProjectTopology } from "@/api/projects";
-import { createService, deleteService } from "@/api/services";
+import { createService, deleteService, discoverServices } from "@/api/services";
 import type {
   Connection,
   Project,
   Service,
-  ServiceConnectionBinding,
-  ServiceDependency,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -38,6 +36,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { CreateConnectionDialog } from "@/components/connections/create-connection-dialog";
+import { TopologyGraph, useTopologyGraph } from "./topology-graph";
 
 const SERVICE_TYPES = [
   "frontend",
@@ -72,6 +71,8 @@ function invalidateTopology(queryClient: ReturnType<typeof useQueryClient>, proj
   queryClient.invalidateQueries({ queryKey: ["project-topology", projectId] });
   queryClient.invalidateQueries({ queryKey: ["connections"] });
 }
+
+// ── Create Service Dialog ──
 
 function CreateServiceButton({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
@@ -163,16 +164,25 @@ function CreateServiceButton({ projectId }: { projectId: string }) {
   );
 }
 
-function CreateDependencyButton({
+// ── Create Dependency Dialog ──
+
+function CreateDependencyDialog({
   projectId,
   services,
+  defaultFromId,
+  defaultToId,
+  open,
+  onOpenChange,
 }: {
   projectId: string;
   services: Service[];
+  defaultFromId?: string;
+  defaultToId?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [fromServiceId, setFromServiceId] = useState("");
-  const [toServiceId, setToServiceId] = useState("");
+  const [fromServiceId, setFromServiceId] = useState(defaultFromId ?? "");
+  const [toServiceId, setToServiceId] = useState(defaultToId ?? "");
   const [dependencyType, setDependencyType] = useState("api_call");
   const [description, setDescription] = useState("");
   const queryClient = useQueryClient();
@@ -182,20 +192,12 @@ function CreateDependencyButton({
     onSuccess: () => {
       toast.success("Dependency created");
       invalidateTopology(queryClient, projectId);
-      setOpen(false);
-      setFromServiceId("");
-      setToServiceId("");
-      setDescription("");
-      setDependencyType("api_call");
+      onOpenChange(false);
     },
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="outline" />}>
-        <Plus className="mr-1 h-4 w-4" />
-        Add Dependency
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Service Dependency</DialogTitle>
@@ -277,18 +279,27 @@ function CreateDependencyButton({
   );
 }
 
-function CreateBindingButton({
+// ── Create Binding Dialog ──
+
+function CreateBindingDialog({
   projectId,
   services,
   connections,
+  defaultServiceId,
+  defaultConnectionId,
+  open,
+  onOpenChange,
 }: {
   projectId: string;
   services: Service[];
   connections: Connection[];
+  defaultServiceId?: string;
+  defaultConnectionId?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [serviceId, setServiceId] = useState("");
-  const [connectionId, setConnectionId] = useState("");
+  const [serviceId, setServiceId] = useState(defaultServiceId ?? "");
+  const [connectionId, setConnectionId] = useState(defaultConnectionId ?? "");
   const [usageType, setUsageType] = useState("runtime_inspect");
   const [priority, setPriority] = useState("100");
   const [notes, setNotes] = useState("");
@@ -299,21 +310,12 @@ function CreateBindingButton({
     onSuccess: () => {
       toast.success("Binding created");
       invalidateTopology(queryClient, projectId);
-      setOpen(false);
-      setServiceId("");
-      setConnectionId("");
-      setUsageType("runtime_inspect");
-      setPriority("100");
-      setNotes("");
+      onOpenChange(false);
     },
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="outline" />}>
-        <Plus className="mr-1 h-4 w-4" />
-        Bind Service
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Service Binding</DialogTitle>
@@ -402,119 +404,130 @@ function CreateBindingButton({
   );
 }
 
-function ServiceCard({
-  service,
-  onDelete,
+// ── Context Menu ──
+
+function ContextMenu({
+  x,
+  y,
+  items,
+  onClose,
 }: {
-  service: Service;
-  onDelete: (id: string) => void;
+  x: number;
+  y: number;
+  items: { label: string; onClick: () => void; variant?: "destructive" }[];
+  onClose: () => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <p className="font-medium">{service.name}</p>
-          <Badge variant="outline">{service.service_type}</Badge>
-          <Badge variant="secondary">{service.source}</Badge>
-        </div>
-        {service.description && (
-          <p className="text-sm text-muted-foreground">{service.description}</p>
-        )}
-        {service.business_context && (
-          <p className="text-xs text-muted-foreground">{service.business_context}</p>
-        )}
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div
+        ref={ref}
+        className="fixed z-50 rounded-md border bg-popover p-1 shadow-md"
+        style={{ left: x, top: y }}
+      >
+        {items.map((item) => (
+          <button
+            key={item.label}
+            className={`flex w-full items-center rounded-sm px-3 py-1.5 text-sm hover:bg-accent ${
+              item.variant === "destructive" ? "text-destructive" : ""
+            }`}
+            onClick={() => {
+              item.onClick();
+              onClose();
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
-      <Button variant="ghost" size="sm" onClick={() => onDelete(service.id)}>
-        <Trash2 className="h-4 w-4 text-destructive" />
-      </Button>
-    </div>
+    </>
   );
 }
 
-function ConnectionCard({
-  connection,
-  onDelete,
-}: {
-  connection: Connection;
-  onDelete: (id: string) => void;
-}) {
+// ── Auto Layout Button ──
+
+function AutoLayoutButton() {
+  const { autoLayout } = useTopologyGraph();
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <p className="font-medium">{connection.name}</p>
-          <Badge variant="outline">{connection.type}</Badge>
-        </div>
-        {connection.description && (
-          <p className="text-sm text-muted-foreground">{connection.description}</p>
-        )}
-        <p className="text-xs text-muted-foreground">
-          {connection.type === "kubernetes"
-            ? "Kubernetes cluster"
-            : `${connection.username}@${connection.host}:${connection.port}`}
+    <Button size="sm" variant="outline" onClick={autoLayout}>
+      <LayoutGrid className="mr-1 h-4 w-4" />
+      Auto Layout
+    </Button>
+  );
+}
+
+// ── Discover Services Button ──
+
+function DiscoverServicesButton({
+  projectId,
+  connections,
+}: {
+  projectId: string;
+  connections: Connection[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedConnId, setSelectedConnId] = useState("");
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: discoverServices,
+    onSuccess: (data) => {
+      toast.success(`Discovered ${data.discovered} services`);
+      invalidateTopology(queryClient, projectId);
+      setOpen(false);
+    },
+    onError: () => {
+      toast.error("Discovery failed");
+    },
+  });
+
+  if (!connections.length) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button size="sm" variant="outline" />}>
+        <Search className="mr-1 h-4 w-4" />
+        Discover Services
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Auto-discover Services</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Scan a connection for running services (Docker containers, systemd units, listening ports, cron jobs, K8s workloads).
         </p>
-      </div>
-      <Button variant="ghost" size="sm" onClick={() => onDelete(connection.id)}>
-        <Trash2 className="h-4 w-4 text-destructive" />
-      </Button>
-    </div>
+        <Field>
+          <FieldLabel>Connection</FieldLabel>
+          <Select value={selectedConnId} onValueChange={(value) => setSelectedConnId(value ?? "")}>
+            <SelectTrigger>
+              <SelectValue placeholder="Choose connection to scan" />
+            </SelectTrigger>
+            <SelectContent>
+              {connections.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <Button
+            onClick={() => mutation.mutate(selectedConnId)}
+            disabled={mutation.isPending || !selectedConnId}
+          >
+            {mutation.isPending ? "Scanning..." : "Start Discovery"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-function BindingRow({
-  binding,
-  servicesById,
-  connectionsById,
-  onDelete,
-}: {
-  binding: ServiceConnectionBinding;
-  servicesById: Record<string, Service>;
-  connectionsById: Record<string, Connection>;
-  onDelete: (id: string) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
-      <div className="flex items-center gap-2 text-sm">
-        <Link2 className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">{servicesById[binding.service_id]?.name ?? binding.service_id}</span>
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        <span>{connectionsById[binding.connection_id]?.name ?? binding.connection_id}</span>
-        <Badge variant="outline">{binding.usage_type}</Badge>
-        <Badge variant="secondary">P{binding.priority}</Badge>
-      </div>
-      <Button variant="ghost" size="sm" onClick={() => onDelete(binding.id)}>
-        <Trash2 className="h-4 w-4 text-destructive" />
-      </Button>
-    </div>
-  );
-}
-
-function DependencyRow({
-  dependency,
-  servicesById,
-  onDelete,
-}: {
-  dependency: ServiceDependency;
-  servicesById: Record<string, Service>;
-  onDelete: (id: string) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
-      <div className="flex items-center gap-2 text-sm">
-        <Workflow className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">
-          {servicesById[dependency.from_service_id]?.name ?? dependency.from_service_id}
-        </span>
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        <span>{servicesById[dependency.to_service_id]?.name ?? dependency.to_service_id}</span>
-        <Badge variant="outline">{dependency.dependency_type}</Badge>
-      </div>
-      <Button variant="ghost" size="sm" onClick={() => onDelete(dependency.id)}>
-        <Trash2 className="h-4 w-4 text-destructive" />
-      </Button>
-    </div>
-  );
-}
+// ── Main Component ──
 
 export function ProjectTopologyPanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
@@ -525,22 +538,38 @@ export function ProjectTopologyPanel({ project }: { project: Project }) {
 
   const services = data?.services ?? [];
   const connections = data?.connections ?? [];
-  const dependencies = data?.dependencies ?? [];
-  const bindings = data?.bindings ?? [];
 
-  const servicesById = useMemo(
-    () => Object.fromEntries(services.map((service) => [service.id, service])),
-    [services],
-  );
-  const connectionsById = useMemo(
-    () => Object.fromEntries(connections.map((connection) => [connection.id, connection])),
-    [connections],
-  );
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    items: { label: string; onClick: () => void; variant?: "destructive" }[];
+  } | null>(null);
 
+  // Dialog state for drag-to-connect
+  const [depDialog, setDepDialog] = useState<{
+    open: boolean;
+    fromId?: string;
+    toId?: string;
+  }>({ open: false });
+  const [bindDialog, setBindDialog] = useState<{
+    open: boolean;
+    serviceId?: string;
+    connectionId?: string;
+  }>({ open: false });
+
+  // Delete mutations
   const serviceDelete = useMutation({
     mutationFn: deleteService,
     onSuccess: () => {
       toast.success("Service deleted");
+      invalidateTopology(queryClient, project.id);
+    },
+  });
+  const connectionDelete = useMutation({
+    mutationFn: deleteConnection,
+    onSuccess: () => {
+      toast.success("Connection deleted");
       invalidateTopology(queryClient, project.id);
     },
   });
@@ -558,161 +587,164 @@ export function ProjectTopologyPanel({ project }: { project: Project }) {
       invalidateTopology(queryClient, project.id);
     },
   });
-  const connectionDelete = useMutation({
-    mutationFn: deleteConnection,
-    onSuccess: () => {
-      toast.success("Connection deleted");
-      invalidateTopology(queryClient, project.id);
+
+  const extractId = (nodeId: string) => nodeId.replace(/^(svc-|conn-)/, "");
+
+  const handleConnect = useCallback(
+    (params: FlowConnection) => {
+      const sourceType = params.source?.startsWith("svc-") ? "service" : "connection";
+      const targetType = params.target?.startsWith("svc-") ? "service" : "connection";
+
+      if (sourceType === "service" && targetType === "service") {
+        setDepDialog({
+          open: true,
+          fromId: extractId(params.source!),
+          toId: extractId(params.target!),
+        });
+      } else if (sourceType === "service" && targetType === "connection") {
+        setBindDialog({
+          open: true,
+          serviceId: extractId(params.source!),
+          connectionId: extractId(params.target!),
+        });
+      } else if (sourceType === "connection" && targetType === "service") {
+        setBindDialog({
+          open: true,
+          serviceId: extractId(params.target!),
+          connectionId: extractId(params.source!),
+        });
+      }
     },
-  });
+    [],
+  );
+
+  const handleNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      const isService = node.id.startsWith("svc-");
+      const entityId = extractId(node.id);
+      const label = isService ? "Delete Service" : "Delete Connection";
+
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label,
+            variant: "destructive",
+            onClick: () => {
+              if (isService) serviceDelete.mutate(entityId);
+              else connectionDelete.mutate(entityId);
+            },
+          },
+        ],
+      });
+    },
+    [serviceDelete, connectionDelete],
+  );
+
+  const handleEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      const edgeData = edge.data as { entityType: string; entityId: string } | undefined;
+      if (!edgeData) return;
+      const label =
+        edgeData.entityType === "dependency" ? "Delete Dependency" : "Delete Binding";
+
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label,
+            variant: "destructive",
+            onClick: () => {
+              if (edgeData.entityType === "dependency") dependencyDelete.mutate(edgeData.entityId);
+              else bindingDelete.mutate(edgeData.entityId);
+            },
+          },
+        ],
+      });
+    },
+    [dependencyDelete, bindingDelete],
+  );
 
   if (isLoading) {
-    return (
-      <div className="grid gap-4 xl:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-48 rounded-xl" />
-        ))}
-      </div>
-    );
+    return <Skeleton className="h-[500px] rounded-xl" />;
   }
 
+  const hasContent = services.length > 0 || connections.length > 0;
+
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Services</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-semibold">{services.length}</CardContent>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Connections</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-semibold">{connections.length}</CardContent>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Dependencies</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-semibold">{dependencies.length}</CardContent>
-        </Card>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Bindings</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-semibold">{bindings.length}</CardContent>
-        </Card>
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <CreateServiceButton projectId={project.id} />
+        <CreateConnectionDialog projectId={project.id} />
+        <DiscoverServicesButton projectId={project.id} connections={connections} />
+        {hasContent && (
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant="secondary">{services.length} services</Badge>
+            <Badge variant="secondary">{connections.length} connections</Badge>
+            <Badge variant="secondary">{data?.dependencies.length ?? 0} deps</Badge>
+            <Badge variant="secondary">{data?.bindings.length ?? 0} bindings</Badge>
+          </div>
+        )}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <Plug className="h-4 w-4" />
-                Services
-              </CardTitle>
-              <CreateServiceButton projectId={project.id} />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {services.length ? (
-              services.map((service) => (
-                <ServiceCard
-                  key={service.id}
-                  service={service}
-                  onDelete={(id) => serviceDelete.mutate(id)}
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">No services yet.</p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Graph */}
+      {hasContent && data ? (
+        <div className="h-[500px] rounded-xl border bg-muted/30">
+          <TopologyGraph
+            topology={data}
+            onConnect={handleConnect}
+            onNodeContextMenu={handleNodeContextMenu}
+            onEdgeContextMenu={handleEdgeContextMenu}
+          />
+        </div>
+      ) : (
+        <div className="flex h-[300px] items-center justify-center rounded-xl border border-dashed">
+          <div className="text-center text-muted-foreground">
+            <p className="text-sm">No topology data yet.</p>
+            <p className="text-xs mt-1">Add services and connections to build the topology graph.</p>
+          </div>
+        </div>
+      )}
 
-        <Card>
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <Plug className="h-4 w-4" />
-                Connections
-              </CardTitle>
-              <CreateConnectionDialog projectId={project.id} />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {connections.length ? (
-              connections.map((connection) => (
-                <ConnectionCard
-                  key={connection.id}
-                  connection={connection}
-                  onDelete={(id) => connectionDelete.mutate(id)}
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">No connections yet.</p>
-            )}
-          </CardContent>
-        </Card>
+      {hasContent && (
+        <p className="text-xs text-muted-foreground">
+          Drag from one node to another to create relationships. Right-click nodes or edges to delete.
+        </p>
+      )}
 
-        <Card>
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <Workflow className="h-4 w-4" />
-                Service Dependencies
-              </CardTitle>
-              <CreateDependencyButton projectId={project.id} services={services} />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {dependencies.length ? (
-              dependencies.map((dependency) => (
-                <DependencyRow
-                  key={dependency.id}
-                  dependency={dependency}
-                  servicesById={servicesById}
-                  onDelete={(id) => dependencyDelete.mutate(id)}
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">No dependencies yet.</p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Context menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
 
-        <Card>
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <Link2 className="h-4 w-4" />
-                Service Bindings
-              </CardTitle>
-              <CreateBindingButton
-                projectId={project.id}
-                services={services}
-                connections={connections}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {bindings.length ? (
-              bindings.map((binding) => (
-                <BindingRow
-                  key={binding.id}
-                  binding={binding}
-                  servicesById={servicesById}
-                  connectionsById={connectionsById}
-                  onDelete={(id) => bindingDelete.mutate(id)}
-                />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">No bindings yet.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Dependency dialog (from drag connect) */}
+      <CreateDependencyDialog
+        projectId={project.id}
+        services={services}
+        defaultFromId={depDialog.fromId}
+        defaultToId={depDialog.toId}
+        open={depDialog.open}
+        onOpenChange={(open) => setDepDialog((prev) => ({ ...prev, open }))}
+      />
+
+      {/* Binding dialog (from drag connect) */}
+      <CreateBindingDialog
+        projectId={project.id}
+        services={services}
+        connections={connections}
+        defaultServiceId={bindDialog.serviceId}
+        defaultConnectionId={bindDialog.connectionId}
+        open={bindDialog.open}
+        onOpenChange={(open) => setBindDialog((prev) => ({ ...prev, open }))}
+      />
     </div>
   );
 }

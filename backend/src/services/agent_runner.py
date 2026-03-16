@@ -23,7 +23,6 @@ class AgentRunner:
         title: str,
         description: str,
         severity: str,
-        connection_id: str,
         project_id: str = "",
     ) -> str:
         thread_id = str(uuid.uuid4())
@@ -52,7 +51,6 @@ class AgentRunner:
         initial_state = {
             "messages": [HumanMessage(content=f"事件: {title}\n\n{description}")],
             "incident_id": incident_id,
-            "connection_id": connection_id,
             "project_id": project_id,
             "title": title,
             "description": description,
@@ -143,12 +141,12 @@ class AgentRunner:
 
     @staticmethod
     def _extract_pending_tool_call(vals: dict) -> dict | None:
-        """Extract the exec_write_tool call from the last AI message."""
+        """Extract the exec_write call from the last AI message."""
         messages = vals.get("messages", [])
         for msg in reversed(messages):
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    if tc["name"] == "exec_write_tool":
+                    if tc["name"] == "exec_write":
                         return tc
         return None
 

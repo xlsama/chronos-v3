@@ -4,24 +4,24 @@ from langchain_openai import ChatOpenAI
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import OpsState
 from src.config import get_settings
-from src.ops_agent.tools.exec_tools import exec_read, exec_write, list_connections
-from src.ops_agent.tools.http_tools import http_request
-from src.ops_agent.tools.monitoring_tools import query_logs, query_metrics
+from src.ops_agent.tools.exec_tools import exec_read as _exec_read, exec_write as _exec_write, list_connections as _list_connections
+from src.ops_agent.tools.http_tools import http_request as _http_request
+from src.ops_agent.tools.monitoring_tools import query_logs as _query_logs, query_metrics as _query_metrics
 
 
 def build_tools(has_prometheus: bool = False, has_loki: bool = False):
     from langchain_core.tools import tool
 
     @tool
-    async def exec_read_tool(connection_id: str, command: str) -> dict:
+    async def exec_read(connection_id: str, command: str) -> dict:
         """Execute a read-only command on the target connection.
         Use this for diagnostic commands like: df -h, free -m, ps aux, cat, etc.
         Works for both SSH servers and Kubernetes clusters.
         """
-        return await exec_read(connection_id=connection_id, command=command)
+        return await _exec_read(connection_id=connection_id, command=command)
 
     @tool
-    async def exec_write_tool(
+    async def exec_write(
         connection_id: str,
         command: str,
         explanation: str,
@@ -34,10 +34,10 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
         - risk_level: LOW / MEDIUM / HIGH
         - risk_detail: 风险说明（可能的影响）
         """
-        return await exec_write(connection_id=connection_id, command=command)
+        return await _exec_write(connection_id=connection_id, command=command)
 
     @tool
-    async def http_request_tool(
+    async def http_request(
         method: str,
         url: str,
         headers: str | None = None,
@@ -49,15 +49,15 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
         - headers: Optional JSON string, e.g. '{"Authorization": "Bearer xxx"}'
         - body: Optional request body
         """
-        return await http_request(method=method, url=url, headers=headers, body=body)
+        return await _http_request(method=method, url=url, headers=headers, body=body)
 
     @tool
-    async def list_connections_tool(project_id: str = "") -> list[dict]:
+    async def list_connections(project_id: str = "") -> list[dict]:
         """List available connections. Returns id, name, type, host, status, project_id.
-        Use this to discover target connection when no connection_id is specified.
-        Optionally filter by project_id.
+        Use this to discover target connection when KB context is insufficient.
+        Must pass project_id to scope the search.
         """
-        return await list_connections(project_id=project_id)
+        return await _list_connections(project_id=project_id)
 
     @tool
     def ask_human(question: str) -> str:
@@ -72,17 +72,17 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
         return summary
 
     tools = [
-        exec_read_tool,
-        exec_write_tool,
-        list_connections_tool,
-        http_request_tool,
+        exec_read,
+        exec_write,
+        list_connections,
+        http_request,
         ask_human,
         complete,
     ]
 
     if has_prometheus:
         @tool
-        async def query_metrics_tool(
+        async def query_metrics(
             project_id: str,
             query: str,
             start: str | None = None,
@@ -95,15 +95,15 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
             - start/end: RFC3339 timestamps for range query. Omit for instant query.
             - step: Query resolution step (default '60s')
             """
-            return await query_metrics(
+            return await _query_metrics(
                 project_id=project_id, query=query, start=start, end=end, step=step
             )
 
-        tools.append(query_metrics_tool)
+        tools.append(query_metrics)
 
     if has_loki:
         @tool
-        async def query_logs_tool(
+        async def query_logs(
             project_id: str,
             query: str,
             start: str | None = None,
@@ -116,11 +116,11 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
             - start/end: RFC3339 timestamps for the query range
             - limit: Max number of log lines (default 100)
             """
-            return await query_logs(
+            return await _query_logs(
                 project_id=project_id, query=query, start=start, end=end, limit=limit
             )
 
-        tools.append(query_logs_tool)
+        tools.append(query_logs)
 
     return tools
 
@@ -165,17 +165,10 @@ async def main_agent_node(state: OpsState) -> dict:
     if has_loki:
         extra_tools_doc += "- **query_logs**: 查询 Loki 日志（LogQL）\n"
 
-    conn_id = state["connection_id"]
-    if conn_id:
-        connection_context = f"已指定连接 ID: {conn_id}，优先使用此连接执行命令。"
-    else:
-        connection_context = "未指定连接，请先使用 list_connections 工具查找可用的连接，然后根据事件描述选择合适的目标。"
-
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         title=state["title"],
         description=state["description"],
         severity=state["severity"],
-        connection_context=connection_context,
         project_id=state.get("project_id", ""),
         incident_history_context=history_context,
         kb_context=kb_context,
@@ -200,7 +193,7 @@ def route_decision(state: OpsState) -> str:
     for tool_call in last_message.tool_calls:
         if tool_call["name"] == "complete":
             return "complete"
-        if tool_call["name"] == "exec_write_tool":
+        if tool_call["name"] == "exec_write":
             return "need_approval"
         if tool_call["name"] == "ask_human":
             return "ask_human"

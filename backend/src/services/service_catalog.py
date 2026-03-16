@@ -4,7 +4,8 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Connection, Service, ServiceConnectionBinding
+from src.db.models import Connection, Project, Service, ServiceConnectionBinding
+from src.lib.errors import ValidationError
 from src.lib.logger import logger
 from src.ops_agent.tools.exec_tools import get_connector
 
@@ -27,10 +28,26 @@ class ServiceCatalog:
         source: str = "manual",
         metadata: dict | None = None,
     ) -> Service:
+        project = await self.session.get(Project, project_id)
+        if not project:
+            raise ValidationError("Project not found")
+
+        resolved_slug = slug or self._generate_slug(name)
+        existing = (
+            await self.session.execute(
+                select(Service).where(
+                    Service.project_id == project_id,
+                    Service.slug == resolved_slug,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            raise ValidationError("Service slug already exists in this project")
+
         svc = Service(
             project_id=project_id,
             name=name,
-            slug=slug or self._generate_slug(name),
+            slug=resolved_slug,
             service_type=service_type,
             description=description,
             business_context=business_context,
@@ -46,6 +63,20 @@ class ServiceCatalog:
         return svc
 
     async def update(self, service: Service, **kwargs) -> Service:
+        incoming_name = kwargs.get("name", service.name)
+        incoming_slug = kwargs.get("slug") or self._generate_slug(incoming_name)
+        duplicate = (
+            await self.session.execute(
+                select(Service).where(
+                    Service.project_id == service.project_id,
+                    Service.slug == incoming_slug,
+                    Service.id != service.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if duplicate:
+            raise ValidationError("Service slug already exists in this project")
+
         for key, value in kwargs.items():
             if value is None:
                 continue
@@ -53,8 +84,7 @@ class ServiceCatalog:
                 service.service_metadata = value
             elif hasattr(service, key):
                 setattr(service, key, value)
-        if service.name and not service.slug:
-            service.slug = self._generate_slug(service.name)
+        service.slug = incoming_slug
         await self.session.commit()
         await self.session.refresh(service)
         return service

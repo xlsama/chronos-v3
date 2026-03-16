@@ -42,3 +42,4 @@ htmlcov/
 alembic/versions/*.pyc
 
 .ruff_cache
+.tanstack

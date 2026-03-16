@@ -2,7 +2,17 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,6 +46,9 @@ class Project(Base):
 
 class Connection(Base):
     __tablename__ = "connections"
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_connections_project_name"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
@@ -52,8 +65,8 @@ class Connection(Base):
         JSONB, default=dict, server_default=text("'{}'")
     )
     status: Mapped[str] = mapped_column(String(20), default="unknown")
-    project_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -68,6 +81,9 @@ class Connection(Base):
 
 class Service(Base):
     __tablename__ = "services"
+    __table_args__ = (
+        UniqueConstraint("project_id", "slug", name="uq_services_project_slug"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -108,6 +124,17 @@ class Service(Base):
 
 class ServiceDependency(Base):
     __tablename__ = "service_dependencies"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "from_service_id",
+            "to_service_id",
+            "dependency_type",
+            name="uq_service_dependencies_edge",
+        ),
+        CheckConstraint("from_service_id <> to_service_id", name="ck_service_dependencies_no_self_ref"),
+        CheckConstraint("confidence >= 0 AND confidence <= 100", name="ck_service_dependencies_confidence"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -134,6 +161,16 @@ class ServiceDependency(Base):
 
 class ServiceConnectionBinding(Base):
     __tablename__ = "service_connection_bindings"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "service_id",
+            "connection_id",
+            "usage_type",
+            name="uq_service_connection_bindings_scope",
+        ),
+        CheckConstraint("priority >= 0", name="ck_service_connection_bindings_priority"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(

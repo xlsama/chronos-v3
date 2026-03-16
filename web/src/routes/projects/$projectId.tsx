@@ -50,7 +50,7 @@ function ProjectDetailPage() {
             <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="topology" className="p-6">
+        <TabsContent value="topology" className="px-6 py-4">
           <ProjectTopologyPanel project={project} />
         </TabsContent>
         <TabsContent value="documents" className="space-y-6 p-6">
