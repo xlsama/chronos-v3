@@ -18,7 +18,9 @@ const sshSchema = z.object({
   host: z.string().min(1, "主机地址不能为空"),
   port: z.coerce.number().int().min(1).max(65535).default(22),
   username: z.string().min(1, "用户名不能为空"),
+  auth_method: z.enum(["password", "private_key"]),
   password: z.string().optional(),
+  private_key: z.string().optional(),
   project_id: z.string().optional(),
 });
 
@@ -32,10 +34,26 @@ const k8sSchema = z.object({
   project_id: z.string().optional(),
 });
 
-export const connectionSchema = z.discriminatedUnion("type", [
-  sshSchema,
-  k8sSchema,
-]);
+export const connectionSchema = z
+  .discriminatedUnion("type", [sshSchema, k8sSchema])
+  .superRefine((data, ctx) => {
+    if (data.type === "ssh") {
+      if (data.auth_method === "password" && !data.password) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "密码不能为空",
+          path: ["password"],
+        });
+      }
+      if (data.auth_method === "private_key" && !data.private_key) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "私钥不能为空",
+          path: ["private_key"],
+        });
+      }
+    }
+  });
 
 export type ConnectionFormData = z.infer<typeof connectionSchema>;
 

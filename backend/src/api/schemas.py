@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 
 
 class ProjectCreate(BaseModel):
@@ -67,6 +67,7 @@ class ConnectionResponse(BaseModel):
     port: int
     username: str
     status: str
+    auth_method: str = "none"
     capabilities: list[str]
     scope_metadata: dict[str, Any]
     project_id: uuid.UUID | None = None
@@ -74,6 +75,18 @@ class ConnectionResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def compute_auth_method(cls, data: Any) -> Any:
+        if hasattr(data, "__dict__"):
+            if getattr(data, "encrypted_private_key", None):
+                data.__dict__["auth_method"] = "private_key"
+            elif getattr(data, "encrypted_password", None):
+                data.__dict__["auth_method"] = "password"
+            else:
+                data.__dict__["auth_method"] = "none"
+        return data
 
 
 class ConnectionTestResponse(BaseModel):

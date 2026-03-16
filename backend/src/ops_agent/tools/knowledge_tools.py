@@ -73,7 +73,7 @@ async def search_knowledge_base(query: str, project_id: str) -> str:
             select(ServiceDependency).where(ServiceDependency.project_id == uuid.UUID(project_id))
         )
         connection_result = await session.execute(
-            select(Connection).where(Connection.project_id == uuid.UUID(project_id)).order_by(Connection.name)
+            select(Connection).where(Connection.status != "offline").order_by(Connection.name)
         )
         binding_result = await session.execute(
             select(ServiceConnectionBinding).where(ServiceConnectionBinding.project_id == uuid.UUID(project_id))

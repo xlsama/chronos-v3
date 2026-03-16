@@ -35,8 +35,8 @@ export function updateConnection(
     host?: string;
     port?: number;
     username?: string;
-    password?: string;
-    private_key?: string;
+    password?: string | null;
+    private_key?: string | null;
     kubeconfig?: string;
     context?: string;
     namespace?: string;

@@ -43,7 +43,7 @@ class SSHConnector:
         }
 
         if self.private_key:
-            key = paramiko.RSAKey.from_private_key(io.StringIO(self.private_key))
+            key = paramiko.PKey.from_private_key(io.StringIO(self.private_key))
             connect_kwargs["pkey"] = key
         elif self.password:
             connect_kwargs["password"] = self.password

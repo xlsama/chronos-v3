@@ -27,6 +27,7 @@ export function useIncidentStream(
     appendSubAgentThinking,
     flushSubAgentThinking,
     addSubAgentEvent,
+    updatePhase,
     setAskHumanQuestion,
     setApprovalDecided,
     setConnected,
@@ -95,7 +96,11 @@ export function useIncidentStream(
           }
 
           const phase = (event.data.phase as string) || "";
-          const agent = (event.data.agent as string) || "history";
+          const agent = (event.data.agent as string) || "";
+
+          if (phase === "discover_project" || phase === "gather_context") {
+            updatePhase("gather_context");
+          }
 
           if (phase === "discover_project") {
             if (event.event_type === "thinking") {
@@ -107,7 +112,7 @@ export function useIncidentStream(
               flushSubAgentThinking("discovery", event.timestamp);
               addSubAgentEvent("discovery", event);
             }
-          } else if (phase === "gather_context") {
+          } else if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
             if (event.event_type === "thinking") {
               appendSubAgentThinking(agent, event.data.content as string);
             } else {
@@ -119,12 +124,18 @@ export function useIncidentStream(
               event.data.approval_id as string,
               event.data.decision as string,
             );
+          } else if (event.event_type === "summary") {
+            updatePhase("summarize");
+            addEvent(event);
           } else if (event.event_type === "ask_human") {
+            updatePhase("main");
             setAskHumanQuestion(event.data.question as string);
             addEvent(event);
           } else if (event.event_type === "thinking") {
+            updatePhase("main");
             appendThinking(event.data.content as string);
           } else {
+            updatePhase("main");
             const { thinkingContent } = useIncidentStreamStore.getState();
             if (thinkingContent) {
               addEvent({

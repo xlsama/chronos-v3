@@ -17,6 +17,7 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
         """Execute a read-only command on the target connection.
         Use this for diagnostic commands like: df -h, free -m, ps aux, cat, etc.
         Works for both SSH servers and Kubernetes clusters.
+        connection_id: Must be a valid UUID from list_connections() or KB context.
         """
         return await _exec_read(connection_id=connection_id, command=command)
 
@@ -30,6 +31,7 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
     ) -> dict:
         """Execute a write command on the target connection.
         This requires human approval.
+        - connection_id: Must be a valid UUID from list_connections() or KB context.
         - explanation: 操作说明（为什么需要执行这个命令）
         - risk_level: LOW / MEDIUM / HIGH
         - risk_detail: 风险说明（可能的影响）
@@ -55,7 +57,7 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
     async def list_connections(project_id: str = "") -> list[dict]:
         """List available connections. Returns id, name, type, host, status, project_id.
         Use this to discover target connection when KB context is insufficient.
-        Must pass project_id to scope the search.
+        Optionally pass project_id to filter by project.
         """
         return await _list_connections(project_id=project_id)
 

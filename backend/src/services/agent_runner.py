@@ -193,6 +193,13 @@ class AgentRunner:
 
     async def _process_event(self, channel: str, event: dict) -> None:
         kind = event.get("event")
+        metadata = event.get("metadata", {})
+        node = metadata.get("langgraph_node", "")
+
+        # gather_context 子 agent 通过自己的 callback 发布事件，跳过避免重复
+        if node == "gather_context":
+            return
+
         phase, agent = self._get_phase_agent(event)
 
         if kind == "on_chat_model_stream":

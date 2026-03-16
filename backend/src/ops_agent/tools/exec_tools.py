@@ -27,7 +27,14 @@ async def get_connector(connection_id: str) -> SSHConnector | K8sConnector:
 
     factory = get_session_factory()
     async with factory() as session:
-        conn = await session.get(Connection, uuid.UUID(connection_id))
+        try:
+            conn_uuid = uuid.UUID(connection_id)
+        except ValueError:
+            raise ValueError(
+                f"Invalid connection_id '{connection_id}': not a valid UUID. "
+                f"Call list_connections() to get valid connection IDs."
+            )
+        conn = await session.get(Connection, conn_uuid)
         if not conn:
             raise ValueError(f"Connection not found: {connection_id}")
 
@@ -62,19 +69,20 @@ async def get_connector(connection_id: str) -> SSHConnector | K8sConnector:
 
 
 async def list_connections(project_id: str = "") -> list[dict]:
-    """List available project-scoped connections, excluding offline ones."""
+    """List available connections, excluding offline ones. Optionally filter by project_id."""
     from sqlalchemy import select
 
     from src.db.connection import get_session_factory
     from src.db.models import Connection
 
-    if not project_id:
-        return []
-
     factory = get_session_factory()
     async with factory() as session:
         stmt = select(Connection).where(Connection.status != "offline")
-        stmt = stmt.where(Connection.project_id == uuid.UUID(project_id))
+        if project_id:
+            try:
+                stmt = stmt.where(Connection.project_id == uuid.UUID(project_id))
+            except ValueError:
+                pass  # invalid project_id, skip filter and return all
 
         result = await session.execute(stmt)
         conns = result.scalars().all()
@@ -101,7 +109,10 @@ async def exec_read(connection_id: str, command: str) -> dict:
     if cmd_type == CommandType.WRITE:
         return {"error": "This is a write command. Use exec_write instead, which requires approval."}
 
-    connector = await get_connector(connection_id)
+    try:
+        connector = await get_connector(connection_id)
+    except ValueError as e:
+        return {"error": str(e)}
     result = await connector.execute(command)
 
     return {
@@ -118,7 +129,10 @@ async def exec_write(connection_id: str, command: str) -> dict:
     if cmd_type == CommandType.BLOCKED:
         return {"error": "Command blocked: this command is too dangerous to execute"}
 
-    connector = await get_connector(connection_id)
+    try:
+        connector = await get_connector(connection_id)
+    except ValueError as e:
+        return {"error": str(e)}
     result = await connector.execute(command)
 
     return {

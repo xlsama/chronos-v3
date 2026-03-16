@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
+import { Upload } from "lucide-react";
 import { createConnection, updateConnection } from "@/api/connections";
 import { connectionSchema } from "@/lib/schemas";
 import type { Connection } from "@/lib/types";
@@ -42,7 +43,9 @@ type FormValues = {
   host: string;
   port: string;
   username: string;
+  auth_method: "password" | "private_key";
   password: string;
+  private_key: string;
   kubeconfig: string;
   context: string;
   namespace: string;
@@ -94,7 +97,9 @@ function ConnectionForm({
         host: connection.host,
         port: String(connection.port),
         username: connection.username,
+        auth_method: connection.auth_method === "private_key" ? "private_key" : "password",
         password: "",
+        private_key: "",
         kubeconfig: "",
         context: "",
         namespace: "",
@@ -106,7 +111,9 @@ function ConnectionForm({
         host: "",
         port: "22",
         username: "root",
+        auth_method: "password",
         password: "",
+        private_key: "",
         kubeconfig: "",
         context: "",
         namespace: "",
@@ -125,7 +132,13 @@ function ConnectionForm({
           if (value.host !== connection!.host) data.host = value.host;
           if (parseInt(value.port) !== connection!.port) data.port = parseInt(value.port);
           if (value.username !== connection!.username) data.username = value.username;
-          if (value.password) data.password = value.password;
+          if (value.auth_method === "password" && value.password) {
+            data.password = value.password;
+            data.private_key = null;
+          } else if (value.auth_method === "private_key" && value.private_key) {
+            data.private_key = value.private_key;
+            data.password = null;
+          }
         } else {
           if (value.kubeconfig) data.kubeconfig = value.kubeconfig;
           if (value.context) data.context = value.context;
@@ -150,7 +163,10 @@ function ConnectionForm({
               host: value.host,
               port: parseInt(value.port),
               username: value.username,
-              password: value.password || undefined,
+              auth_method: value.auth_method,
+              ...(value.auth_method === "password"
+                ? { password: value.password || undefined }
+                : { private_key: value.private_key || undefined }),
               project_id: projectId,
             }
           : {
@@ -182,6 +198,8 @@ function ConnectionForm({
   });
 
   const type = useStore(form.store, (s) => s.values.type);
+  const authMethod = useStore(form.store, (s) => s.values.auth_method);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <form
@@ -326,19 +344,83 @@ function ConnectionForm({
                 </Field>
               )}
             </form.Field>
-            <form.Field name="password">
+            <form.Field name="auth_method">
               {(field) => (
                 <Field>
-                  <FieldLabel>Password</FieldLabel>
-                  <Input
-                    type="password"
-                    placeholder={isEdit ? "Leave blank to keep current" : "Optional"}
+                  <FieldLabel>Authentication Method</FieldLabel>
+                  <Select
                     value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
+                    onValueChange={(v) =>
+                      field.handleChange(v as "password" | "private_key")
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="password">密码</SelectItem>
+                      <SelectItem value="private_key">私钥</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>
+            {authMethod === "password" ? (
+              <form.Field name="password">
+                {(field) => (
+                  <Field>
+                    <FieldLabel>Password</FieldLabel>
+                    <Input
+                      type="password"
+                      placeholder={isEdit ? "留空保持当前密码" : ""}
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+            ) : (
+              <form.Field name="private_key">
+                {(field) => (
+                  <Field>
+                    <FieldLabel>Private Key</FieldLabel>
+                    <Textarea
+                      rows={6}
+                      className="font-mono text-xs"
+                      placeholder={
+                        isEdit
+                          ? "留空保持当前私钥"
+                          : "粘贴 PEM 格式私钥内容..."
+                      }
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pem,.key,.pub,.id_rsa,.id_ed25519"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        file.text().then((text) => field.handleChange(text));
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-1"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="mr-1 h-3 w-3" />
+                      上传密钥文件
+                    </Button>
+                  </Field>
+                )}
+              </form.Field>
+            )}
           </>
         ) : (
           <>

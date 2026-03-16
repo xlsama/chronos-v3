@@ -9,6 +9,7 @@ export interface Connection {
   status: string;
   capabilities: string[];
   scope_metadata: Record<string, unknown>;
+  auth_method: "password" | "private_key" | "none";
   project_id: string | null;
   created_at: string;
   updated_at: string;

@@ -24,29 +24,37 @@ class EventPublisher:
     def __init__(self, redis: aioredis.Redis, session_factory: async_sessionmaker | None = None):
         self.redis = redis
         self.session_factory = session_factory
-        self._thinking_buffer: dict[str, dict] = {}  # channel -> {content, phase, agent}
+        self._thinking_buffer: dict[tuple[str, str, str], dict] = {}  # (channel, phase, agent) -> {content, phase, agent}
 
     async def publish(self, channel: str, event_type: str, data: dict) -> None:
+        phase = data.get("phase", "")
+        agent = data.get("agent", "")
+
         if event_type == "thinking":
             # Accumulate thinking tokens, don't persist yet, but still push SSE
+            buf_key = (channel, phase, agent)
             buf = self._thinking_buffer.setdefault(
-                channel, {"content": "", "phase": data.get("phase", ""), "agent": data.get("agent", "")}
+                buf_key, {"content": "", "phase": phase, "agent": agent}
             )
             buf["content"] += data.get("content", "")
             await self._publish_sse(channel, event_type, data)
             return
 
-        # Non-thinking event: flush accumulated thinking first, then persist current
-        await self._flush_thinking(channel)
+        # Non-thinking event: flush accumulated thinking for this (channel, phase, agent) first
+        await self._flush_thinking(channel, phase, agent)
         await self._persist(channel, event_type, data)
         await self._publish_sse(channel, event_type, data)
 
     async def flush_remaining(self, channel: str) -> None:
         """Call when agent run ends to flush any remaining thinking buffer."""
-        await self._flush_thinking(channel)
+        keys_to_flush = [k for k in self._thinking_buffer if k[0] == channel]
+        for key in keys_to_flush:
+            buf = self._thinking_buffer.pop(key, None)
+            if buf and buf["content"]:
+                await self._persist(channel, "thinking", buf)
 
-    async def _flush_thinking(self, channel: str) -> None:
-        buf = self._thinking_buffer.pop(channel, None)
+    async def _flush_thinking(self, channel: str, phase: str = "", agent: str = "") -> None:
+        buf = self._thinking_buffer.pop((channel, phase, agent), None)
         if buf and buf["content"]:
             await self._persist(channel, "thinking", buf)
 

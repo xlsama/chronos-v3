@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { EllipsisVertical, Pencil, Server, Trash2, Wifi, WifiOff } from "lucide-react";
+import { EllipsisVertical, KeyRound, Pencil, Server, Trash2, Wifi, WifiOff } from "lucide-react";
 import {
   deleteConnection,
   getConnections,
@@ -99,6 +99,9 @@ function ConnectionItem({
               {conn.type === "kubernetes"
                 ? "Kubernetes Cluster"
                 : `${conn.username}@${conn.host}:${conn.port}`}
+              {conn.type === "ssh" && conn.auth_method === "private_key" && (
+                <KeyRound className="ml-1 inline h-3 w-3 text-muted-foreground" />
+              )}
             </p>
             {conn.description && (
               <p className="text-xs text-muted-foreground">{conn.description}</p>
@@ -130,18 +133,18 @@ function ConnectionItem({
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="icon-sm">
                 <EllipsisVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setShowEditDialog(true)}>
+              <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
-                onSelect={() => setShowDeleteDialog(true)}
+                onClick={() => setShowDeleteDialog(true)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
@@ -154,18 +157,19 @@ function ConnectionItem({
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Connection</AlertDialogTitle>
+            <AlertDialogTitle>确认删除连接</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{conn.name}</strong>? This action cannot be undone.
+              确定要删除 <strong>{conn.name}</strong> 吗？该操作无法撤销。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => deleteMutation.mutate(conn.id)}
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              {deleteMutation.isPending ? "删除中..." : "删除"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
