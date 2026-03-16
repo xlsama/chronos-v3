@@ -23,3 +23,8 @@ class AuthenticationError(AppError):
 class ForbiddenError(AppError):
     def __init__(self, message: str = "Forbidden"):
         super().__init__(message, status_code=403)
+
+
+class ConflictError(AppError):
+    def __init__(self, message: str = "Resource already modified"):
+        super().__init__(message, status_code=409)

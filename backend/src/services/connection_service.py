@@ -89,6 +89,59 @@ class ConnectionService:
         await self.session.refresh(conn)
         return conn
 
+    async def update(self, conn: Connection, **kwargs: object) -> Connection:
+        # Name uniqueness check (exclude self)
+        if "name" in kwargs:
+            dup_filters = [Connection.name == kwargs["name"], Connection.id != conn.id]
+            if conn.project_id:
+                dup_filters.append(Connection.project_id == conn.project_id)
+            else:
+                dup_filters.append(Connection.project_id.is_(None))
+            dup = (
+                await self.session.execute(select(Connection).where(*dup_filters))
+            ).scalar_one_or_none()
+            if dup:
+                raise ValidationError("Connection name already exists")
+
+        # Plain fields
+        for field in ("name", "description", "host", "port", "username"):
+            if field in kwargs:
+                setattr(conn, field, kwargs[field])
+
+        # Re-encrypt sensitive fields
+        if "password" in kwargs:
+            pw = kwargs["password"]
+            conn.encrypted_password = self.crypto.encrypt(pw) if pw else None
+        if "private_key" in kwargs:
+            pk = kwargs["private_key"]
+            conn.encrypted_private_key = self.crypto.encrypt(pk) if pk else None
+
+        # K8s conn_config rebuild
+        k8s_fields = {"kubeconfig", "context", "namespace"}
+        if k8s_fields & kwargs.keys() and conn.type == "kubernetes":
+            # Read current config as base
+            current = self.get_decrypted_conn_config(conn) or {}
+            kubeconfig = kwargs.get("kubeconfig", current.get("kubeconfig"))
+            if not kubeconfig:
+                raise ValidationError("Kubernetes connection requires kubeconfig")
+            config_data: dict[str, str] = {"kubeconfig": kubeconfig}
+            context = kwargs.get("context", current.get("context"))
+            if context:
+                config_data["context"] = context
+            namespace = kwargs.get("namespace", current.get("namespace"))
+            if namespace:
+                config_data["namespace"] = namespace
+                scope_metadata = dict(conn.scope_metadata or {})
+                scope_metadata["namespace"] = namespace
+                conn.scope_metadata = scope_metadata
+            conn.conn_config = self.crypto.encrypt(
+                orjson.dumps(config_data).decode()
+            )
+
+        await self.session.commit()
+        await self.session.refresh(conn)
+        return conn
+
     def get_decrypted_credentials(
         self, conn: Connection
     ) -> tuple[str | None, str | None]:

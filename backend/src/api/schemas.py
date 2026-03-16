@@ -48,7 +48,14 @@ class ConnectionCreate(BaseModel):
 class ConnectionUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
-    status: str | None = None
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    password: str | None = None
+    private_key: str | None = None
+    kubeconfig: str | None = None
+    context: str | None = None
+    namespace: str | None = None
 
 
 class ConnectionResponse(BaseModel):

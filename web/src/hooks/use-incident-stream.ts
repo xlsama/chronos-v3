@@ -18,6 +18,7 @@ export function useIncidentStream(incidentId: string | undefined) {
     flushSubAgentThinking,
     addSubAgentEvent,
     setAskHumanQuestion,
+    setApprovalDecided,
     setConnected,
     reset,
   } = useIncidentStreamStore();
@@ -64,6 +65,11 @@ export function useIncidentStream(incidentId: string | undefined) {
               flushSubAgentThinking(agent, event.timestamp);
               addSubAgentEvent(agent, event);
             }
+          } else if (event.event_type === "approval_decided") {
+            setApprovalDecided(
+              event.data.approval_id as string,
+              event.data.decision as string,
+            );
           } else if (event.event_type === "ask_human") {
             setAskHumanQuestion(event.data.question as string);
             addEvent(event);

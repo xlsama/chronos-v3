@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
-import { createConnection } from "@/api/connections";
+import { createConnection, updateConnection } from "@/api/connections";
 import { connectionSchema } from "@/lib/schemas";
+import type { Connection } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,11 +35,34 @@ function fieldError(errors: unknown[]) {
   }));
 }
 
-export function CreateConnectionDialog({ projectId }: { projectId?: string }) {
-  const [open, setOpen] = useState(false);
-  const queryClient = useQueryClient();
+type FormValues = {
+  type: "ssh" | "kubernetes";
+  name: string;
+  description: string;
+  host: string;
+  port: string;
+  username: string;
+  password: string;
+  kubeconfig: string;
+  context: string;
+  namespace: string;
+};
 
-  const mutation = useMutation({
+function ConnectionForm({
+  mode,
+  connection,
+  projectId,
+  onSuccess,
+}: {
+  mode: "create" | "edit";
+  connection?: Connection;
+  projectId?: string;
+  onSuccess: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const isEdit = mode === "edit";
+
+  const createMutation = useMutation({
     mutationFn: createConnection,
     onSuccess: () => {
       toast.success("Connection added");
@@ -46,24 +70,77 @@ export function CreateConnectionDialog({ projectId }: { projectId?: string }) {
       if (projectId) {
         queryClient.invalidateQueries({ queryKey: ["project-topology", projectId] });
       }
-      setOpen(false);
+      onSuccess();
     },
   });
 
-  const form = useForm({
-    defaultValues: {
-      type: "ssh" as "ssh" | "kubernetes",
-      name: "",
-      description: "",
-      host: "",
-      port: "22",
-      username: "root",
-      password: "",
-      kubeconfig: "",
-      context: "",
-      namespace: "",
+  const updateMutation = useMutation({
+    mutationFn: (data: Parameters<typeof updateConnection>[1]) =>
+      updateConnection(connection!.id, data),
+    onSuccess: () => {
+      toast.success("Connection updated");
+      queryClient.invalidateQueries({ queryKey: ["connections"] });
+      onSuccess();
     },
+  });
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const defaultValues: FormValues = isEdit && connection
+    ? {
+        type: connection.type as "ssh" | "kubernetes",
+        name: connection.name,
+        description: connection.description ?? "",
+        host: connection.host,
+        port: String(connection.port),
+        username: connection.username,
+        password: "",
+        kubeconfig: "",
+        context: "",
+        namespace: "",
+      }
+    : {
+        type: "ssh",
+        name: "",
+        description: "",
+        host: "",
+        port: "22",
+        username: "root",
+        password: "",
+        kubeconfig: "",
+        context: "",
+        namespace: "",
+      };
+
+  const form = useForm({
+    defaultValues,
     onSubmit: ({ value }) => {
+      if (isEdit) {
+        const data: Record<string, unknown> = {};
+        if (value.name !== connection!.name) data.name = value.name;
+        if ((value.description || "") !== (connection!.description || ""))
+          data.description = value.description || undefined;
+
+        if (connection!.type === "ssh") {
+          if (value.host !== connection!.host) data.host = value.host;
+          if (parseInt(value.port) !== connection!.port) data.port = parseInt(value.port);
+          if (value.username !== connection!.username) data.username = value.username;
+          if (value.password) data.password = value.password;
+        } else {
+          if (value.kubeconfig) data.kubeconfig = value.kubeconfig;
+          if (value.context) data.context = value.context;
+          if (value.namespace) data.namespace = value.namespace;
+        }
+
+        if (Object.keys(data).length === 0) {
+          onSuccess();
+          return;
+        }
+        updateMutation.mutate(data as Parameters<typeof updateConnection>[1]);
+        return;
+      }
+
+      // Create mode - use zod validation
       const payload =
         value.type === "ssh"
           ? {
@@ -100,63 +177,135 @@ export function CreateConnectionDialog({ projectId }: { projectId?: string }) {
         return;
       }
 
-      mutation.mutate(result.data);
+      createMutation.mutate(result.data);
     },
   });
 
   const type = useStore(form.store, (s) => s.values.type);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(open) => {
-        setOpen(open);
-        if (!open) form.reset();
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        form.handleSubmit();
       }}
     >
-      <DialogTrigger render={<Button size="sm" />}>
-        Add Connection
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add Connection</DialogTitle>
-        </DialogHeader>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            form.handleSubmit();
+      <div className="space-y-4">
+        <form.Field name="type">
+          {(field) => (
+            <Field>
+              <FieldLabel>Type</FieldLabel>
+              <Select
+                value={field.state.value}
+                onValueChange={(v) =>
+                  field.handleChange(v as "ssh" | "kubernetes")
+                }
+                disabled={isEdit}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ssh">SSH Server</SelectItem>
+                  <SelectItem value="kubernetes">
+                    Kubernetes Cluster
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+        </form.Field>
+
+        <form.Field
+          name="name"
+          validators={{
+            onSubmit: ({ value }) =>
+              !value ? "名称不能为空" : undefined,
           }}
         >
-          <div className="space-y-4">
-            <form.Field name="type">
-              {(field) => (
-                <Field>
-                  <FieldLabel>Type</FieldLabel>
-                  <Select
-                    value={field.state.value}
-                    onValueChange={(v) =>
-                      field.handleChange(v as "ssh" | "kubernetes")
+          {(field) => (
+            <Field
+              data-invalid={
+                field.state.meta.errors.length > 0 || undefined
+              }
+            >
+              <FieldLabel>Name</FieldLabel>
+              <Input
+                placeholder={
+                  type === "ssh"
+                    ? "e.g. Production Server"
+                    : "e.g. K8s Production"
+                }
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+                onBlur={field.handleBlur}
+              />
+              <FieldError errors={fieldError(field.state.meta.errors)} />
+            </Field>
+          )}
+        </form.Field>
+        <form.Field name="description">
+          {(field) => (
+            <Field>
+              <FieldLabel>Description</FieldLabel>
+              <Textarea
+                placeholder="What this entry is used for"
+                rows={3}
+                value={field.state.value}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
+            </Field>
+          )}
+        </form.Field>
+
+        {type === "ssh" ? (
+          <>
+            <div className="flex gap-3">
+              <form.Field
+                name="host"
+                validators={{
+                  onSubmit: ({ value }) =>
+                    !value ? "主机地址不能为空" : undefined,
+                }}
+              >
+                {(field) => (
+                  <Field
+                    className="flex-1"
+                    data-invalid={
+                      field.state.meta.errors.length > 0 || undefined
                     }
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ssh">SSH Server</SelectItem>
-                      <SelectItem value="kubernetes">
-                        Kubernetes Cluster
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              )}
-            </form.Field>
-
+                    <FieldLabel>Host</FieldLabel>
+                    <Input
+                      placeholder="e.g. 192.168.1.1"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      onBlur={field.handleBlur}
+                    />
+                    <FieldError
+                      errors={fieldError(field.state.meta.errors)}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+              <form.Field name="port">
+                {(field) => (
+                  <Field className="w-24">
+                    <FieldLabel>Port</FieldLabel>
+                    <Input
+                      type="number"
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+            </div>
             <form.Field
-              name="name"
+              name="username"
               validators={{
                 onSubmit: ({ value }) =>
-                  !value ? "名称不能为空" : undefined,
+                  !value ? "用户名不能为空" : undefined,
               }}
             >
               {(field) => (
@@ -165,184 +314,154 @@ export function CreateConnectionDialog({ projectId }: { projectId?: string }) {
                     field.state.meta.errors.length > 0 || undefined
                   }
                 >
-                  <FieldLabel>Name</FieldLabel>
+                  <FieldLabel>Username</FieldLabel>
                   <Input
-                    placeholder={
-                      type === "ssh"
-                        ? "e.g. Production Server"
-                        : "e.g. K8s Production"
-                    }
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
                   />
-                  <FieldError errors={fieldError(field.state.meta.errors)} />
+                  <FieldError
+                    errors={fieldError(field.state.meta.errors)}
+                  />
                 </Field>
               )}
             </form.Field>
-            <form.Field name="description">
+            <form.Field name="password">
               {(field) => (
                 <Field>
-                  <FieldLabel>Description</FieldLabel>
-                  <Textarea
-                    placeholder="What this entry is used for"
-                    rows={3}
+                  <FieldLabel>Password</FieldLabel>
+                  <Input
+                    type="password"
+                    placeholder={isEdit ? "Leave blank to keep current" : "Optional"}
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
                 </Field>
               )}
             </form.Field>
-
-            {type === "ssh" ? (
-              <>
-                <div className="flex gap-3">
-                  <form.Field
-                    name="host"
-                    validators={{
+          </>
+        ) : (
+          <>
+            <form.Field
+              name="kubeconfig"
+              validators={
+                isEdit
+                  ? undefined
+                  : {
                       onSubmit: ({ value }) =>
-                        !value ? "主机地址不能为空" : undefined,
-                    }}
-                  >
-                    {(field) => (
-                      <Field
-                        className="flex-1"
-                        data-invalid={
-                          field.state.meta.errors.length > 0 || undefined
-                        }
-                      >
-                        <FieldLabel>Host</FieldLabel>
-                        <Input
-                          placeholder="e.g. 192.168.1.1"
-                          value={field.state.value}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                          onBlur={field.handleBlur}
-                        />
-                        <FieldError
-                          errors={fieldError(field.state.meta.errors)}
-                        />
-                      </Field>
-                    )}
-                  </form.Field>
-                  <form.Field name="port">
-                    {(field) => (
-                      <Field className="w-24">
-                        <FieldLabel>Port</FieldLabel>
-                        <Input
-                          type="number"
-                          value={field.state.value}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                        />
-                      </Field>
-                    )}
-                  </form.Field>
-                </div>
-                <form.Field
-                  name="username"
-                  validators={{
-                    onSubmit: ({ value }) =>
-                      !value ? "用户名不能为空" : undefined,
-                  }}
+                        !value ? "Kubeconfig 不能为空" : undefined,
+                    }
+              }
+            >
+              {(field) => (
+                <Field
+                  data-invalid={
+                    field.state.meta.errors.length > 0 || undefined
+                  }
                 >
-                  {(field) => (
-                    <Field
-                      data-invalid={
-                        field.state.meta.errors.length > 0 || undefined
-                      }
-                    >
-                      <FieldLabel>Username</FieldLabel>
-                      <Input
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        onBlur={field.handleBlur}
-                      />
-                      <FieldError
-                        errors={fieldError(field.state.meta.errors)}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-                <form.Field name="password">
-                  {(field) => (
-                    <Field>
-                      <FieldLabel>Password</FieldLabel>
-                      <Input
-                        type="password"
-                        placeholder="Optional"
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-              </>
-            ) : (
-              <>
-                <form.Field
-                  name="kubeconfig"
-                  validators={{
-                    onSubmit: ({ value }) =>
-                      !value ? "Kubeconfig 不能为空" : undefined,
-                  }}
-                >
-                  {(field) => (
-                    <Field
-                      data-invalid={
-                        field.state.meta.errors.length > 0 || undefined
-                      }
-                    >
-                      <FieldLabel>Kubeconfig</FieldLabel>
-                      <Textarea
-                        placeholder="Paste kubeconfig YAML content here..."
-                        rows={6}
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        onBlur={field.handleBlur}
-                      />
-                      <FieldError
-                        errors={fieldError(field.state.meta.errors)}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-                <div className="flex gap-3">
-                  <form.Field name="context">
-                    {(field) => (
-                      <Field className="flex-1">
-                        <FieldLabel>Context</FieldLabel>
-                        <Input
-                          placeholder="Optional"
-                          value={field.state.value}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                        />
-                      </Field>
-                    )}
-                  </form.Field>
-                  <form.Field name="namespace">
-                    {(field) => (
-                      <Field className="flex-1">
-                        <FieldLabel>Default Namespace</FieldLabel>
-                        <Input
-                          placeholder="default"
-                          value={field.state.value}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                        />
-                      </Field>
-                    )}
-                  </form.Field>
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter className="mt-4">
-            <DialogClose render={<Button variant="outline" />}>
-              Cancel
-            </DialogClose>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Adding..." : "Add"}
-            </Button>
-          </DialogFooter>
-        </form>
+                  <FieldLabel>Kubeconfig</FieldLabel>
+                  <Textarea
+                    placeholder={
+                      isEdit
+                        ? "Leave blank to keep current"
+                        : "Paste kubeconfig YAML content here..."
+                    }
+                    rows={6}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                  />
+                  <FieldError
+                    errors={fieldError(field.state.meta.errors)}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <div className="flex gap-3">
+              <form.Field name="context">
+                {(field) => (
+                  <Field className="flex-1">
+                    <FieldLabel>Context</FieldLabel>
+                    <Input
+                      placeholder={isEdit ? "Leave blank to keep current" : "Optional"}
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+              <form.Field name="namespace">
+                {(field) => (
+                  <Field className="flex-1">
+                    <FieldLabel>Default Namespace</FieldLabel>
+                    <Input
+                      placeholder={isEdit ? "Leave blank to keep current" : "default"}
+                      value={field.state.value}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+            </div>
+          </>
+        )}
+      </div>
+      <DialogFooter className="mt-4">
+        <DialogClose render={<Button variant="outline" />}>
+          Cancel
+        </DialogClose>
+        <Button type="submit" disabled={isPending}>
+          {isPending
+            ? isEdit ? "Saving..." : "Adding..."
+            : isEdit ? "Save" : "Add"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+export function CreateConnectionDialog({ projectId }: { projectId?: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button size="sm" />}>
+        Add Connection
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Connection</DialogTitle>
+        </DialogHeader>
+        <ConnectionForm
+          mode="create"
+          projectId={projectId}
+          onSuccess={() => setOpen(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function EditConnectionDialog({
+  connection,
+  open,
+  onOpenChange,
+}: {
+  connection: Connection;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Connection</DialogTitle>
+        </DialogHeader>
+        <ConnectionForm
+          mode="edit"
+          connection={connection}
+          onSuccess={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );

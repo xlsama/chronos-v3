@@ -8,6 +8,7 @@ from src.api.schemas import (
     ConnectionCreate,
     ConnectionResponse,
     ConnectionTestResponse,
+    ConnectionUpdate,
 )
 from src.config import get_settings
 from src.ops_agent.connectors.k8s import K8sConnector
@@ -51,6 +52,20 @@ async def get_connection(
     if not conn:
         raise NotFoundError("Connection not found")
     return conn
+
+
+@router.patch("/{connection_id}", response_model=ConnectionResponse)
+async def update_connection(
+    connection_id: uuid.UUID,
+    body: ConnectionUpdate,
+    session: AsyncSession = Depends(get_session),
+    crypto: CryptoService = Depends(get_crypto),
+):
+    conn = await session.get(Connection, connection_id)
+    if not conn:
+        raise NotFoundError("Connection not found")
+    service = ConnectionService(session=session, crypto=crypto)
+    return await service.update(conn, **body.model_dump(exclude_unset=True))
 
 
 @router.delete("/{connection_id}")

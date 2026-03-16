@@ -115,6 +115,17 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
     data: z.object({ message: z.string() }).passthrough(),
     ...baseSSEFields,
   }),
+  z.object({
+    event_type: z.literal("approval_decided"),
+    data: z
+      .object({
+        approval_id: z.string(),
+        decision: z.string(),
+        decided_by: z.string(),
+      })
+      .passthrough(),
+    ...baseSSEFields,
+  }),
 ]);
 
 export type SSEEventParsed = z.infer<typeof sseEventSchema>;

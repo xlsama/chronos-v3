@@ -49,6 +49,7 @@ function IncidentDetailPage() {
         <EventTimeline
           incidentId={incidentId}
           savedToMemory={incident?.saved_to_memory}
+          summaryMarkdown={incident?.summary_md}
         />
       </div>
 

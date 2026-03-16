@@ -24,21 +24,22 @@ services:
       retries: 10
 
   target:
-    image: ubuntu:22.04
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:22.04
+        RUN apt-get update && apt-get install -y openssh-server && rm -rf /var/lib/apt/lists/*
+        RUN mkdir -p /run/sshd
+        RUN echo 'root:testpassword' | chpasswd
+        RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+        RUN echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+        EXPOSE 22
+        CMD ["/usr/sbin/sshd", "-D"]
     ports:
       - "12222:22"
-    command: >
-      bash -c "
-        apt-get update &&
-        apt-get install -y openssh-server &&
-        mkdir -p /run/sshd &&
-        echo 'root:testpassword' | chpasswd &&
-        echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config &&
-        /usr/sbin/sshd -D
-      "
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'cat < /dev/tcp/localhost/22'"]
-      interval: 5s
-      timeout: 5s
-      start_period: 60s
-      retries: 30
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/22'"]
+      interval: 3s
+      timeout: 3s
+      start_period: 5s
+      retries: 10

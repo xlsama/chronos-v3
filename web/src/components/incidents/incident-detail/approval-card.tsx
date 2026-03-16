@@ -5,6 +5,7 @@ import { ShieldAlert } from "lucide-react";
 import { decideApproval } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useIncidentStreamStore } from "@/stores/incident-stream";
 
 interface ApprovalCardProps {
   toolCall: Record<string, unknown> | null;
@@ -18,11 +19,33 @@ const riskColors: Record<string, string> = {
 };
 
 export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
+  const decidedApprovals = useIncidentStreamStore((s) => s.decidedApprovals);
+  const setApprovalDecided = useIncidentStreamStore(
+    (s) => s.setApprovalDecided,
+  );
+  const resolvedDecision = approvalId
+    ? (decidedApprovals.get(approvalId) ?? null)
+    : null;
+
   const decideMutation = useMutation({
     mutationFn: (decision: string) =>
-      decideApproval(approvalId!, { decision, decided_by: "admin" }),
+      decideApproval(approvalId!, {
+        decision,
+        decided_by: "admin",
+        silent: true,
+      }),
     onSuccess: (_, decision) => {
+      setApprovalDecided(approvalId!, decision);
       toast.success(`Request ${decision}`);
+    },
+    onError: (error: unknown) => {
+      // 409 Conflict → approval already decided, silently mark as decided
+      const status = (error as { status?: number })?.status;
+      if (status === 409) {
+        setApprovalDecided(approvalId!, "approved");
+        return;
+      }
+      toast.error("Failed to decide approval");
     },
   });
 
@@ -34,6 +57,7 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
     <motion.div
       className="rounded-lg border-2 border-yellow-300 bg-yellow-50/50 p-4"
       data-testid="approval-card"
+      data-approval-id={approvalId}
       initial={{ scale: 0.95, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -79,7 +103,7 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
         </div>
       )}
 
-      {approvalId && (
+      {approvalId && !resolvedDecision && (
         <div className="mt-3 flex gap-2">
           <Button
             size="sm"
@@ -98,6 +122,17 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
           >
             Reject
           </Button>
+        </div>
+      )}
+
+      {resolvedDecision && (
+        <div className="mt-3">
+          <span
+            className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800"
+            data-testid="approval-decision"
+          >
+            {resolvedDecision === "approved" ? "Approved" : "Rejected"}
+          </span>
         </div>
       )}
     </motion.div>

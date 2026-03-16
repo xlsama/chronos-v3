@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import ApprovalRequest
@@ -34,10 +35,20 @@ class ApprovalService:
 
     async def decide(
         self,
-        approval: ApprovalRequest,
+        approval_id: uuid.UUID,
         decision: str,
         decided_by: str,
     ) -> ApprovalRequest:
+        stmt = (
+            select(ApprovalRequest)
+            .where(ApprovalRequest.id == approval_id)
+            .with_for_update()
+        )
+        result = await self.session.execute(stmt)
+        approval = result.scalar_one_or_none()
+        if approval is None:
+            raise ValueError("Approval request not found")
+
         if approval.decision is not None:
             raise ValueError(f"Approval request already decided: {approval.decision}")
 

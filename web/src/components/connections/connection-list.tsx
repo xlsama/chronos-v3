@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Server, Trash2, Wifi, WifiOff } from "lucide-react";
+import { EllipsisVertical, Pencil, Server, Trash2, Wifi, WifiOff } from "lucide-react";
 import {
   deleteConnection,
   getConnections,
@@ -19,6 +20,23 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { EditConnectionDialog } from "./create-connection-dialog";
 
 const statusConfig: Record<string, { color: string; icon: typeof Wifi }> = {
   online: { color: "text-green-500", icon: Wifi },
@@ -45,6 +63,8 @@ function ConnectionItem({
   projectName?: string;
 }) {
   const queryClient = useQueryClient();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const testMutation = useMutation({
     mutationFn: testConnection,
@@ -58,6 +78,7 @@ function ConnectionItem({
     mutationFn: deleteConnection,
     onSuccess: () => {
       toast.success("Connection deleted");
+      setShowDeleteDialog(false);
       queryClient.invalidateQueries({ queryKey: ["connections"] });
     },
   });
@@ -67,56 +88,95 @@ function ConnectionItem({
   const typeIcon = conn.type === "kubernetes" ? "☸️" : "🖥️";
 
   return (
-    <div data-testid={`conn-item-${conn.id}`} className="border-b last:border-b-0">
-      <div className="flex items-center gap-3 p-4">
-        <span className="text-lg">{typeIcon}</span>
-        <StatusIcon className={cn("h-4 w-4", status.color)} />
-        <div className="flex-1 space-y-0.5">
-          <p className="font-medium">{conn.name}</p>
-          <p className="text-sm text-muted-foreground">
-            {conn.type === "kubernetes"
-              ? "Kubernetes Cluster"
-              : `${conn.username}@${conn.host}:${conn.port}`}
-          </p>
-          {conn.description && (
-            <p className="text-xs text-muted-foreground">{conn.description}</p>
-          )}
-        </div>
-        <Badge data-testid="conn-type-badge" variant="outline" className="text-xs">
-          {typeLabels[conn.type] ?? conn.type}
-        </Badge>
-        <Badge
-          className={
-            statusBadgeColors[conn.status] ?? statusBadgeColors.unknown
-          }
-        >
-          {conn.status}
-        </Badge>
-        {projectName && (
-          <Badge variant="secondary" className="text-xs">
-            {projectName}
+    <>
+      <div data-testid={`conn-item-${conn.id}`} className="border-b last:border-b-0">
+        <div className="flex items-center gap-3 p-4">
+          <span className="text-lg">{typeIcon}</span>
+          <StatusIcon className={cn("h-4 w-4", status.color)} />
+          <div className="flex-1 space-y-0.5">
+            <p className="font-medium">{conn.name}</p>
+            <p className="text-sm text-muted-foreground">
+              {conn.type === "kubernetes"
+                ? "Kubernetes Cluster"
+                : `${conn.username}@${conn.host}:${conn.port}`}
+            </p>
+            {conn.description && (
+              <p className="text-xs text-muted-foreground">{conn.description}</p>
+            )}
+          </div>
+          <Badge data-testid="conn-type-badge" variant="outline" className="text-xs">
+            {typeLabels[conn.type] ?? conn.type}
           </Badge>
-        )}
-        <Button
-          data-testid={`conn-test-${conn.id}`}
-          variant="outline"
-          size="sm"
-          onClick={() => testMutation.mutate(conn.id)}
-          disabled={testMutation.isPending}
-        >
-          {testMutation.isPending ? "Testing..." : "Test"}
-        </Button>
-        <Button
-          data-testid={`conn-delete-${conn.id}`}
-          variant="ghost"
-          size="sm"
-          onClick={() => deleteMutation.mutate(conn.id)}
-          disabled={deleteMutation.isPending}
-        >
-          <Trash2 className="h-4 w-4 text-destructive" />
-        </Button>
+          <Badge
+            className={
+              statusBadgeColors[conn.status] ?? statusBadgeColors.unknown
+            }
+          >
+            {conn.status}
+          </Badge>
+          {projectName && (
+            <Badge variant="secondary" className="text-xs">
+              {projectName}
+            </Badge>
+          )}
+          <Button
+            data-testid={`conn-test-${conn.id}`}
+            variant="outline"
+            size="sm"
+            onClick={() => testMutation.mutate(conn.id)}
+            disabled={testMutation.isPending}
+          >
+            {testMutation.isPending ? "Testing..." : "Test"}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <EllipsisVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setShowEditDialog(true)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-    </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Connection</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{conn.name}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMutation.mutate(conn.id)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <EditConnectionDialog
+        connection={conn}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+      />
+    </>
   );
 }
 

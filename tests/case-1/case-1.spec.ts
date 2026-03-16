@@ -10,11 +10,6 @@ test("磁盘占满事件 - 完整生命周期", async ({ page, seedData, faultIn
   // 3. 创建事件
   await page.click('[data-testid="create-incident-btn"]');
 
-  // 选择项目
-  const projectSelect = page.locator('[data-testid="project-select"]');
-  await projectSelect.click();
-  await page.getByRole("option", { name: seedData.project.name }).click();
-
   // 填写事件描述
   await page.fill(
     '[data-testid="prompt-textarea"]',
@@ -32,6 +27,8 @@ test("磁盘占满事件 - 完整生命周期", async ({ page, seedData, faultIn
 
   // 5. 事件处理循环（最长 8 分钟）
   const deadline = Date.now() + 8 * 60 * 1000;
+  const handledApprovals = new Set<string>();
+  const handledQuestions = new Set<string>();
 
   while (Date.now() < deadline) {
     // 检查是否已完成（出现 summary）
@@ -41,21 +38,33 @@ test("磁盘占满事件 - 完整生命周期", async ({ page, seedData, faultIn
     }
 
     // 检查是否需要审批
-    const approveBtn = page.locator('[data-testid="approve-button"]');
-    if (await approveBtn.isVisible().catch(() => false)) {
-      await approveBtn.click();
-      await page.waitForTimeout(2000);
-      continue;
+    const approvalCard = page.locator('[data-testid="approval-card"]').last();
+    if (await approvalCard.isVisible().catch(() => false)) {
+      const approvalId = await approvalCard.getAttribute("data-approval-id");
+      const approvalKey = approvalId ?? "approval";
+      if (!handledApprovals.has(approvalKey)) {
+        const approveBtn = approvalCard.locator('[data-testid="approve-button"]');
+        if (await approveBtn.isVisible().catch(() => false)) {
+          handledApprovals.add(approvalKey);
+          await approveBtn.click();
+          await page.waitForTimeout(2000);
+          continue;
+        }
+      }
     }
 
     // 检查是否 ask_human（需要用户回复）
     const askHumanBanner = page.locator('[data-testid="ask-human-banner"]');
     if (await askHumanBanner.isVisible().catch(() => false)) {
-      const replyInput = page.locator('[data-testid="message-input"]');
-      await replyInput.fill("请继续排查并清理 /tmp 目录下的大文件");
-      await page.locator('[data-testid="send-message-btn"]').click();
-      await page.waitForTimeout(2000);
-      continue;
+      const question = (await askHumanBanner.textContent())?.trim() ?? "ask-human";
+      if (!handledQuestions.has(question)) {
+        handledQuestions.add(question);
+        const replyInput = page.locator('[data-testid="prompt-textarea"]');
+        await replyInput.fill("请继续排查并清理 /tmp 目录下的大文件");
+        await page.locator('[data-testid="submit-incident"]').click();
+        await page.waitForTimeout(2000);
+        continue;
+      }
     }
 
     await page.waitForTimeout(3000);

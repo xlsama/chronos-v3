@@ -27,6 +27,27 @@ export function createConnection(data: {
   });
 }
 
+export function updateConnection(
+  id: string,
+  data: {
+    name?: string;
+    description?: string;
+    host?: string;
+    port?: number;
+    username?: string;
+    password?: string;
+    private_key?: string;
+    kubeconfig?: string;
+    context?: string;
+    namespace?: string;
+  },
+) {
+  return request<Connection>(`/connections/${id}`, {
+    method: "PATCH",
+    body: data,
+  });
+}
+
 export function deleteConnection(id: string) {
   return request(`/connections/${id}`, { method: "DELETE" });
 }

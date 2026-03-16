@@ -7,7 +7,8 @@ export function getApproval(id: string) {
 
 export function decideApproval(
   id: string,
-  data: { decision: string; decided_by: string },
+  data: { decision: string; decided_by: string; silent?: boolean },
 ) {
-  return request(`/approvals/${id}/decide`, { method: "POST", body: data });
+  const { silent, ...body } = data;
+  return request(`/approvals/${id}/decide`, { method: "POST", body, silent });
 }

@@ -44,7 +44,10 @@ export function UserInputBar({ incidentId }: UserInputBarProps) {
   return (
     <div className="border-t p-4">
       {askHumanQuestion && (
-        <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+        <div
+          className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+          data-testid="ask-human-banner"
+        >
           Agent 正在等待你的回复：{askHumanQuestion}
         </div>
       )}

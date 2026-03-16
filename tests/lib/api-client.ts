@@ -41,7 +41,7 @@ export class ApiClient {
     connection_id: string;
     project_id: string;
   }) {
-    return this.api("/api/service-connection-bindings", { method: "POST", body: data });
+    return this.api("/api/service-bindings", { method: "POST", body: data });
   }
 
   async getIncident(incidentId: string) {

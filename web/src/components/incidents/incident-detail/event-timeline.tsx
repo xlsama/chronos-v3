@@ -10,6 +10,7 @@ import { MessageCircleQuestion } from "lucide-react";
 interface EventTimelineProps {
   incidentId?: string;
   savedToMemory?: boolean;
+  summaryMarkdown?: string | null;
 }
 
 const itemVariants = {
@@ -18,7 +19,7 @@ const itemVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 
-export function EventTimeline({ incidentId, savedToMemory }: EventTimelineProps) {
+export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: EventTimelineProps) {
   const {
     events,
     discoveryAgentState,
@@ -36,6 +37,7 @@ export function EventTimeline({ incidentId, savedToMemory }: EventTimelineProps)
   const hasKB =
     kbAgentState.events.length > 0 || !!kbAgentState.thinkingContent;
   const hasGatherContext = hasDiscovery || hasHistory || hasKB;
+  const hasSummaryEvent = events.some((event) => event.event_type === "summary");
 
   return (
     <div className="space-y-3 p-4" data-testid="event-timeline">
@@ -148,6 +150,16 @@ export function EventTimeline({ incidentId, savedToMemory }: EventTimelineProps)
           }
         })}
       </AnimatePresence>
+
+      {!hasSummaryEvent && summaryMarkdown && (
+        <motion.div variants={itemVariants} initial="hidden" animate="visible" layout>
+          <SummarySection
+            markdown={summaryMarkdown}
+            incidentId={incidentId}
+            savedToMemory={savedToMemory}
+          />
+        </motion.div>
+      )}
 
       {/* Live thinking stream */}
       <AnimatePresence>

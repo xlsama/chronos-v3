@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, LayoutGrid, Library, Sparkles } from "lucide-react";
+import { Activity, BookOpen, Link2, Sparkles } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -17,8 +17,8 @@ const mainItems = [
 ] as const;
 
 const contextItems = [
-  { to: "/connections", label: "连接", icon: LayoutGrid },
-  { to: "/projects", label: "知识库", icon: Library },
+  { to: "/connections", label: "连接", icon: Link2 },
+  { to: "/projects", label: "知识库", icon: BookOpen },
 ] as const;
 
 const bottomItems = [

@@ -14,6 +14,7 @@ interface IncidentStreamState {
   isConnected: boolean;
   thinkingContent: string;
   askHumanQuestion: string | null;
+  decidedApprovals: Map<string, string>;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
@@ -21,6 +22,7 @@ interface IncidentStreamState {
   flushSubAgentThinking: (agent: string, timestamp: string) => void;
   addSubAgentEvent: (agent: string, event: SSEEvent) => void;
   setAskHumanQuestion: (question: string | null) => void;
+  setApprovalDecided: (approvalId: string, decision: string) => void;
   setConnected: (connected: boolean) => void;
   reset: () => void;
 }
@@ -38,6 +40,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   isConnected: false,
   thinkingContent: "",
   askHumanQuestion: null,
+  decidedApprovals: new Map(),
 
   addEvent: (event) => {
     set((state) => ({ events: [...state.events, event] }));
@@ -111,6 +114,13 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   setAskHumanQuestion: (question) => set({ askHumanQuestion: question }),
 
+  setApprovalDecided: (approvalId, decision) =>
+    set((state) => {
+      const next = new Map(state.decidedApprovals);
+      next.set(approvalId, decision);
+      return { decidedApprovals: next };
+    }),
+
   setConnected: (connected) => set({ isConnected: connected }),
 
   reset: () =>
@@ -122,5 +132,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       isConnected: false,
       thinkingContent: "",
       askHumanQuestion: null,
+      decidedApprovals: new Map(),
     }),
 }));
