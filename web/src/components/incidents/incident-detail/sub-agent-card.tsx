@@ -1,6 +1,14 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, BookOpen } from "lucide-react";
 import type { SSEEvent } from "@/lib/types";
+
+const AGENT_CONFIG: Record<
+  string,
+  { label: string; icon: typeof Search }
+> = {
+  history: { label: "历史事件检索", icon: Search },
+  kb: { label: "知识库检索", icon: BookOpen },
+};
 
 interface SubAgentCardProps {
   agentName: string;
@@ -19,6 +27,11 @@ export function SubAgentCard({
 
   const hasEvents = events.length > 0 || !!streamingContent;
   const status = isStreaming ? "检索中..." : "完成";
+  const config = AGENT_CONFIG[agentName] ?? {
+    label: agentName,
+    icon: Search,
+  };
+  const Icon = config.icon;
 
   return (
     <div
@@ -34,10 +47,8 @@ export function SubAgentCard({
         ) : (
           <ChevronRight className="h-4 w-4" />
         )}
-        <Search className="h-4 w-4" />
-        <span>
-          {agentName === "history" ? "历史事件检索" : agentName}
-        </span>
+        <Icon className="h-4 w-4" />
+        <span>{config.label}</span>
         <span className="ml-auto text-xs text-blue-600">{status}</span>
       </button>
 

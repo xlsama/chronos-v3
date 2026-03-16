@@ -62,6 +62,7 @@ class AgentRunner:
             "pending_tool_call": None,
             "summary_md": None,
             "incident_history_summary": None,
+            "kb_summary": None,
             "has_prometheus": has_prometheus,
             "has_loki": has_loki,
             "_event_channel": channel,
@@ -100,7 +101,7 @@ class AgentRunner:
         state = await self.graph.aget_state(config)
         vals = state.values
 
-        # Gap A/B: interrupted before human_approval → create approval record + SSE
+        # Interrupted before human_approval → create approval record + SSE
         if "human_approval" in (state.next or ()):
             pending = self._extract_pending_tool_call(vals)
             if pending:
@@ -120,7 +121,15 @@ class AgentRunner:
                     "tool_args": args,
                 })
 
-        # Gap C: graph complete → update Incident status + publish summary
+        # Interrupted before ask_human → extract question and publish SSE
+        if "ask_human" in (state.next or ()):
+            question = self._extract_ask_human_question(vals)
+            if question:
+                await self.publisher.publish(channel, "ask_human", {
+                    "question": question,
+                })
+
+        # Graph complete → update Incident status + publish summary
         if vals.get("is_complete"):
             async with get_session_factory()() as session:
                 incident = await session.get(Incident, uuid.UUID(incident_id))
@@ -141,6 +150,28 @@ class AgentRunner:
                 for tc in msg.tool_calls:
                     if tc["name"] == "exec_write_tool":
                         return tc
+        return None
+
+    @staticmethod
+    def _extract_ask_human_question(vals: dict) -> str | None:
+        """Extract the question from the last AI message.
+
+        Handles two cases:
+        1. Explicit ask_human tool call → extract question from args
+        2. Plain text response (no tool calls) → use message content as question
+        """
+        messages = vals.get("messages", [])
+        for msg in reversed(messages):
+            if not hasattr(msg, "tool_calls"):
+                continue
+            # Case 1: explicit ask_human tool call
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    if tc["name"] == "ask_human":
+                        return tc["args"].get("question", "")
+            # Case 2: plain text response (routed to ask_human because no tool_calls)
+            elif hasattr(msg, "content") and msg.content:
+                return msg.content
         return None
 
     def _get_phase_agent(self, event: dict) -> tuple[str, str]:

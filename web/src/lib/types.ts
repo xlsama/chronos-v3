@@ -103,7 +103,7 @@ export interface Project {
   name: string;
   slug: string;
   description: string | null;
-  cloud_md: string | null;
+  service_md: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { uploadFiles } from "@/api/attachments";
 import { sendIncidentMessage } from "@/api/incidents";
 import { PromptComposer } from "@/components/prompt-composer";
+import { useIncidentStreamStore } from "@/stores/incident-stream";
 
 interface UserInputBarProps {
   incidentId: string;
@@ -10,6 +11,7 @@ interface UserInputBarProps {
 
 export function UserInputBar({ incidentId }: UserInputBarProps) {
   const queryClient = useQueryClient();
+  const { askHumanQuestion, setAskHumanQuestion } = useIncidentStreamStore();
 
   const mutation = useMutation({
     mutationFn: async ({
@@ -27,6 +29,7 @@ export function UserInputBar({ incidentId }: UserInputBarProps) {
       return sendIncidentMessage(incidentId, content, attachmentIds);
     },
     onSuccess: () => {
+      setAskHumanQuestion(null);
       queryClient.invalidateQueries({ queryKey: ["incidents", incidentId] });
     },
   });
@@ -40,11 +43,20 @@ export function UserInputBar({ incidentId }: UserInputBarProps) {
 
   return (
     <div className="border-t p-4">
+      {askHumanQuestion && (
+        <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          Agent 正在等待你的回复：{askHumanQuestion}
+        </div>
+      )}
       <PromptComposer
         onSubmit={handleSubmit}
         isLoading={mutation.isPending}
         disabled={mutation.isPending}
-        placeholder="Send a message to the agent..."
+        placeholder={
+          askHumanQuestion
+            ? "回复 Agent 的问题..."
+            : "Send a message to the agent..."
+        }
       />
     </div>
   );

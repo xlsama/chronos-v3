@@ -48,7 +48,7 @@ def test_route_decision_complete_when_no_tool_calls():
     state = {
         "messages": [AIMessage(content="All done")],
     }
-    assert route_decision(state) == "complete"
+    assert route_decision(state) == "ask_human"
 
 
 def test_route_decision_complete_tool():

@@ -42,7 +42,7 @@ class IncidentService:
                 attachment.incident_id = incident.id
 
         await self.session.commit()
-        await self.session.refresh(incident)
+        await self.session.refresh(incident, ["attachments"])
         return incident
 
     async def update_status(self, incident: Incident, status: str) -> Incident:

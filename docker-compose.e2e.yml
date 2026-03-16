@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: chronos
+      POSTGRES_PASSWORD: chronos
+      POSTGRES_DB: chronos
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chronos"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  ssh-target:
+    build:
+      context: ./e2e/docker
+      dockerfile: Dockerfile.ssh-target
+    ports:
+      - "2222:22"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "ss -tlnp | grep -q ':22'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

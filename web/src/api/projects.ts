@@ -13,10 +13,10 @@ export function createProject(data: { name: string; description?: string }) {
   return request<Project>("/projects", { method: "POST", body: data });
 }
 
-export function updateProjectCloudMd(id: string, cloudMd: string) {
-  return request<Project>(`/projects/${id}/cloud-md`, {
+export function updateProjectServiceMd(id: string, serviceMd: string) {
+  return request<Project>(`/projects/${id}/service-md`, {
     method: "PATCH",
-    body: { cloud_md: cloudMd },
+    body: { service_md: serviceMd },
   });
 }
 

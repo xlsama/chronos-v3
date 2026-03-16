@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import (
-    ProjectCloudMdUpdate,
     ProjectCreate,
     ProjectResponse,
+    ProjectServiceMdUpdate,
     ProjectUpdate,
 )
 from src.db.connection import get_session
@@ -57,17 +57,17 @@ async def update_project(
     return await service.update(project, **body.model_dump(exclude_unset=True))
 
 
-@router.patch("/{project_id}/cloud-md", response_model=ProjectResponse)
-async def update_cloud_md(
+@router.patch("/{project_id}/service-md", response_model=ProjectResponse)
+async def update_service_md(
     project_id: uuid.UUID,
-    body: ProjectCloudMdUpdate,
+    body: ProjectServiceMdUpdate,
     session: AsyncSession = Depends(get_session),
 ):
     service = ProjectService(session=session)
     project = await service.get(project_id)
     if not project:
         raise NotFoundError("Project not found")
-    return await service.update_cloud_md(project, body.cloud_md)
+    return await service.update_service_md(project, body.service_md)
 
 
 @router.delete("/{project_id}")

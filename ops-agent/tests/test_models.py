@@ -23,12 +23,12 @@ class TestProjectModel:
             name="My Project",
             slug="my-project",
             description="desc",
-            cloud_md="# Cloud",
+            service_md="# Cloud",
         )
         assert project.name == "My Project"
         assert project.slug == "my-project"
         assert project.description == "desc"
-        assert project.cloud_md == "# Cloud"
+        assert project.service_md == "# Cloud"
 
     def test_id_column_has_default(self):
         col = Project.__table__.c.id

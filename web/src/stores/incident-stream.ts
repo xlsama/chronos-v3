@@ -1,37 +1,44 @@
 import { create } from "zustand";
 import type { SSEEvent } from "@/lib/types";
 
+interface SubAgentState {
+  events: SSEEvent[];
+  thinkingContent: string;
+}
+
 interface IncidentStreamState {
   events: SSEEvent[];
-  gatherContextEvents: SSEEvent[];
+  historyAgentState: SubAgentState;
+  kbAgentState: SubAgentState;
   isConnected: boolean;
   thinkingContent: string;
-  subAgentThinkingContent: string;
+  askHumanQuestion: string | null;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
-  appendSubAgentThinking: (content: string) => void;
-  clearSubAgentThinking: () => void;
+  appendSubAgentThinking: (agent: string, content: string) => void;
+  flushSubAgentThinking: (agent: string, timestamp: string) => void;
+  addSubAgentEvent: (agent: string, event: SSEEvent) => void;
+  setAskHumanQuestion: (question: string | null) => void;
   setConnected: (connected: boolean) => void;
   reset: () => void;
 }
 
+const emptySubAgent = (): SubAgentState => ({
+  events: [],
+  thinkingContent: "",
+});
+
 export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   events: [],
-  gatherContextEvents: [],
+  historyAgentState: emptySubAgent(),
+  kbAgentState: emptySubAgent(),
   isConnected: false,
   thinkingContent: "",
-  subAgentThinkingContent: "",
+  askHumanQuestion: null,
 
   addEvent: (event) => {
-    const phase = (event.data.phase as string) || "";
-    if (phase === "gather_context") {
-      set((state) => ({
-        gatherContextEvents: [...state.gatherContextEvents, event],
-      }));
-    } else {
-      set((state) => ({ events: [...state.events, event] }));
-    }
+    set((state) => ({ events: [...state.events, event] }));
   },
 
   appendThinking: (content) =>
@@ -39,21 +46,66 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   clearThinking: () => set({ thinkingContent: "" }),
 
-  appendSubAgentThinking: (content) =>
-    set((state) => ({
-      subAgentThinkingContent: state.subAgentThinkingContent + content,
-    })),
+  appendSubAgentThinking: (agent, content) =>
+    set((state) => {
+      const key =
+        agent === "kb" ? "kbAgentState" : "historyAgentState";
+      return {
+        [key]: {
+          ...state[key],
+          thinkingContent: state[key].thinkingContent + content,
+        },
+      };
+    }),
 
-  clearSubAgentThinking: () => set({ subAgentThinkingContent: "" }),
+  flushSubAgentThinking: (agent, timestamp) =>
+    set((state) => {
+      const key =
+        agent === "kb" ? "kbAgentState" : "historyAgentState";
+      const agentState = state[key];
+      if (!agentState.thinkingContent) return {};
+      return {
+        [key]: {
+          events: [
+            ...agentState.events,
+            {
+              event_type: "thinking",
+              data: {
+                content: agentState.thinkingContent,
+                phase: "gather_context",
+                agent,
+              },
+              timestamp,
+            },
+          ],
+          thinkingContent: "",
+        },
+      };
+    }),
+
+  addSubAgentEvent: (agent, event) =>
+    set((state) => {
+      const key =
+        agent === "kb" ? "kbAgentState" : "historyAgentState";
+      return {
+        [key]: {
+          ...state[key],
+          events: [...state[key].events, event],
+        },
+      };
+    }),
+
+  setAskHumanQuestion: (question) => set({ askHumanQuestion: question }),
 
   setConnected: (connected) => set({ isConnected: connected }),
 
   reset: () =>
     set({
       events: [],
-      gatherContextEvents: [],
+      historyAgentState: emptySubAgent(),
+      kbAgentState: emptySubAgent(),
       isConnected: false,
       thinkingContent: "",
-      subAgentThinkingContent: "",
+      askHumanQuestion: null,
     }),
 }));

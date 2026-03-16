@@ -291,6 +291,116 @@ async def test_agent_runner_with_events():
     assert "summary" in event_types, "AgentRunner should publish summary event"
 
 
+async def test_agent_auto_discovers_infrastructure():
+    """Agent should call list_infrastructures_tool when no infrastructure_id is provided, then use the discovered infra."""
+    checkpointer = MemorySaver()
+
+    mock_ssh = make_mock_ssh()
+    register_connector(INFRA_ID, mock_ssh)
+
+    fake_responses = [
+        # Call 1: agent discovers infra via list_infrastructures_tool
+        AIMessage(
+            content="No infrastructure specified, let me find available ones",
+            tool_calls=[
+                {
+                    "name": "list_infrastructures_tool",
+                    "args": {"project_id": ""},
+                    "id": "tc-list-1",
+                }
+            ],
+        ),
+        # Call 2: agent uses discovered infra to run a read command
+        AIMessage(
+            content="Found infrastructure, checking disk usage",
+            tool_calls=[
+                {
+                    "name": "exec_read_tool",
+                    "args": {"infra_id": INFRA_ID, "command": "df -h"},
+                    "id": "tc-read-1",
+                }
+            ],
+        ),
+        # Call 3: complete
+        AIMessage(
+            content="Investigation complete",
+            tool_calls=[
+                {
+                    "name": "complete",
+                    "args": {"summary": "Found infra automatically, disk at 94%."},
+                    "id": "tc-complete-1",
+                }
+            ],
+        ),
+    ]
+    fake_llm = FakeLLM(fake_responses)
+    mock_summarize_llm = AsyncMock()
+    mock_summarize_llm.ainvoke.return_value = AIMessage(
+        content="## 排查报告\n\n自动发现基础设施并完成排查。"
+    )
+
+    # Mock list_infrastructures to return our test infra
+    mock_list = AsyncMock(
+        return_value=[
+            {
+                "id": INFRA_ID,
+                "name": "test-server",
+                "type": "ssh",
+                "host": "192.168.1.1",
+                "status": "online",
+                "project_id": "",
+            }
+        ]
+    )
+
+    with (
+        patch("src.agent.nodes.main_agent.get_llm", return_value=fake_llm),
+        patch("src.agent.nodes.summarize.ChatOpenAI", return_value=mock_summarize_llm),
+        patch("src.agent.nodes.main_agent.list_infrastructures", mock_list),
+        patch("src.agent.nodes.gather_context.run_history_agent", return_value="暂无相似历史事件"),
+        patch("src.agent.nodes.gather_context.get_redis"),
+    ):
+        graph = compile_graph(checkpointer=checkpointer)
+        config = {"configurable": {"thread_id": "test-thread-auto-infra"}}
+
+        initial_state = {
+            "messages": [HumanMessage(content="事件: Disk full\n\n磁盘使用率过高")],
+            "incident_id": "inc-auto-001",
+            "infrastructure_id": "",  # No infra specified
+            "project_id": "",
+            "title": "Disk full",
+            "description": "磁盘使用率过高",
+            "severity": "high",
+            "is_complete": False,
+            "needs_approval": False,
+            "pending_tool_call": None,
+            "summary_md": None,
+            "incident_history_summary": None,
+            "_event_channel": "",
+        }
+
+        events = []
+        async for chunk in graph.astream(initial_state, config):
+            events.append(chunk)
+
+        final = await graph.aget_state(config)
+        assert final.next == (), f"Expected flow to be complete, got {final.next}"
+        assert final.values["is_complete"] is True
+
+        # Verify list_infrastructures was called
+        mock_list.assert_called_once()
+
+        # Verify the agent used the discovered infra to run commands
+        read_calls = [c for c in mock_ssh.execute.call_args_list if "df" in str(c)]
+        assert len(read_calls) == 1
+
+        # Verify message history has the list_infrastructures_tool call
+        messages = final.values["messages"]
+        tool_names = [m.name for m in messages if hasattr(m, "name") and m.name]
+        assert "list_infrastructures_tool" in tool_names
+        assert "exec_read_tool" in tool_names
+
+
 async def test_agent_runner_creates_approval_record():
     """Test AgentRunner creates ApprovalRequest when agent needs approval."""
     import fakeredis.aioredis

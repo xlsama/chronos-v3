@@ -9,7 +9,9 @@ export function useIncidentStream(incidentId: string | undefined) {
     appendThinking,
     clearThinking,
     appendSubAgentThinking,
-    clearSubAgentThinking,
+    flushSubAgentThinking,
+    addSubAgentEvent,
+    setAskHumanQuestion,
     setConnected,
     reset,
   } = useIncidentStreamStore();
@@ -30,28 +32,21 @@ export function useIncidentStream(incidentId: string | undefined) {
       try {
         const event: SSEEvent = JSON.parse(e.data);
         const phase = (event.data.phase as string) || "";
+        const agent = (event.data.agent as string) || "history";
 
         if (phase === "gather_context") {
-          // Sub agent events
+          // Sub agent events — dispatch by agent name
           if (event.event_type === "thinking") {
-            appendSubAgentThinking(event.data.content as string);
+            appendSubAgentThinking(agent, event.data.content as string);
           } else {
-            const { subAgentThinkingContent } =
-              useIncidentStreamStore.getState();
-            if (subAgentThinkingContent) {
-              addEvent({
-                event_type: "thinking",
-                data: {
-                  content: subAgentThinkingContent,
-                  phase: "gather_context",
-                  agent: event.data.agent,
-                },
-                timestamp: event.timestamp,
-              });
-              clearSubAgentThinking();
-            }
-            addEvent(event);
+            // Flush accumulated thinking before non-thinking event
+            flushSubAgentThinking(agent, event.timestamp);
+            addSubAgentEvent(agent, event);
           }
+        } else if (event.event_type === "ask_human") {
+          // Agent is asking the human a question
+          setAskHumanQuestion(event.data.question as string);
+          addEvent(event);
         } else if (event.event_type === "thinking") {
           appendThinking(event.data.content as string);
         } else {

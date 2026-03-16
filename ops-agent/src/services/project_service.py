@@ -16,7 +16,7 @@ class ProjectService:
         name: str,
         slug: str | None = None,
         description: str | None = None,
-        cloud_md: str | None = None,
+        service_md: str | None = None,
     ) -> Project:
         if not slug:
             slug = self._generate_slug(name)
@@ -25,7 +25,7 @@ class ProjectService:
             name=name,
             slug=slug,
             description=description,
-            cloud_md=cloud_md,
+            service_md=service_md,
         )
         self.session.add(project)
         await self.session.commit()
@@ -51,8 +51,8 @@ class ProjectService:
         await self.session.refresh(project)
         return project
 
-    async def update_cloud_md(self, project: Project, cloud_md: str) -> Project:
-        project.cloud_md = cloud_md
+    async def update_service_md(self, project: Project, service_md: str) -> Project:
+        project.service_md = service_md
         await self.session.commit()
         await self.session.refresh(project)
         return project

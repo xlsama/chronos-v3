@@ -38,20 +38,20 @@ class TestProjectService:
 
         assert result.slug == "my-project"
 
-    async def test_create_with_cloud_md(self, service, session):
+    async def test_create_with_service_md(self, service, session):
         result = await service.create(
-            name="Proj", slug="proj", cloud_md="# Cloud Architecture"
+            name="Proj", slug="proj", service_md="# Service Architecture"
         )
 
-        assert result.cloud_md == "# Cloud Architecture"
+        assert result.service_md == "# Service Architecture"
 
-    async def test_update_cloud_md(self, service, session):
+    async def test_update_service_md(self, service, session):
         project = MagicMock()
-        project.cloud_md = None
+        project.service_md = None
 
-        result = await service.update_cloud_md(project, "# New Cloud MD")
+        result = await service.update_service_md(project, "# New SERVICE.md")
 
-        assert project.cloud_md == "# New Cloud MD"
+        assert project.service_md == "# New SERVICE.md"
         session.commit.assert_called_once()
 
     async def test_get_by_slug(self, service, session):

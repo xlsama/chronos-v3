@@ -47,7 +47,7 @@ async def run_history_agent(
         HumanMessage(content=f"当前事件标题: {title}\n当前事件描述: {description}"),
     ]
 
-    max_iterations = 2
+    max_iterations = 5
     for _ in range(max_iterations):
         # Stream LLM response
         full_content = ""

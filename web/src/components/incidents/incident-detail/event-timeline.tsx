@@ -4,6 +4,7 @@ import { ToolCallCard } from "./tool-call-card";
 import { ApprovalCard } from "./approval-card";
 import { SummarySection } from "./summary-section";
 import { SubAgentCard } from "./sub-agent-card";
+import { MessageCircleQuestion } from "lucide-react";
 
 interface EventTimelineProps {
   incidentId?: string;
@@ -11,22 +12,42 @@ interface EventTimelineProps {
 }
 
 export function EventTimeline({ incidentId, savedToMemory }: EventTimelineProps) {
-  const { events, gatherContextEvents, thinkingContent, subAgentThinkingContent } =
-    useIncidentStreamStore();
+  const {
+    events,
+    historyAgentState,
+    kbAgentState,
+    thinkingContent,
+  } = useIncidentStreamStore();
 
-  const hasGatherContext =
-    gatherContextEvents.length > 0 || !!subAgentThinkingContent;
+  const hasHistory =
+    historyAgentState.events.length > 0 ||
+    !!historyAgentState.thinkingContent;
+  const hasKB =
+    kbAgentState.events.length > 0 || !!kbAgentState.thinkingContent;
+  const hasGatherContext = hasHistory || hasKB;
 
   return (
     <div className="space-y-3 p-4" data-testid="event-timeline">
-      {/* Gather Context Phase */}
+      {/* Gather Context Phase — sub agent cards in grid */}
       {hasGatherContext && (
-        <SubAgentCard
-          agentName="history"
-          events={gatherContextEvents}
-          isStreaming={!!subAgentThinkingContent}
-          streamingContent={subAgentThinkingContent}
-        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {hasHistory && (
+            <SubAgentCard
+              agentName="history"
+              events={historyAgentState.events}
+              isStreaming={!!historyAgentState.thinkingContent}
+              streamingContent={historyAgentState.thinkingContent}
+            />
+          )}
+          {hasKB && (
+            <SubAgentCard
+              agentName="kb"
+              events={kbAgentState.events}
+              isStreaming={!!kbAgentState.thinkingContent}
+              streamingContent={kbAgentState.thinkingContent}
+            />
+          )}
+        </div>
       )}
 
       {/* Main Agent Events */}
@@ -63,6 +84,23 @@ export function EventTimeline({ incidentId, savedToMemory }: EventTimelineProps)
                 toolCall={event.data.tool_args as Record<string, unknown>}
                 approvalId={event.data.approval_id as string}
               />
+            );
+          case "ask_human":
+            return (
+              <div
+                key={i}
+                className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4"
+              >
+                <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800">
+                    Agent 需要更多信息
+                  </p>
+                  <p className="mt-1 text-sm text-amber-700">
+                    {event.data.question as string}
+                  </p>
+                </div>
+              </div>
             );
           case "summary":
             return (

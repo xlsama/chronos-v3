@@ -1,12 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import DocumentResponse, DocumentUpload
 from src.db.connection import get_session
 from src.lib.embedder import Embedder
 from src.lib.errors import NotFoundError
+from src.lib.file_parsers import SUPPORTED_EXTENSIONS
 from src.services.document_service import DocumentService
 from src.services.project_service import ProjectService
 
@@ -35,6 +36,40 @@ async def upload_document(
         filename=body.filename,
         content=body.content,
         doc_type=body.doc_type,
+    )
+    return doc
+
+
+@router.post("/api/projects/{project_id}/documents/upload", response_model=DocumentResponse)
+async def upload_document_file(
+    project_id: uuid.UUID,
+    file: UploadFile,
+    session: AsyncSession = Depends(get_session),
+    embedder: Embedder = Depends(get_embedder),
+):
+    """Upload a binary file (PDF, Word, Excel, CSV, Markdown, Text)."""
+    project_service = ProjectService(session=session)
+    project = await project_service.get(project_id)
+    if not project:
+        raise NotFoundError("Project not found")
+
+    filename = file.filename or "unknown"
+    from pathlib import Path
+    ext = Path(filename).suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        from src.lib.errors import AppError
+        raise AppError(
+            f"Unsupported file format: {ext}. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
+            status_code=400,
+        )
+
+    file_bytes = await file.read()
+    service = DocumentService(session=session, embedder=embedder)
+    doc = await service.upload_file(
+        project_id=project_id,
+        project_slug=project.slug,
+        filename=filename,
+        file_bytes=file_bytes,
     )
     return doc
 

@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { AlertTriangle, BookOpen, Server, Zap } from "lucide-react";
+import { Activity, LayoutGrid, Library, Sparkles } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,16 +13,16 @@ import {
 } from "@/components/ui/sidebar";
 
 const mainItems = [
-  { to: "/incidents", label: "事件", icon: AlertTriangle },
+  { to: "/incidents", label: "事件", icon: Activity },
 ] as const;
 
 const contextItems = [
-  { to: "/infrastructure", label: "基础设施", icon: Server },
-  { to: "/projects", label: "知识库", icon: BookOpen },
+  { to: "/infrastructure", label: "基础设施", icon: LayoutGrid },
+  { to: "/projects", label: "知识库", icon: Library },
 ] as const;
 
 const bottomItems = [
-  { to: "/skills", label: "技能", icon: Zap },
+  { to: "/skills", label: "技能", icon: Sparkles },
 ] as const;
 
 export function AppSidebar() {

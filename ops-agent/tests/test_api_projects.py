@@ -36,7 +36,7 @@ def _mock_project(**overrides):
         "name": "Test Project",
         "slug": "test-project",
         "description": "A test project",
-        "cloud_md": None,
+        "service_md": None,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
@@ -120,21 +120,21 @@ async def test_update_project(client: AsyncClient):
     assert response.json()["name"] == "Updated"
 
 
-async def test_update_cloud_md(client: AsyncClient):
-    mock_proj = _mock_project(cloud_md="# Updated Cloud MD")
+async def test_update_service_md(client: AsyncClient):
+    mock_proj = _mock_project(service_md="# Updated SERVICE.md")
 
     with patch("src.api.projects.ProjectService") as mock_cls:
         mock_svc = AsyncMock()
         mock_svc.get.return_value = mock_proj
-        mock_svc.update_cloud_md.return_value = mock_proj
+        mock_svc.update_service_md.return_value = mock_proj
         mock_cls.return_value = mock_svc
 
-        response = await client.patch(f"/api/projects/{mock_proj.id}/cloud-md", json={
-            "cloud_md": "# Updated Cloud MD",
+        response = await client.patch(f"/api/projects/{mock_proj.id}/service-md", json={
+            "service_md": "# Updated SERVICE.md",
         })
 
     assert response.status_code == 200
-    assert response.json()["cloud_md"] == "# Updated Cloud MD"
+    assert response.json()["service_md"] == "# Updated SERVICE.md"
 
 
 async def test_delete_project(client: AsyncClient):

@@ -4,9 +4,8 @@ from langchain_openai import ChatOpenAI
 from src.agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.agent.state import OpsState
 from src.config import get_settings
-from src.tools.exec_tools import exec_read, exec_write
+from src.tools.exec_tools import exec_read, exec_write, list_infrastructures
 from src.tools.http_tools import http_request
-from src.tools.knowledge_tools import search_knowledge_base
 from src.tools.monitoring_tools import query_logs, query_metrics
 
 
@@ -38,13 +37,6 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
         return await exec_write(infra_id=infra_id, command=command)
 
     @tool
-    async def search_knowledge_base_tool(query: str, project_id: str) -> str:
-        """Search the project knowledge base for architecture docs, deployment guides, and other context.
-        Use this when investigating issues related to a specific project.
-        """
-        return await search_knowledge_base(query=query, project_id=project_id)
-
-    @tool
     async def http_request_tool(
         method: str,
         url: str,
@@ -60,11 +52,33 @@ def build_tools(has_prometheus: bool = False, has_loki: bool = False):
         return await http_request(method=method, url=url, headers=headers, body=body)
 
     @tool
+    async def list_infrastructures_tool(project_id: str = "") -> list[dict]:
+        """List available infrastructures. Returns id, name, type, host, status, project_id.
+        Use this to discover target infrastructure when no infrastructure_id is specified.
+        Optionally filter by project_id.
+        """
+        return await list_infrastructures(project_id=project_id)
+
+    @tool
+    def ask_human(question: str) -> str:
+        """当你缺少关键信息无法继续排查时，向用户提问。
+        例如：不确定事件涉及哪个服务、哪个基础设施、需要额外上下文等。
+        """
+        return question
+
+    @tool
     def complete(summary: str) -> str:
         """Call this when the investigation is complete. Provide a brief summary."""
         return summary
 
-    tools = [exec_read_tool, exec_write_tool, search_knowledge_base_tool, http_request_tool, complete]
+    tools = [
+        exec_read_tool,
+        exec_write_tool,
+        list_infrastructures_tool,
+        http_request_tool,
+        ask_human,
+        complete,
+    ]
 
     if has_prometheus:
         @tool
@@ -138,6 +152,12 @@ async def main_agent_node(state: OpsState) -> dict:
     else:
         history_context = ""
 
+    kb_summary = state.get("kb_summary")
+    if kb_summary:
+        kb_context = f"## 项目知识库上下文\n{kb_summary}"
+    else:
+        kb_context = ""
+
     # Build conditional tool docs
     extra_tools_doc = ""
     if has_prometheus:
@@ -145,13 +165,20 @@ async def main_agent_node(state: OpsState) -> dict:
     if has_loki:
         extra_tools_doc += "- **query_logs**: 查询 Loki 日志（LogQL）\n"
 
+    infra_id = state["infrastructure_id"]
+    if infra_id:
+        infrastructure_context = f"已指定基础设施 ID: {infra_id}，优先使用此基础设施执行命令。"
+    else:
+        infrastructure_context = "未指定基础设施，请先使用 list_infrastructures 工具查找可用的基础设施，然后根据事件描述选择合适的目标。"
+
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         title=state["title"],
         description=state["description"],
         severity=state["severity"],
-        infrastructure_id=state["infrastructure_id"],
+        infrastructure_context=infrastructure_context,
         project_id=state.get("project_id", ""),
         incident_history_context=history_context,
+        kb_context=kb_context,
         extra_tools_doc=extra_tools_doc,
     )
 
@@ -166,12 +193,16 @@ def route_decision(state: OpsState) -> str:
     last_message = state["messages"][-1]
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-        return "complete"
+        # No tool calls — agent is sharing analysis or asking for context.
+        # Interrupt so the user can see the response and reply.
+        return "ask_human"
 
     for tool_call in last_message.tool_calls:
         if tool_call["name"] == "complete":
             return "complete"
         if tool_call["name"] == "exec_write_tool":
             return "need_approval"
+        if tool_call["name"] == "ask_human":
+            return "ask_human"
 
     return "continue"

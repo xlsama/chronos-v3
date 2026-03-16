@@ -59,6 +59,35 @@ async def get_connector(infra_id: str) -> SSHConnector | K8sConnector:
         return connector
 
 
+async def list_infrastructures(project_id: str = "") -> list[dict]:
+    """List available infrastructures, excluding offline ones and sensitive fields."""
+    from sqlalchemy import select
+
+    from src.db.connection import get_session_factory
+    from src.db.models import Infrastructure
+
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(Infrastructure).where(Infrastructure.status != "offline")
+        if project_id:
+            stmt = stmt.where(Infrastructure.project_id == uuid.UUID(project_id))
+
+        result = await session.execute(stmt)
+        infras = result.scalars().all()
+
+        return [
+            {
+                "id": str(infra.id),
+                "name": infra.name,
+                "type": infra.type,
+                "host": infra.host,
+                "status": infra.status,
+                "project_id": str(infra.project_id) if infra.project_id else "",
+            }
+            for infra in infras
+        ]
+
+
 async def exec_read(infra_id: str, command: str) -> dict:
     cmd_type = CommandSafety.classify(command)
 

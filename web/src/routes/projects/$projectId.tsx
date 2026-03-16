@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getProject } from "@/api/projects";
-import { CloudMdEditor } from "@/components/projects/cloud-md-editor";
+import { ServiceMdEditor } from "@/components/projects/service-md-editor";
 import { DocumentUpload } from "@/components/projects/document-upload";
 import { DocumentList } from "@/components/projects/document-list";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,15 +43,15 @@ function ProjectDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue="cloud-md">
+      <Tabs defaultValue="service-md">
         <div className="border-b px-6">
           <TabsList variant="line">
-            <TabsTrigger value="cloud-md">Cloud.md</TabsTrigger>
+            <TabsTrigger value="service-md">SERVICE.md</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="cloud-md" className="p-6">
-          <CloudMdEditor project={project} />
+        <TabsContent value="service-md" className="p-6">
+          <ServiceMdEditor project={project} />
         </TabsContent>
         <TabsContent value="documents" className="space-y-6 p-6">
           <DocumentUpload projectId={projectId} />

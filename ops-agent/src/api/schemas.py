@@ -184,7 +184,7 @@ class ProjectCreate(BaseModel):
     name: str
     slug: str | None = None
     description: str | None = None
-    cloud_md: str | None = None
+    service_md: str | None = None
 
 
 class ProjectUpdate(BaseModel):
@@ -193,8 +193,8 @@ class ProjectUpdate(BaseModel):
     description: str | None = None
 
 
-class ProjectCloudMdUpdate(BaseModel):
-    cloud_md: str
+class ProjectServiceMdUpdate(BaseModel):
+    service_md: str
 
 
 class ProjectResponse(BaseModel):
@@ -202,7 +202,7 @@ class ProjectResponse(BaseModel):
     name: str
     slug: str
     description: str | None
-    cloud_md: str | None
+    service_md: str | None
     created_at: datetime
     updated_at: datetime
 
