@@ -16,8 +16,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface DocumentViewerProps {
@@ -108,22 +108,13 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
     if (editing) {
       if (isMarkdown) {
         return (
-          <Tabs defaultValue="edit" className="flex h-full flex-col">
-            <TabsList className="mx-4 mt-2 w-fit">
-              <TabsTrigger value="edit">编辑</TabsTrigger>
-              <TabsTrigger value="preview">预览</TabsTrigger>
-            </TabsList>
-            <TabsContent value="edit" className="flex-1 overflow-hidden">
-              <Textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                className="h-full resize-none rounded-none border-0 font-mono text-sm focus-visible:ring-0"
-              />
-            </TabsContent>
-            <TabsContent value="preview" className="flex-1 overflow-auto p-4">
-              <Markdown content={draft} />
-            </TabsContent>
-          </Tabs>
+          <div className="h-full p-4">
+            <MarkdownEditor
+              value={draft}
+              onChange={setDraft}
+              className="h-full border-0"
+            />
+          </div>
         );
       }
 
