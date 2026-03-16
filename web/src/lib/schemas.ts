@@ -14,18 +14,22 @@ export type ProjectFormData = z.infer<typeof projectSchema>;
 const sshSchema = z.object({
   type: z.literal("ssh"),
   name: z.string().min(1, "名称不能为空"),
+  description: z.string().optional(),
   host: z.string().min(1, "主机地址不能为空"),
   port: z.coerce.number().int().min(1).max(65535).default(22),
   username: z.string().min(1, "用户名不能为空"),
   password: z.string().optional(),
+  project_id: z.string().optional(),
 });
 
 const k8sSchema = z.object({
   type: z.literal("kubernetes"),
   name: z.string().min(1, "名称不能为空"),
+  description: z.string().optional(),
   kubeconfig: z.string().min(1, "Kubeconfig 不能为空"),
   context: z.string().optional(),
   namespace: z.string().optional(),
+  project_id: z.string().optional(),
 });
 
 export const connectionSchema = z.discriminatedUnion("type", [
@@ -38,9 +42,13 @@ export type ConnectionFormData = z.infer<typeof connectionSchema>;
 // ── Service ──
 
 export const serviceSchema = z.object({
+  project_id: z.string().min(1, "项目不能为空"),
   name: z.string().min(1, "名称不能为空"),
-  port: z.coerce.number().int().min(1).max(65535).optional(),
-  namespace: z.string().optional(),
+  service_type: z.string().min(1, "服务类型不能为空"),
+  description: z.string().optional(),
+  business_context: z.string().optional(),
+  owner: z.string().optional(),
+  keywords: z.array(z.string()).optional(),
 });
 
 export type ServiceFormData = z.infer<typeof serviceSchema>;

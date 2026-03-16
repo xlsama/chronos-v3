@@ -54,12 +54,12 @@ export function ServiceList({ connectionId }: { connectionId: string }) {
               {isLast ? "└──" : "├──"}
             </span>
             <span className="font-medium text-sm">{svc.name}</span>
-            {svc.port && (
-              <span className="text-xs text-muted-foreground">:{svc.port}</span>
-            )}
-            {svc.namespace && (
+            <span className="text-xs text-muted-foreground">
+              {svc.service_type}
+            </span>
+            {svc.source && (
               <span className="text-xs text-muted-foreground">
-                ({svc.namespace})
+                {svc.source}
               </span>
             )}
             <Button

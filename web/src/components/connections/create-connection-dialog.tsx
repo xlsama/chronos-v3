@@ -34,7 +34,7 @@ function fieldError(errors: unknown[]) {
   }));
 }
 
-export function CreateConnectionDialog() {
+export function CreateConnectionDialog({ projectId }: { projectId?: string }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -43,6 +43,9 @@ export function CreateConnectionDialog() {
     onSuccess: () => {
       toast.success("Connection added");
       queryClient.invalidateQueries({ queryKey: ["connections"] });
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: ["project-topology", projectId] });
+      }
       setOpen(false);
     },
   });
@@ -51,6 +54,7 @@ export function CreateConnectionDialog() {
     defaultValues: {
       type: "ssh" as "ssh" | "kubernetes",
       name: "",
+      description: "",
       host: "",
       port: "22",
       username: "root",
@@ -65,17 +69,21 @@ export function CreateConnectionDialog() {
           ? {
               type: "ssh" as const,
               name: value.name,
+              description: value.description || undefined,
               host: value.host,
               port: parseInt(value.port),
               username: value.username,
               password: value.password || undefined,
+              project_id: projectId,
             }
           : {
               type: "kubernetes" as const,
               name: value.name,
+              description: value.description || undefined,
               kubeconfig: value.kubeconfig,
               context: value.context || undefined,
               namespace: value.namespace || undefined,
+              project_id: projectId,
             };
 
       const result = connectionSchema.safeParse(payload);
@@ -169,6 +177,19 @@ export function CreateConnectionDialog() {
                     onBlur={field.handleBlur}
                   />
                   <FieldError errors={fieldError(field.state.meta.errors)} />
+                </Field>
+              )}
+            </form.Field>
+            <form.Field name="description">
+              {(field) => (
+                <Field>
+                  <FieldLabel>Description</FieldLabel>
+                  <Textarea
+                    placeholder="What this entry is used for"
+                    rows={3}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
                 </Field>
               )}
             </form.Field>

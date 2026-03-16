@@ -143,8 +143,8 @@ export function useVoiceInput({
     };
 
     ws.onclose = () => {
-      if (state === "recording" && !cancelledRef.current) {
-        // Unexpected close
+      if (!cancelledRef.current) {
+        setState("idle");
       }
     };
 

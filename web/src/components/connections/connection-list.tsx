@@ -20,7 +20,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { ServiceList } from "./service-list";
-import { CreateServiceDialog } from "./create-service-dialog";
 import { DiscoverServicesDialog } from "./discover-services-dialog";
 
 const statusConfig: Record<string, { color: string; icon: typeof Wifi }> = {
@@ -88,6 +87,9 @@ function ConnectionItem({ conn }: { conn: Connection }) {
               ? "Kubernetes Cluster"
               : `${conn.username}@${conn.host}:${conn.port}`}
           </p>
+          {conn.description && (
+            <p className="text-xs text-muted-foreground">{conn.description}</p>
+          )}
         </div>
         <Badge data-testid="conn-type-badge" variant="outline" className="text-xs">
           {typeLabels[conn.type] ?? conn.type}
@@ -123,9 +125,8 @@ function ConnectionItem({ conn }: { conn: Connection }) {
         <div className="pb-3">
           <div className="flex items-center gap-2 pl-12 pb-2">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Services
+              Bound services
             </span>
-            <CreateServiceDialog connectionId={conn.id} />
             <DiscoverServicesDialog connectionId={conn.id} />
           </div>
           <ServiceList connectionId={conn.id} />

@@ -311,7 +311,7 @@ CREATE INDEX idx_messages_thread ON messages(thread_id, created_at);
 ## 四、后端项目目录结构
 
 ```
-ops-agent/
+backend/
 ├── pyproject.toml                      # uv 项目配置
 ├── alembic/                            # 数据库迁移
 │   ├── alembic.ini

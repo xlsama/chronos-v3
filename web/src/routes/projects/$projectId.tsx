@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getProject } from "@/api/projects";
-import { ServiceMdEditor } from "@/components/projects/service-md-editor";
 import { DocumentUpload } from "@/components/projects/document-upload";
 import { DocumentList } from "@/components/projects/document-list";
+import { ProjectTopologyPanel } from "@/components/projects/project-topology-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -43,15 +43,15 @@ function ProjectDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue="service-md">
+      <Tabs defaultValue="topology">
         <div className="px-6 pt-4">
           <TabsList>
-            <TabsTrigger value="service-md">SERVICE.md</TabsTrigger>
+            <TabsTrigger value="topology">Topology</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="service-md" className="p-6">
-          <ServiceMdEditor project={project} />
+        <TabsContent value="topology" className="p-6">
+          <ProjectTopologyPanel project={project} />
         </TabsContent>
         <TabsContent value="documents" className="space-y-6 p-6">
           <DocumentUpload projectId={projectId} />

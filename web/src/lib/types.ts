@@ -1,11 +1,14 @@
 export interface Connection {
   id: string;
   name: string;
-  type: string; // ssh, kubernetes
+  type: string;
+  description: string | null;
   host: string;
   port: number;
   username: string;
   status: string;
+  capabilities: string[];
+  scope_metadata: Record<string, unknown>;
   project_id: string | null;
   created_at: string;
   updated_at: string;
@@ -13,12 +16,40 @@ export interface Connection {
 
 export interface Service {
   id: string;
-  connection_id: string;
+  project_id: string;
   name: string;
-  port: number | null;
-  namespace: string | null;
+  slug: string;
+  service_type: string;
+  description: string | null;
+  business_context: string | null;
+  owner: string | null;
+  keywords: string[];
   status: string;
-  discovery_method: string;
+  source: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceDependency {
+  id: string;
+  project_id: string;
+  from_service_id: string;
+  to_service_id: string;
+  dependency_type: string;
+  description: string | null;
+  confidence: number;
+  created_at: string;
+}
+
+export interface ServiceConnectionBinding {
+  id: string;
+  project_id: string;
+  service_id: string;
+  connection_id: string;
+  usage_type: string;
+  priority: number;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -81,8 +112,6 @@ export interface ApprovalRequest {
   created_at: string;
 }
 
-// SSE event types — canonical shape kept for runtime compatibility.
-// Validated at parse time via sseEventSchema in lib/schemas.ts.
 export interface SSEEvent {
   event_type: string;
   data: Record<string, unknown>;
@@ -96,9 +125,16 @@ export interface Project {
   name: string;
   slug: string;
   description: string | null;
-  service_md: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectTopology {
+  project: Project;
+  services: Service[];
+  dependencies: ServiceDependency[];
+  connections: Connection[];
+  bindings: ServiceConnectionBinding[];
 }
 
 export interface ProjectDocument {

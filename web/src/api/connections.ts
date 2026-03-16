@@ -8,6 +8,7 @@ export function getConnections() {
 export function createConnection(data: {
   name: string;
   type?: string;
+  description?: string;
   host?: string;
   port?: number;
   username?: string;
@@ -16,6 +17,9 @@ export function createConnection(data: {
   kubeconfig?: string;
   context?: string;
   namespace?: string;
+  capabilities?: string[];
+  scope_metadata?: Record<string, unknown>;
+  project_id?: string;
 }) {
   return request<Connection>("/connections", {
     method: "POST",

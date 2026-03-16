@@ -12,6 +12,8 @@ export function getIncident(id: string) {
 export function createIncident(data: {
   description: string;
   attachment_ids?: string[];
+  project_id?: string;
+  connection_id?: string;
 }) {
   return request<Incident>("/incidents", { method: "POST", body: data });
 }
