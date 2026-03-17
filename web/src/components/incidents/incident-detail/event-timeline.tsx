@@ -303,19 +303,15 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                         </div>
                       </motion.div>
                     );
-                  case "user_message": {
-                    const relTime = baseTimestamp
-                      ? formatRelativeTime(item.event.timestamp, baseTimestamp)
-                      : undefined;
+                  case "user_message":
                     return (
                       <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
                         <UserMessageBubble
                           content={item.event.data.content as string}
-                          relativeTime={relTime}
                         />
                       </motion.div>
                     );
-                  }
+
                   case "error":
                     return (
                       <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
