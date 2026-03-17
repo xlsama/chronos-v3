@@ -120,6 +120,25 @@ function LiveThinkingSection() {
   );
 }
 
+function LiveAnswerSection() {
+  const answerContent = useIncidentStreamStore((s) => s.answerContent);
+  return (
+    <AnimatePresence>
+      {answerContent && (
+        <motion.div
+          key="live-answer"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2 }}
+        >
+          <AnswerCard content={answerContent} isStreaming />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function ReportStreamSection() {
   const reportStreamContent = useIncidentStreamStore((s) => s.reportStreamContent);
   return (
@@ -143,6 +162,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
   const kbAgentState = useIncidentStreamStore((s) => s.kbAgentState);
   const phaseState = useIncidentStreamStore((s) => s.phaseState);
   const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
+  const hasAnswerStream = useIncidentStreamStore((s) => !!s.answerContent);
 
   // Servers for resolving server_id → name
   const { data: serversData } = useQuery({
@@ -173,7 +193,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
 
   const mainEvents = events.filter((e) => e.event_type !== "summary");
   const summaryEvent = events.find((e) => e.event_type === "summary");
-  const hasInvestigation = mainEvents.length > 0 || hasThinking;
+  const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream;
   const hasReport = !!summaryEvent || !!summaryMarkdown;
 
   // Build paired timeline items
@@ -308,6 +328,8 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                       <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
                         <UserMessageBubble
                           content={item.event.data.content as string}
+                          attachments={item.event.data.attachments as { filename: string; content_type: string; size: number; preview_url: string | null }[]}
+                          attachment_ids={item.event.data.attachment_ids as string[]}
                         />
                       </motion.div>
                     );
@@ -363,6 +385,9 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
 
             {/* Live thinking stream — isolated component to avoid re-rendering timeline */}
             <LiveThinkingSection />
+
+            {/* Live answer stream — shows answer as it streams in */}
+            <LiveAnswerSection />
           </div>
         </PhaseSection>
       )}

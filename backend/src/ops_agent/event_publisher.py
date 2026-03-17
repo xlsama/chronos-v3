@@ -12,6 +12,7 @@ _EVENT_ROLE = {
     "thinking": "assistant",
     "thinking_done": "assistant",
     "answer": "assistant",
+    "answer_done": "assistant",
     "tool_call": "assistant",
     "tool_result": "assistant",
     "skill_used": "assistant",
@@ -30,6 +31,7 @@ class EventPublisher:
         self.redis = redis
         self.session_factory = session_factory
         self._thinking_buffer: dict[tuple[str, str, str], dict] = {}  # (channel, phase, agent) -> {content, phase, agent}
+        self._answer_buffer: dict[str, dict] = {}  # channel -> {content, phase}
 
     async def publish(self, channel: str, event_type: str, data: dict) -> None:
         ts = datetime.now(timezone.utc)
@@ -53,24 +55,43 @@ class EventPublisher:
             await self._publish_sse(channel, event_type, data, ts)
             return
 
+        if event_type == "answer":
+            # Accumulate answer tokens, push SSE immediately but don't persist
+            buf = self._answer_buffer.setdefault(channel, {"content": "", "phase": phase})
+            buf["content"] += data.get("content", "")
+            await self._publish_sse(channel, event_type, data, ts)
+            return
+
+        if event_type == "answer_done":
+            # Flush answer buffer → persist complete answer + SSE
+            await self._flush_answer(channel, ts)
+            await self._publish_sse(channel, event_type, data, ts)
+            return
+
         # Non-thinking event: flush accumulated thinking as safety net, then persist
         await self._flush_thinking(channel, phase, agent, ts)
         await self._persist(channel, event_type, data, ts)
         await self._publish_sse(channel, event_type, data, ts)
 
     async def flush_remaining(self, channel: str) -> None:
-        """Call when agent run ends to flush any remaining thinking buffer."""
+        """Call when agent run ends to flush any remaining thinking/answer buffers."""
         ts = datetime.now(timezone.utc)
         keys_to_flush = [k for k in self._thinking_buffer if k[0] == channel]
         for key in keys_to_flush:
             buf = self._thinking_buffer.pop(key, None)
             if buf and buf["content"]:
                 await self._persist(channel, "thinking", buf, ts)
+        await self._flush_answer(channel, ts)
 
     async def _flush_thinking(self, channel: str, phase: str = "", agent: str = "", ts: datetime | None = None) -> None:
         buf = self._thinking_buffer.pop((channel, phase, agent), None)
         if buf and buf["content"]:
             await self._persist(channel, "thinking", buf, ts or datetime.now(timezone.utc))
+
+    async def _flush_answer(self, channel: str, ts: datetime | None = None) -> None:
+        buf = self._answer_buffer.pop(channel, None)
+        if buf and buf["content"]:
+            await self._persist(channel, "answer", buf, ts or datetime.now(timezone.utc))
 
     async def _persist(self, channel: str, event_type: str, data: dict, ts: datetime) -> None:
         if not self.session_factory:
@@ -114,6 +135,8 @@ class EventPublisher:
             return data.get("content", "")
         if event_type == "thinking_done":
             return ""
+        if event_type == "answer_done":
+            return ""
         if event_type == "answer":
             return data.get("content", "")
         if event_type == "agent_status":
@@ -149,6 +172,11 @@ class EventPublisher:
                 meta["phase"] = data["phase"]
             if data.get("agent"):
                 meta["agent"] = data["agent"]
+            return meta or None
+        if event_type in ("answer", "answer_done"):
+            meta = {}
+            if data.get("phase"):
+                meta["phase"] = data["phase"]
             return meta or None
         if event_type == "agent_status":
             return {

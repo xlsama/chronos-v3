@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 
@@ -36,6 +37,11 @@ class AgentRunner:
         self.publisher = publisher
         self.redis = redis
         self.graph = compile_graph(checkpointer=checkpointer)
+        # Streaming answer state
+        self._answer_stream_active = False
+        self._answer_args_buffer = ""
+        self._answer_published_len = 0
+        self._thinking_done_sent = False
 
     async def _check_cancelled(self, incident_id: str) -> str | None:
         """Check if this incident has been cancelled. Returns cancel reason or None."""
@@ -53,6 +59,7 @@ class AgentRunner:
         severity: str,
         project_id: str = "",
     ) -> str:
+        self._reset_answer_stream_state()
         sid = incident_id[:8]
         thread_id = str(uuid.uuid4())
         channel = EventPublisher.channel_for_incident(incident_id)
@@ -100,6 +107,7 @@ class AgentRunner:
 
     async def resume_with_human_input(self, thread_id: str, incident_id: str, human_input: str) -> None:
         """Resume graph from ask_human interrupt with user's response."""
+        self._reset_answer_stream_state()
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
 
@@ -136,6 +144,7 @@ class AgentRunner:
             await self._post_run(config, channel, incident_id)
 
     async def resume(self, thread_id: str, incident_id: str, approval_result: dict) -> None:
+        self._reset_answer_stream_state()
         sid = incident_id[:8]
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
@@ -343,6 +352,24 @@ class AgentRunner:
             result = await service.auto_save(incident, summary_md)
             logger.info(f"[{sid}] [history] Auto-save result: {result.get('action')}")
 
+    def _reset_answer_stream_state(self) -> None:
+        self._answer_stream_active = False
+        self._answer_args_buffer = ""
+        self._answer_published_len = 0
+        self._thinking_done_sent = False
+
+    def _extract_answer_delta(self) -> str | None:
+        for suffix in ['"}', '" }']:
+            try:
+                parsed = json.loads(self._answer_args_buffer + suffix)
+                content = parsed.get("answer_md", "")
+                delta = content[self._answer_published_len:]
+                self._answer_published_len = len(content)
+                return delta if delta else None
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return None
+
     def _get_phase_agent(self, event: dict) -> tuple[str, str]:
         """Extract phase and agent from event metadata."""
         metadata = event.get("metadata", {})
@@ -370,7 +397,32 @@ class AgentRunner:
 
         if kind == "on_chat_model_stream":
             chunk = event["data"].get("chunk")
-            if chunk and chunk.content:
+            if not chunk:
+                return
+
+            # Check for tool_call_chunks (streaming tool calls)
+            if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
+                for tcc in chunk.tool_call_chunks:
+                    if tcc.get("name") == "complete":
+                        self._answer_stream_active = True
+                        self._answer_args_buffer = ""
+                        self._answer_published_len = 0
+                        # End thinking stream
+                        if not self._thinking_done_sent:
+                            await self.publisher.publish(channel, "thinking_done", {
+                                "phase": phase, "agent": agent,
+                            })
+                            self._thinking_done_sent = True
+                    if self._answer_stream_active and tcc.get("args"):
+                        self._answer_args_buffer += tcc["args"]
+                        delta = self._extract_answer_delta()
+                        if delta:
+                            await self.publisher.publish(channel, "answer", {
+                                "content": delta, "phase": phase,
+                            })
+
+            # Regular content (thinking) — only if not in answer stream
+            if chunk.content and not self._answer_stream_active:
                 await self.publisher.publish(channel, "thinking", {
                     "content": chunk.content,
                     "phase": phase,
@@ -391,20 +443,25 @@ class AgentRunner:
             for tc in tool_calls:
                 logger.info(f"\n[{sid}] [main] LLM tool_call: {tc['name']}({tc.get('args', {})})")
 
-            # End current thinking segment
-            await self.publisher.publish(channel, "thinking_done", {
-                "phase": phase, "agent": agent,
-            })
-            # Check for complete tool call → publish answer
-            if hasattr(output, "tool_calls") and output.tool_calls:
-                for tc in output.tool_calls:
-                    if tc["name"] == "complete":
-                        answer_md = tc["args"].get("answer_md", "")
-                        if answer_md:
-                            await self.publisher.publish(channel, "answer", {
-                                "content": answer_md, "phase": phase,
-                            })
-                        break
+            if self._answer_stream_active:
+                # Already streamed answer via tool_call_chunks, just send answer_done
+                await self.publisher.publish(channel, "answer_done", {"phase": phase})
+                self._reset_answer_stream_state()
+            else:
+                # End current thinking segment
+                await self.publisher.publish(channel, "thinking_done", {
+                    "phase": phase, "agent": agent,
+                })
+                # Fallback: check for complete tool call → publish answer in one shot
+                if hasattr(output, "tool_calls") and output.tool_calls:
+                    for tc in output.tool_calls:
+                        if tc["name"] == "complete":
+                            answer_md = tc["args"].get("answer_md", "")
+                            if answer_md:
+                                await self.publisher.publish(channel, "answer", {
+                                    "content": answer_md, "phase": phase,
+                                })
+                            break
 
         elif kind == "on_tool_start":
             name = event.get("name", "")

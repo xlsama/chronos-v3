@@ -22,12 +22,15 @@ interface IncidentStreamState {
   phaseState: PhaseState;
   isConnected: boolean;
   thinkingContent: string;
+  answerContent: string;
   reportStreamContent: string;
   askHumanQuestion: string | null;
   decidedApprovals: Record<string, string>;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
+  appendAnswer: (content: string) => void;
+  clearAnswer: () => void;
   appendReportStream: (content: string) => void;
   clearReportStream: () => void;
   appendSubAgentThinking: (agent: string, content: string) => void;
@@ -61,6 +64,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   phaseState: initialPhaseState(),
   isConnected: false,
   thinkingContent: "",
+  answerContent: "",
   reportStreamContent: "",
   askHumanQuestion: null,
   decidedApprovals: {},
@@ -73,6 +77,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     set((state) => ({ thinkingContent: state.thinkingContent + content })),
 
   clearThinking: () => set({ thinkingContent: "" }),
+
+  appendAnswer: (content) =>
+    set((state) => ({ answerContent: state.answerContent + content })),
+
+  clearAnswer: () => set({ answerContent: "" }),
 
   appendReportStream: (content) =>
     set((state) => {
@@ -203,8 +212,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // thinking_done → DB boundary marker, skip in UI
-      if (event.event_type === "thinking_done") {
+      // thinking_done / answer_done → DB boundary markers, skip in UI
+      if (event.event_type === "thinking_done" || event.event_type === "answer_done") {
         continue;
       }
 
@@ -272,6 +281,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       phaseState: initialPhaseState(),
       isConnected: false,
       thinkingContent: "",
+      answerContent: "",
       reportStreamContent: "",
       askHumanQuestion: null,
       decidedApprovals: {},

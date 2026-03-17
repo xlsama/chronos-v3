@@ -35,11 +35,25 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
       }
       return sendIncidentMessage(incidentId, content, attachmentIds);
     },
-    onMutate: ({ content }) => {
+    onMutate: ({ content, files }) => {
+      const optimisticAttachments = files.map((f) => ({
+        filename: f.name,
+        content_type: f.type,
+        size: f.size,
+        preview_url: f.type.startsWith("image/")
+          ? URL.createObjectURL(f)
+          : null,
+      }));
+
       addEvent({
         event_id: `optimistic-${Date.now()}`,
         event_type: "user_message",
-        data: { content },
+        data: {
+          content,
+          ...(optimisticAttachments.length > 0 && {
+            attachments: optimisticAttachments,
+          }),
+        },
         timestamp: new Date().toISOString(),
       });
       setAskHumanQuestion(null);

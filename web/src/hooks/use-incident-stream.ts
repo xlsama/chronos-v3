@@ -31,6 +31,8 @@ export function useIncidentStream(
     addEvent,
     appendThinking,
     clearThinking,
+    appendAnswer,
+    clearAnswer,
     appendReportStream,
     clearReportStream,
     appendSubAgentThinking,
@@ -179,7 +181,7 @@ export function useIncidentStream(
                 event.data.approval_id as string,
                 event.data.decision as string,
               );
-            } else if (event.event_type === "thinking_done") {
+            } else if (event.event_type === "thinking_done" || event.event_type === "answer_done") {
               // DB boundary marker, skip
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
@@ -278,7 +280,19 @@ export function useIncidentStream(
               });
               clearThinking();
             }
-            addEvent(event);
+            // Stream accumulate
+            appendAnswer(event.data.content as string);
+          } else if (event.event_type === "answer_done") {
+            // Flush answer buffer → add as complete event
+            const { answerContent } = useIncidentStreamStore.getState();
+            if (answerContent) {
+              addEvent({
+                event_type: "answer",
+                data: { content: answerContent },
+                timestamp: event.timestamp,
+              });
+              clearAnswer();
+            }
           } else if (event.event_type === "agent_status") {
             // main-phase agent_status: ignore (only relevant for gather_context)
           } else {

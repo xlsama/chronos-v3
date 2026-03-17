@@ -182,6 +182,11 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
     ...baseSSEFields,
   }),
   z.object({
+    event_type: z.literal("answer_done"),
+    data: z.object({}).passthrough(),
+    ...baseSSEFields,
+  }),
+  z.object({
     event_type: z.literal("agent_status"),
     data: z.object({ status: z.string() }).passthrough(),
     ...baseSSEFields,

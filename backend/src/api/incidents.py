@@ -166,7 +166,7 @@ def _message_to_event(m: Message) -> dict:
     elif m.event_type == "approval_decided":
         data = metadata
     elif m.event_type == "user_message":
-        data = {"content": m.content}
+        data = {"content": m.content, **metadata}
     elif m.event_type == "skill_used":
         data = metadata
     elif m.event_type == "incident_stopped":
@@ -175,6 +175,8 @@ def _message_to_event(m: Message) -> dict:
         data = metadata  # {phase, agent}
     elif m.event_type == "answer":
         data = {"content": m.content}
+    elif m.event_type == "answer_done":
+        data = metadata or {}
     elif m.event_type == "agent_status":
         data = metadata  # {phase, agent, status}
     else:
@@ -278,12 +280,17 @@ async def send_user_message(
             attachment.incident_id = incident_id
         await session.flush()
 
+    metadata = {}
+    if body.attachment_ids:
+        metadata["attachment_ids"] = [str(aid) for aid in body.attachment_ids]
+
     service = IncidentService(session=session)
     message = await service.save_message(
         incident_id=incident_id,
         role="user",
         event_type="user_message",
         content=body.content,
+        metadata_json=metadata if metadata else None,
     )
 
     # If agent is waiting for human input (ask_human interrupt), resume the graph
