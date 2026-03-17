@@ -12,7 +12,9 @@ from src.lib.logger import logger
 from src.lib.reranker import Reranker
 
 
-async def _generate_title(summary_md: str) -> str:
+async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
+    import json
+
     from langchain_core.messages import HumanMessage, SystemMessage
     from langchain_openai import ChatOpenAI
 
@@ -22,13 +24,33 @@ async def _generate_title(summary_md: str) -> str:
     llm = ChatOpenAI(model=s.mini_model, base_url=s.llm_base_url, api_key=s.dashscope_api_key)
     resp = await llm.ainvoke([
         SystemMessage(content=(
-            "你是一个标题生成器。根据以下事件排查报告，生成一个简短的中文标题（15-30字以内），"
-            "概括事件的核心问题和根因。只输出标题文本，不要加引号或其他格式。"
+            "你是一个事件分析器。根据以下事件排查报告，生成标题和严重等级。\n\n"
+            "严重等级判定标准：\n"
+            "- P0: 核心业务完全不可用，影响大量用户\n"
+            "- P1: 核心业务严重受损，部分功能不可用\n"
+            "- P2: 非核心功能异常，有 workaround\n"
+            "- P3: 轻微问题、信息查询类、无业务影响\n\n"
+            '请输出 JSON 格式：{"title": "简短中文标题（15-30字）", "severity": "P0|P1|P2|P3"}\n'
+            "只输出 JSON，不要输出其他内容。"
         )),
         HumanMessage(content=summary_md[:3000]),
     ])
-    title = resp.content.strip().strip("\"'《》")
-    return title if title and len(title) <= 60 else summary_md[:30].replace("\n", " ")
+    raw = resp.content.strip()
+    # 尝试解析 JSON
+    try:
+        data = json.loads(raw)
+        title = str(data.get("title", "")).strip().strip("\"'《》")
+        severity = str(data.get("severity", "P3")).strip().upper()
+    except (json.JSONDecodeError, AttributeError):
+        title = raw.strip().strip("\"'《》")
+        severity = "P3"
+
+    if not title or len(title) > 60:
+        title = summary_md[:30].replace("\n", " ")
+    if severity not in ("P0", "P1", "P2", "P3"):
+        severity = "P3"
+
+    return title, severity
 
 
 async def _generate_filename(title: str) -> str:

@@ -98,7 +98,7 @@ class ServerTestResponse(BaseModel):
 
 class IncidentCreate(BaseModel):
     description: str
-    severity: Literal["low", "medium", "high", "critical"] = "medium"
+    severity: Literal["P0", "P1", "P2", "P3"] = "P3"
     project_id: uuid.UUID | None = None
     attachment_ids: list[uuid.UUID] = Field(default_factory=list)
 

@@ -20,6 +20,7 @@ export function useIncidentStream(
   );
   const lastTimestampRef = useRef("");
   const loadedForRef = useRef("");
+  const loadedEventsRef = useRef<SSEEvent[] | null>(null);
 
   const {
     addEvent,
@@ -46,6 +47,16 @@ export function useIncidentStream(
     refetchOnWindowFocus: false,
   });
 
+  // Reset store when navigating away (unmount) or switching incidents
+  useEffect(() => {
+    return () => {
+      reset();
+      loadedForRef.current = "";
+      loadedEventsRef.current = null;
+      lastTimestampRef.current = "";
+    };
+  }, [incidentId]);
+
   useEffect(() => {
     if (!incidentId) return;
 
@@ -54,12 +65,27 @@ export function useIncidentStream(
       reset();
       lastTimestampRef.current = "";
       loadedForRef.current = "";
+      loadedEventsRef.current = null;
     }
 
     // Load history once per incident
     if (historyEvents && !loadedForRef.current) {
       loadHistory(historyEvents);
       loadedForRef.current = incidentId;
+      loadedEventsRef.current = historyEvents;
+      if (historyEvents.length > 0) {
+        lastTimestampRef.current =
+          historyEvents[historyEvents.length - 1].timestamp;
+      }
+    } else if (
+      historyEvents &&
+      loadedForRef.current === incidentId &&
+      loadedEventsRef.current !== historyEvents &&
+      (status === "resolved" || status === "closed" || status === "stopped")
+    ) {
+      // Terminal incidents: reload when React Query refetches newer data
+      loadHistory(historyEvents);
+      loadedEventsRef.current = historyEvents;
       if (historyEvents.length > 0) {
         lastTimestampRef.current =
           historyEvents[historyEvents.length - 1].timestamp;
@@ -165,6 +191,7 @@ export function useIncidentStream(
             addEvent(event);
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
+            queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
           } else if (event.event_type === "incident_stopped") {
             addEvent(event);
             // Close SSE and invalidate queries to refresh status
@@ -173,6 +200,7 @@ export function useIncidentStream(
             setConnected(false);
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
+            queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
           } else if (event.event_type === "ask_human") {
             updatePhase("main");
             setAskHumanQuestion(event.data.question as string);

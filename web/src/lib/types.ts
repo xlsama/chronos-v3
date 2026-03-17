@@ -114,5 +114,5 @@ export interface SkillDetail extends Skill {
   content: string;
 }
 
-export type SeverityLevel = "low" | "medium" | "high" | "critical";
+export type SeverityLevel = "P0" | "P1" | "P2" | "P3";
 export type IncidentStatus = "open" | "investigating" | "resolved" | "closed" | "stopped";

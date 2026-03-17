@@ -1,8 +1,8 @@
 export const severityColors: Record<string, string> = {
-  low: "bg-blue-100 text-blue-800 border-transparent",
-  medium: "bg-yellow-100 text-yellow-800 border-transparent",
-  high: "bg-orange-100 text-orange-800 border-transparent",
-  critical: "bg-red-100 text-red-800 border-transparent",
+  P0: "bg-red-100 text-red-800 border-transparent",
+  P1: "bg-orange-100 text-orange-800 border-transparent",
+  P2: "bg-yellow-100 text-yellow-800 border-transparent",
+  P3: "bg-blue-100 text-blue-800 border-transparent",
 };
 
 export const statusColors: Record<string, string> = {

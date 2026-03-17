@@ -13,7 +13,7 @@ class IncidentService:
     async def create(
         self,
         description: str,
-        severity: str = "medium",
+        severity: str = "P3",
         project_id: uuid.UUID | None = None,
         attachment_ids: list[uuid.UUID] | None = None,
     ) -> Incident:

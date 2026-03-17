@@ -15,12 +15,12 @@ from src.lib.redis import get_redis
 EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
 
 
-def _build_callback(channel: str, agent: str) -> EventCallback:
+def _build_callback(channel: str, agent: str) -> tuple[EventCallback, EventPublisher | None]:
     """Build an event callback that publishes to Redis with phase/agent metadata."""
     if not channel:
         async def noop(event_type: str, data: dict) -> None:
             pass
-        return noop
+        return noop, None
 
     redis = get_redis()
     publisher = EventPublisher(redis=redis, session_factory=get_session_factory())
@@ -32,7 +32,7 @@ def _build_callback(channel: str, agent: str) -> EventCallback:
             {**data, "phase": "gather_context", "agent": agent},
         )
 
-    return callback
+    return callback, publisher
 
 
 async def _safe_run(coro_func, *args) -> Any:
@@ -64,14 +64,20 @@ async def gather_context_node(state: OpsState) -> dict:
     project_id = state.get("project_id", "")
     incident_id = state["incident_id"]
 
-    history_cb = _build_callback(channel, agent="history")
-    kb_cb = _build_callback(channel, agent="kb")
+    history_cb, history_pub = _build_callback(channel, agent="history")
+    kb_cb, kb_pub = _build_callback(channel, agent="kb")
 
     # Always run both sub-agents in parallel
     history_result, kb_result = await asyncio.gather(
         _safe_run(run_history_agent, description, project_id, history_cb),
         _safe_run(run_kb_agent, description, project_id, kb_cb),
     )
+
+    # Flush sub-agent thinking buffers so all thinking events are persisted
+    if history_pub:
+        await history_pub.flush_remaining(channel)
+    if kb_pub:
+        await kb_pub.flush_remaining(channel)
 
     # Extract project_id from KB agent result
     kb_summary = None

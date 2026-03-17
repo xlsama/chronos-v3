@@ -200,20 +200,23 @@ class AgentRunner:
         if vals.get("is_complete"):
             summary_md = vals.get("summary_md", "")
 
-            # Generate summary title (fast mini model, ~1s)
+            # Generate summary title + severity (fast mini model, ~1s)
             summary_title = None
+            severity = None
             if summary_md:
                 try:
-                    from src.services.incident_history_service import _generate_title
-                    summary_title = await _generate_title(summary_md)
+                    from src.services.incident_history_service import _generate_title_and_severity
+                    summary_title, severity = await _generate_title_and_severity(summary_md)
                 except Exception as e:
-                    logger.warning(f"Summary title generation failed for {incident_id}: {e}")
+                    logger.warning(f"Summary title/severity generation failed for {incident_id}: {e}")
 
             async with get_session_factory()() as session:
                 incident = await session.get(Incident, uuid.UUID(incident_id))
                 if incident and incident.status == "investigating":
                     incident.summary_md = summary_md
                     incident.summary_title = summary_title
+                    if severity:
+                        incident.severity = severity
                     incident.status = "resolved"
                     await session.commit()
 

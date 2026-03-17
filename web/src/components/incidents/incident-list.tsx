@@ -2,9 +2,12 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { AlertCircle, Square } from "lucide-react";
+import { AlertCircle, FileText, Square } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { getIncidents, stopIncident } from "@/api/incidents";
+import { getAttachmentUrl } from "@/api/attachments";
+import type { Attachment } from "@/lib/types";
+import { isImageType } from "@/lib/file-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +28,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { AttachmentPreviewDialog } from "@/components/incidents/attachment-preview-dialog";
 import { severityColors, statusColors, statusLabels } from "@/lib/incident-constants";
 
 export function IncidentList() {
@@ -35,6 +39,7 @@ export function IncidentList() {
   });
 
   const [stopDialogId, setStopDialogId] = useState<string | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
   const stopMutation = useMutation({
     mutationFn: (id: string) => stopIncident(id),
@@ -93,10 +98,43 @@ export function IncidentList() {
               className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
             >
               <div className="flex-1 space-y-1">
-                <p className="font-medium">{incident.summary_title || incident.description.slice(0, 80) + (incident.description.length > 80 ? "..." : "")}</p>
-                <p className="text-sm text-muted-foreground line-clamp-1">
+                <p className="text-sm font-medium">{incident.summary_title || incident.description.slice(0, 80) + (incident.description.length > 80 ? "..." : "")}</p>
+                <p className="text-xs text-muted-foreground line-clamp-1">
                   {incident.description}
                 </p>
+                {incident.attachments && incident.attachments.length > 0 && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    {incident.attachments.slice(0, 4).map((att) => (
+                      <button
+                        key={att.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPreviewAttachment(att);
+                        }}
+                        className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
+                      >
+                        {isImageType(att.content_type) ? (
+                          <img
+                            src={getAttachmentUrl(att.id)}
+                            alt={att.filename}
+                            className="size-8 rounded object-cover"
+                          />
+                        ) : (
+                          <div className="flex size-8 items-center justify-center bg-muted text-muted-foreground">
+                            <FileText className="size-3.5" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                    {incident.attachments.length > 4 && (
+                      <span className="text-xs text-muted-foreground">
+                        +{incident.attachments.length - 4}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <Badge className={severityColors[incident.severity]}>
                 {incident.severity}
@@ -145,6 +183,12 @@ export function IncidentList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AttachmentPreviewDialog
+        attachment={previewAttachment}
+        open={!!previewAttachment}
+        onOpenChange={(open) => !open && setPreviewAttachment(null)}
+      />
     </>
   );
 }

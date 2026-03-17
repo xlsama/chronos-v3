@@ -74,7 +74,7 @@ class Incident(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     description: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="open")
-    severity: Mapped[str] = mapped_column(String(20), default="medium")
+    severity: Mapped[str] = mapped_column(String(20), default="P3")
     project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True, index=True
     )
