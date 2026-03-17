@@ -79,7 +79,7 @@ export function ToolCallCard({
               onClick={() => setOutputExpanded(!outputExpanded)}
             >
               {outputExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              输出 ({output.length} chars)
+              输出 ({output.length} 字符)
             </button>
           )}
           {(output.length <= 500 || outputExpanded) && (

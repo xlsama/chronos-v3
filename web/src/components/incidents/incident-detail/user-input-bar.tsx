@@ -54,7 +54,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
       ? "Agent 正在调查中..."
       : askHumanQuestion
         ? "回复 Agent 的问题..."
-        : "Send a message to the agent...";
+        : "向 Agent 发送消息...";
 
   return (
     <div className="border-t p-4">

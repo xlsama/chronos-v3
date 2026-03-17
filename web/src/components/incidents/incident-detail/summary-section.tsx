@@ -13,7 +13,7 @@ export function SummarySection({ markdown }: SummarySectionProps) {
     >
       <div className="flex items-center gap-2 text-sm font-semibold text-green-800">
         <CheckCircle className="h-5 w-5" />
-        Investigation Complete
+        排查完成
       </div>
       <Markdown content={markdown} variant="compact" className="mt-3" />
     </div>

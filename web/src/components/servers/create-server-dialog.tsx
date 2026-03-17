@@ -260,7 +260,7 @@ function ServerForm({
             >
               <FieldLabel>名称</FieldLabel>
               <Input
-                placeholder="e.g. Production Server"
+                placeholder="例如: 生产服务器"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}

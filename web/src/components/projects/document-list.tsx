@@ -74,7 +74,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
   const deleteMutation = useMutation({
     mutationFn: deleteDocument,
     onSuccess: () => {
-      toast.success("Document deleted");
+      toast.success("文档已删除");
       queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
     },
   });

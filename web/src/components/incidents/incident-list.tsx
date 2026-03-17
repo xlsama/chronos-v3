@@ -68,8 +68,8 @@ export function IncidentList() {
           <EmptyMedia variant="icon">
             <AlertCircle />
           </EmptyMedia>
-          <EmptyTitle>No incidents yet</EmptyTitle>
-          <EmptyDescription>Create one to get started.</EmptyDescription>
+          <EmptyTitle>暂无事件</EmptyTitle>
+          <EmptyDescription>创建一个以开始使用。</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );

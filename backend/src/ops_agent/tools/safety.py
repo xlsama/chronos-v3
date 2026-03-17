@@ -107,14 +107,18 @@ class CommandSafety:
             if re.search(pattern, cmd, re.IGNORECASE):
                 return CommandType.WRITE
 
-        # 4. For piped commands, check each part against whitelist
-        parts = [p.strip() for p in cmd.split("|")]
-        for part in parts:
-            is_read = any(part.startswith(prefix) for prefix in READ_PREFIXES)
-            if not is_read:
-                is_read = any(re.search(p, part, re.IGNORECASE) for p in READ_PATTERNS)
-            if not is_read:
-                return CommandType.WRITE
+        # 4. Split compound commands (||, &&, ;) then pipes
+        sub_commands = re.split(r'\|\||&&|;', cmd)
+        for sub_cmd in sub_commands:
+            parts = [p.strip() for p in sub_cmd.split("|")]
+            for part in parts:
+                if not part:
+                    continue
+                is_read = any(part.startswith(prefix) for prefix in READ_PREFIXES)
+                if not is_read:
+                    is_read = any(re.search(p, part, re.IGNORECASE) for p in READ_PATTERNS)
+                if not is_read:
+                    return CommandType.WRITE
 
         # 5. All parts in whitelist → READ
         return CommandType.READ

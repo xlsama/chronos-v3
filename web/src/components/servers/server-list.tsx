@@ -100,7 +100,7 @@ function ServerItem({ server }: { server: ServerType }) {
           </div>
           {server.has_bastion && (
             <Badge variant="outline" className="text-xs">
-              via bastion
+              通过跳板机
             </Badge>
           )}
           <Badge

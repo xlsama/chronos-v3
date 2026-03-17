@@ -130,7 +130,7 @@ export function CreateDocumentButton({ projectId }: DocumentUploadProps) {
                 >
                   <FieldLabel>文件名</FieldLabel>
                   <Input
-                    placeholder="e.g. deploy-guide.md"
+                    placeholder="例如: deploy-guide.md"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}

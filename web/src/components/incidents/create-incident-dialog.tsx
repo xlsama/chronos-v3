@@ -38,7 +38,7 @@ export function CreateIncidentDialog() {
       });
     },
     onSuccess: (incident) => {
-      toast.success("Incident created");
+      toast.success("事件已创建");
       queryClient.invalidateQueries({ queryKey: ["incidents"] });
       setOpen(false);
       navigate({
@@ -60,11 +60,11 @@ export function CreateIncidentDialog() {
       <DialogTrigger
         render={<Button size="sm" data-testid="create-incident-btn" />}
       >
-        New Incident
+        新建事件
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Incident</DialogTitle>
+          <DialogTitle>创建事件</DialogTitle>
         </DialogHeader>
         <PromptComposer
           onSubmit={handleSubmit}

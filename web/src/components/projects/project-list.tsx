@@ -77,8 +77,8 @@ export function ProjectList() {
           <EmptyMedia variant="icon">
             <FolderOpen />
           </EmptyMedia>
-          <EmptyTitle>No projects yet</EmptyTitle>
-          <EmptyDescription>Create one to get started.</EmptyDescription>
+          <EmptyTitle>暂无项目</EmptyTitle>
+          <EmptyDescription>创建一个以开始使用。</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );

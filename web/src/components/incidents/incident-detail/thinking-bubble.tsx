@@ -16,7 +16,7 @@ export function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
       data-testid="thinking-bubble"
     >
       <div className="mb-1 text-xs font-medium text-muted-foreground">
-        Agent Thinking {isStreaming && "..."}
+        Agent 思考中{isStreaming && "..."}
       </div>
       <Markdown content={content} streaming={isStreaming} variant="compact" />
     </div>
