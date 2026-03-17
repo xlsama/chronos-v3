@@ -86,7 +86,9 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
         items.push({ type: "incident_stopped", event });
         break;
       case "skill_used":
-        items.push({ type: "skill_used", event });
+        if (event.data.success !== false) {
+          items.push({ type: "skill_used", event });
+        }
         break;
       case "answer":
         items.push({ type: "answer", event });
@@ -352,7 +354,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                       </motion.div>
                     );
                   case "skill_used": {
-                    const skillName = item.event.data.skill_name as string;
+                    const skillName = (item.event.data.skill_name as string) || (item.event.data.skill_slug as string);
                     const skillContent = item.event.data.content as string;
                     return (
                       <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>

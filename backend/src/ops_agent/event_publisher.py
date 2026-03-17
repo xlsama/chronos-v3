@@ -146,7 +146,7 @@ class EventPublisher:
         if event_type == "tool_result":
             return data.get("output", "")
         if event_type == "skill_used":
-            return data.get("skill_name", "")
+            return data.get("skill_slug", "")
         if event_type == "ask_human":
             return data.get("question", "")
         if event_type == "summary":
@@ -202,8 +202,10 @@ class EventPublisher:
             return meta
         if event_type == "skill_used":
             return {
+                "skill_slug": data.get("skill_slug", ""),
                 "skill_name": data.get("skill_name", ""),
                 "content": data.get("content", ""),
+                "success": data.get("success", True),
             }
         if event_type == "approval_required":
             return {

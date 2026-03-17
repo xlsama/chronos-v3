@@ -481,9 +481,17 @@ class AgentRunner:
             if name == "use_skill":
                 args = event["data"].get("input", {})
                 output = str(event["data"].get("output", ""))
+                success = not output.startswith("未找到")
+                skill_slug = args.get("skill_slug", "")
+                skill_name = skill_slug
+                if success and output.startswith("## 技能: "):
+                    first_line = output.split("\n", 1)[0]
+                    skill_name = first_line.removeprefix("## 技能: ")
                 await self.publisher.publish(channel, "skill_used", {
-                    "skill_name": args.get("skill_name", ""),
+                    "skill_slug": skill_slug,
+                    "skill_name": skill_name,
                     "content": output,
+                    "success": success,
                     "phase": phase,
                     "agent": agent,
                 })

@@ -43,14 +43,14 @@ def build_tools():
         return question
 
     @tool
-    async def use_skill(skill_name: str) -> str:
-        """调用预设技能获取详细排查步骤。传入技能名称，返回完整排查指南。"""
+    async def use_skill(skill_slug: str) -> str:
+        """调用预设技能获取详细排查步骤。传入技能 slug 标识符，返回完整排查指南。"""
         service = SkillService()
         try:
-            meta, content = service.get_skill_by_name(skill_name)
+            meta, content = service.get_skill(skill_slug)
             return f"## 技能: {meta.name}\n\n{content}"
         except FileNotFoundError:
-            return f"未找到名为 '{skill_name}' 的技能"
+            return f"未找到名为 '{skill_slug}' 的技能"
 
     @tool
     def complete(answer_md: str) -> str:
@@ -105,7 +105,7 @@ async def main_agent_node(state: OpsState) -> dict:
     if skill_summaries:
         lines = ["## 可用技能", "你可以通过 use_skill 工具调用以下预设技能：", ""]
         for s in skill_summaries:
-            lines.append(f"- **{s['name']}**: {s['description']}")
+            lines.append(f"- `{s['slug']}` ({s['name']}): {s['description']}")
         skills_context = "\n".join(lines)
     else:
         skills_context = ""
