@@ -181,7 +181,12 @@ class AgentRunner:
                 })
                 notify_fire_and_forget(
                     "need_approval", incident_id,
-                    vals.get("description", "")[:80], detail=pending["name"],
+                    vals.get("description", "")[:80],
+                    severity=vals.get("severity", ""),
+                    project_id=vals.get("project_id", ""),
+                    command=command,
+                    risk_level=risk_level,
+                    explanation=args.get("explanation", ""),
                 )
 
         # Interrupted before ask_human → extract question and publish SSE
@@ -193,7 +198,10 @@ class AgentRunner:
                 })
                 notify_fire_and_forget(
                     "ask_human", incident_id,
-                    vals.get("description", "")[:80], detail=question,
+                    vals.get("description", "")[:80],
+                    severity=vals.get("severity", ""),
+                    project_id=vals.get("project_id", ""),
+                    question=question,
                 )
 
         # Graph complete → update Incident status + publish summary (only if still investigating)
@@ -224,7 +232,11 @@ class AgentRunner:
                 "summary_md": summary_md,
                 "summary_title": summary_title,
             })
-            notify_fire_and_forget("resolved", incident_id, summary_title or vals.get("description", "")[:80])
+            notify_fire_and_forget(
+                "resolved", incident_id, summary_title or vals.get("description", "")[:80],
+                severity=vals.get("severity", ""),
+                project_id=vals.get("project_id", ""),
+            )
             try:
                 await self._auto_save_history(incident_id, summary_md)
             except Exception as e:

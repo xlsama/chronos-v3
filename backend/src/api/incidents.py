@@ -53,7 +53,10 @@ async def _start_agent_background(
                 incident.status = "investigating"
                 await session.commit()
                 logger.info(f"Agent started for incident {incident_id}, thread {thread_id}")
-                notify_fire_and_forget("investigating", incident_id, description[:80])
+                notify_fire_and_forget(
+                    "investigating", incident_id, description[:80],
+                    severity=severity, project_id=project_id,
+                )
     except Exception as e:
         logger.error(f"Failed to start agent for incident {incident_id}: {e}")
 
@@ -79,7 +82,10 @@ async def create_incident(
         str(body.project_id or ""),
     )
 
-    notify_fire_and_forget("open", str(incident.id), body.description[:80])
+    notify_fire_and_forget(
+        "open", str(incident.id), body.description[:80],
+        severity=body.severity, project_id=str(body.project_id or ""),
+    )
 
     return incident
 
@@ -293,7 +299,10 @@ async def stop_incident(
     channel = EventPublisher.channel_for_incident(str(incident_id))
     await runner.publisher.publish(channel, "incident_stopped", {"reason": "stopped"})
 
-    notify_fire_and_forget("stopped", str(incident_id), incident.summary_title or incident.description[:80])
+    notify_fire_and_forget(
+        "stopped", str(incident_id), incident.summary_title or incident.description[:80],
+        severity=incident.severity or "", project_id=str(incident.project_id or ""),
+    )
 
     return {"ok": True}
 
