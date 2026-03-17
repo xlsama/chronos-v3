@@ -49,6 +49,12 @@ test("微服务链路故障 - 库存服务进程被杀导致订单接口 500", a
   const processCheck = await dataServerInjector.isProcessRunning("inventory-api/app.py");
   expect(processCheck).toBe(false);
 
+  // 验证故障确实导致 500
+  const faultVerify = await appServerInjector.exec(
+    "curl -s -o /dev/null -w '%{http_code}' http://localhost/api/orders",
+  );
+  expect(faultVerify.stdout.trim()).toBe("500");
+
   // 3. 打开事件页面
   await page.goto("/incidents");
 
@@ -83,6 +89,20 @@ test("微服务链路故障 - 库存服务进程被杀导致订单接口 500", a
   const incident = await apiClient.getIncident(incidentId);
   expect(incident.status).toBe("resolved");
 
+  // 断言 Agent 执行了 tool call（确认 Agent 实际工作了）
+  const toolCallCards = page.locator('[data-testid="tool-call-card"]');
+  const toolCallCount = await toolCallCards.count();
+  expect(toolCallCount).toBeGreaterThanOrEqual(1);
+
+  // 断言 summary 包含相关服务关键词
+  const summaryText = await summary.textContent();
+  expect(summaryText).toBeTruthy();
+  const lowerSummary = summaryText!.toLowerCase();
+  const hasRelevantKeyword = ["inventory", "库存", "进程", "process", "8080", "data-server"].some(
+    (kw) => lowerSummary.includes(kw),
+  );
+  expect(hasRelevantKeyword).toBe(true);
+
   // 8. Best-effort 验证：inventory-api 进程已恢复
   try {
     const running = await dataServerInjector.isProcessRunning("inventory-api/app.py");
@@ -98,4 +118,8 @@ test("微服务链路故障 - 库存服务进程被杀导致订单接口 500", a
   } catch {
     // best-effort
   }
+
+  // 9. 返回事件列表，验证事件显示为"已解决"
+  await page.goto("/incidents");
+  await expect(page.locator("text=已解决").first()).toBeVisible({ timeout: 10_000 });
 });

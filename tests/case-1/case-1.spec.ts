@@ -111,6 +111,20 @@ test("磁盘占满事件 - 完整生命周期", async ({ page, seedData, faultIn
   const incident = await apiClient.getIncident(incidentId);
   expect(incident.status).toBe("resolved");
 
+  // 断言 Agent 执行了 tool call（确认 Agent 实际工作了）
+  const toolCallCards = page.locator('[data-testid="tool-call-card"]');
+  const toolCallCount = await toolCallCards.count();
+  expect(toolCallCount).toBeGreaterThanOrEqual(1);
+
+  // 断言 summary 包含磁盘相关关键词
+  const summaryText = await summary.textContent();
+  expect(summaryText).toBeTruthy();
+  const lowerSummary = summaryText!.toLowerCase();
+  const hasRelevantKeyword = ["/tmp", "testfill", "disk", "磁盘", "清理", "删除", "空间"].some(
+    (kw) => lowerSummary.includes(kw),
+  );
+  expect(hasRelevantKeyword).toBe(true);
+
   // 7. 验证故障已修复（best-effort）
   try {
     const result = await faultInjector.exec("test -f /tmp/testfill");
@@ -118,4 +132,8 @@ test("磁盘占满事件 - 完整生命周期", async ({ page, seedData, faultIn
   } catch {
     // best-effort, don't fail the test
   }
+
+  // 8. 返回事件列表，验证事件显示为"已解决"
+  await page.goto("/incidents");
+  await expect(page.locator("text=已解决").first()).toBeVisible({ timeout: 10_000 });
 });
