@@ -104,11 +104,9 @@ function IncidentDetailPage() {
         <p className="text-sm text-muted-foreground">
           无法加载事件详情
         </p>
-        <Button variant="outline" size="sm" asChild>
-          <Link to="/incidents">
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            返回事件列表
-          </Link>
+        <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/incidents" />}>
+          <ArrowLeft className="mr-1 h-4 w-4" />
+          返回事件列表
         </Button>
       </div>
     );

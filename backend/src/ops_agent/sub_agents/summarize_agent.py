@@ -10,6 +10,7 @@ from langchain_core.messages import (
 from langchain_openai import ChatOpenAI
 
 from src.config import get_settings
+from src.lib.logger import logger
 from src.ops_agent.prompts.summarize import SUMMARIZE_SYSTEM_PROMPT
 
 EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
@@ -62,6 +63,8 @@ async def run_summarize_agent(
 
     conversation_text = _format_messages(messages, description)
 
+    logger.info(f"\n[summarize] Started, message_count={len(messages)}, severity={severity}")
+
     llm_messages = [
         SystemMessage(content=SUMMARIZE_SYSTEM_PROMPT),
         HumanMessage(
@@ -77,4 +80,5 @@ async def run_summarize_agent(
             full_content += chunk.content
             await event_callback("thinking", {"content": chunk.content})
 
+    logger.info(f"[summarize] Completed, report_len={len(full_content)}")
     return full_content or "报告生成失败"

@@ -32,8 +32,11 @@ def _build_callback(channel: str) -> EventCallback:
 
 
 async def summarize_node(state: OpsState) -> dict:
+    sid = state["incident_id"][:8]
     channel = EventPublisher.channel_for_incident(state["incident_id"])
     callback = _build_callback(channel)
+
+    logger.info(f"\n[{sid}] [summarize] ===== Summarize node started =====")
 
     try:
         summary_md = await run_summarize_agent(
@@ -43,8 +46,10 @@ async def summarize_node(state: OpsState) -> dict:
             event_callback=callback,
         )
     except Exception as e:
-        logger.error(f"Summarize agent failed: {e}")
+        logger.error(f"[{sid}] [summarize] Summarize agent failed: {e}", exc_info=True)
         summary_md = f"报告生成失败: {e}"
+
+    logger.info(f"\n[{sid}] [summarize] ===== Summarize node completed =====")
 
     return {
         "summary_md": summary_md,

@@ -38,6 +38,8 @@ async def _start_agent_background(
     severity: str,
     project_id: str,
 ) -> None:
+    sid = incident_id[:8]
+    logger.info(f"[{sid}] [api] Background agent task starting")
     try:
         thread_id = await runner.start(
             incident_id=incident_id,
@@ -53,7 +55,7 @@ async def _start_agent_background(
                 incident.thread_id = thread_id
                 incident.status = "investigating"
                 await session.commit()
-                logger.info(f"Agent started for incident {incident_id}, thread {thread_id}")
+                logger.info(f"[{sid}] [api] status -> investigating, thread={thread_id}")
                 notify_fire_and_forget(
                     "investigating", incident_id, description[:80],
                     severity=severity, project_id=project_id,
@@ -71,6 +73,9 @@ async def create_incident(
 ):
     service = IncidentService(session=session)
     incident = await service.create(**body.model_dump())
+
+    sid = str(incident.id)[:8]
+    logger.info(f"[{sid}] [api] Incident created: severity={body.severity}, project_id={body.project_id or ''}")
 
     # Start agent in background
     runner: AgentRunner = request.app.state.agent_runner
@@ -283,6 +288,9 @@ async def send_user_message(
 
     # If agent is waiting for human input (ask_human interrupt), resume the graph
     if incident.thread_id and incident.status == "investigating":
+        sid = str(incident.id)[:8]
+        logger.info(f"[{sid}] [api] User message received, resuming agent")
+        logger.debug(f"[{sid}] [api] User message content: {body.content[:200]}")
         runner: AgentRunner = request.app.state.agent_runner
         background_tasks.add_task(
             runner.resume_with_human_input,
@@ -314,6 +322,9 @@ async def stop_incident(
     # Update DB status
     incident.status = "stopped"
     await session.commit()
+
+    sid = str(incident_id)[:8]
+    logger.info(f"[{sid}] [api] status -> stopped")
 
     # Publish SSE event
     runner: AgentRunner = request.app.state.agent_runner

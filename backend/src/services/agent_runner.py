@@ -53,11 +53,11 @@ class AgentRunner:
         severity: str,
         project_id: str = "",
     ) -> str:
+        sid = incident_id[:8]
         thread_id = str(uuid.uuid4())
         channel = EventPublisher.channel_for_incident(incident_id)
 
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
-        logger.info(f"Agent config recursion_limit={config['recursion_limit']}")
 
         initial_state = {
             "messages": [HumanMessage(content=f"事件描述: {description}")],
@@ -75,31 +75,35 @@ class AgentRunner:
             "kb_summary": None,
         }
 
-        logger.info(f"Starting agent for incident {incident_id}, thread {thread_id}")
+        logger.info(f"\n[{sid}] [main] ===== Agent lifecycle started =====")
+        logger.info(f"[{sid}] [main] thread_id={thread_id}, severity={severity}, project_id={project_id}, recursion_limit={config['recursion_limit']}")
 
         cancelled = False
         try:
             async for event in self.graph.astream_events(initial_state, config=config, version="v2"):
                 cancel_reason = await self._check_cancelled(incident_id)
                 if cancel_reason:
-                    logger.info(f"Agent cancelled for incident {incident_id}: {cancel_reason}")
+                    logger.info(f"[{sid}] [main] Agent cancelled: {cancel_reason}")
                     cancelled = True
                     break
                 await self._process_event(channel, event)
         except Exception as e:
-            logger.error(f"Agent error for incident {incident_id}: {e}")
+            logger.error(f"[{sid}] [main] Agent error: {e}")
             await self.publisher.publish(channel, "error", {"message": str(e)})
             raise
 
         await self.publisher.flush_remaining(channel)
         if not cancelled:
             await self._post_run(config, channel, incident_id)
+        logger.info(f"\n[{sid}] [main] ===== Agent lifecycle completed =====")
         return thread_id
 
     async def resume_with_human_input(self, thread_id: str, incident_id: str, human_input: str) -> None:
         """Resume graph from ask_human interrupt with user's response."""
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
+
+        sid = incident_id[:8]
 
         # Only resume if graph is actually at ask_human interrupt
         state = await self.graph.aget_state(config)
@@ -110,7 +114,8 @@ class AgentRunner:
 
         resume_input = Command(resume=human_input)
 
-        logger.info(f"Resuming agent (human input) for incident {incident_id}, thread {thread_id}")
+        logger.info(f"[{sid}] [main] Resuming agent (human input), thread={thread_id}")
+        logger.debug(f"[{sid}] [main] human_input: {human_input[:200]}")
 
         cancelled = False
         try:
@@ -131,10 +136,11 @@ class AgentRunner:
             await self._post_run(config, channel, incident_id)
 
     async def resume(self, thread_id: str, incident_id: str, approval_result: dict) -> None:
+        sid = incident_id[:8]
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
 
-        logger.info(f"Resuming agent for incident {incident_id}, thread {thread_id}, decision={approval_result.get('decision')}")
+        logger.info(f"[{sid}] [main] Resuming agent (approval), thread={thread_id}, decision={approval_result.get('decision')}")
 
         from langgraph.types import Command
 
@@ -160,8 +166,11 @@ class AgentRunner:
             await self._post_run(config, channel, incident_id)
 
     async def _post_run(self, config: dict, channel: str, incident_id: str) -> None:
+        sid = incident_id[:8]
         state = await self.graph.aget_state(config)
         vals = state.values
+
+        logger.info(f"[{sid}] [post_run] Post-run: next_nodes={state.next}, is_complete={vals.get('is_complete')}")
 
         # Interrupted before human_approval → create approval record + SSE
         if "human_approval" in (state.next or ()):
@@ -172,6 +181,8 @@ class AgentRunner:
                 command = args.get("command", "")
                 cmd_type = CommandSafety.classify(command)
                 risk_level = "HIGH" if cmd_type == CommandType.DANGEROUS else "MEDIUM"
+                logger.info(f"[{sid}] [post_run] human_approval interrupt: tool={pending['name']}, cmd_type={cmd_type.name}, risk={risk_level}")
+                logger.debug(f"[{sid}] [post_run] approval command: {command[:200]}")
                 async with get_session_factory()() as session:
                     approval = await ApprovalService(session).create(
                         incident_id=uuid.UUID(incident_id),
@@ -180,6 +191,7 @@ class AgentRunner:
                         risk_level=risk_level,
                         explanation=args.get("explanation"),
                     )
+                logger.info(f"[{sid}] [post_run] Approval created: id={approval.id}")
                 await self.publisher.publish(channel, "approval_required", {
                     "approval_id": str(approval.id),
                     "tool_name": pending["name"],
@@ -199,6 +211,7 @@ class AgentRunner:
         if "ask_human" in (state.next or ()):
             question = self._extract_ask_human_question(vals)
             if question:
+                logger.info(f"[{sid}] [post_run] ask_human interrupt: question={question[:100]}")
                 await self.publisher.publish(channel, "ask_human", {
                     "question": question,
                 })
@@ -214,7 +227,21 @@ class AgentRunner:
         if vals.get("is_complete"):
             summary_md = vals.get("summary_md", "")
 
-            # Generate summary title + severity (fast mini model, ~1s)
+            # Step 1: Write summary_md + status=resolved to DB immediately
+            async with get_session_factory()() as session:
+                incident = await session.get(Incident, uuid.UUID(incident_id))
+                if incident and incident.status == "investigating":
+                    incident.summary_md = summary_md
+                    incident.status = "resolved"
+                    await session.commit()
+                    logger.info(f"[{sid}] [post_run] status -> resolved")
+
+            # Step 2: Send SSE event immediately so frontend switches to completed state
+            await self.publisher.publish(channel, "summary", {
+                "summary_md": summary_md,
+            })
+
+            # Step 3: Generate title + severity (LLM call, may take tens of seconds)
             summary_title = None
             severity = None
             if summary_md:
@@ -224,20 +251,18 @@ class AgentRunner:
                 except Exception as e:
                     logger.warning(f"Summary title/severity generation failed for {incident_id}: {e}")
 
-            async with get_session_factory()() as session:
-                incident = await session.get(Incident, uuid.UUID(incident_id))
-                if incident and incident.status == "investigating":
-                    incident.summary_md = summary_md
-                    incident.summary_title = summary_title
-                    if severity:
-                        incident.severity = severity
-                    incident.status = "resolved"
-                    await session.commit()
+            # Step 4: Update DB with title + severity
+            if summary_title or severity:
+                async with get_session_factory()() as session:
+                    incident = await session.get(Incident, uuid.UUID(incident_id))
+                    if incident:
+                        if summary_title:
+                            incident.summary_title = summary_title
+                        if severity:
+                            incident.severity = severity
+                        await session.commit()
+                        logger.info(f"[{sid}] [post_run] DB updated: title='{summary_title}', severity={severity}")
 
-            await self.publisher.publish(channel, "summary", {
-                "summary_md": summary_md,
-                "summary_title": summary_title,
-            })
             notify_fire_and_forget(
                 "resolved", incident_id, summary_title or vals.get("description", "")[:80],
                 severity=vals.get("severity", ""),
@@ -282,10 +307,14 @@ class AgentRunner:
         return None
 
     async def _auto_save_history(self, incident_id: str, summary_md: str) -> None:
+        sid = incident_id[:8]
         if not summary_md:
+            logger.info(f"[{sid}] [history] Check: summary_md is empty, skipping auto-save")
             return
-        if not _has_root_cause(summary_md):
-            logger.info(f"Auto-save skipped for {incident_id}: no valid root cause")
+
+        has_root = _has_root_cause(summary_md)
+        logger.info(f"[{sid}] [history] Check: has_root_cause={has_root}")
+        if not has_root:
             return
 
         async with get_session_factory()() as session:
@@ -299,17 +328,20 @@ class AgentRunner:
                     Message.content == "bash",
                 )
             )
+            logger.info(f"[{sid}] [history] Check: bash_tool_calls={tool_count}")
             if not tool_count:
-                logger.info(f"Auto-save skipped for {incident_id}: no bash tool calls")
                 return
 
             incident = await session.get(Incident, uuid.UUID(incident_id))
-            if not incident or incident.saved_to_memory:
+            if not incident:
+                return
+            logger.info(f"[{sid}] [history] Check: saved_to_memory={incident.saved_to_memory}")
+            if incident.saved_to_memory:
                 return
 
             service = IncidentHistoryService(session=session)
             result = await service.auto_save(incident, summary_md)
-            logger.info(f"Auto-save result for {incident_id}: {result}")
+            logger.info(f"[{sid}] [history] Auto-save result: {result.get('action')}")
 
     def _get_phase_agent(self, event: dict) -> tuple[str, str]:
         """Extract phase and agent from event metadata."""
@@ -325,6 +357,10 @@ class AgentRunner:
         kind = event.get("event")
         metadata = event.get("metadata", {})
         node = metadata.get("langgraph_node", "")
+
+        # Extract incident_id short prefix from channel
+        # channel format: "incident:<uuid>"
+        sid = channel.split(":")[-1][:8] if ":" in channel else ""
 
         # 子 agent 通过自己的 callback 发布事件，跳过避免重复
         if node in ("gather_context", "summarize"):
@@ -345,6 +381,16 @@ class AgentRunner:
             output = event["data"].get("output")
             if not output:
                 return
+
+            # Log full LLM response
+            content_text = output.content if hasattr(output, "content") else ""
+            tool_calls = output.tool_calls if hasattr(output, "tool_calls") else []
+            logger.info(f"\n[{sid}] [main] LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}")
+            if content_text:
+                logger.info(f"\n[{sid}] [main] LLM content:\n{content_text}\n")
+            for tc in tool_calls:
+                logger.info(f"\n[{sid}] [main] LLM tool_call: {tc['name']}({tc.get('args', {})})")
+
             # End current thinking segment
             await self.publisher.publish(channel, "thinking_done", {
                 "phase": phase, "agent": agent,
@@ -364,6 +410,8 @@ class AgentRunner:
             name = event.get("name", "")
             if name == "use_skill":
                 return  # Don't emit tool_call; wait for tool_end to emit skill_used
+            logger.info(f"\n[{sid}] [main] Tool start: {name}")
+            logger.debug(f"[{sid}] [main] Tool input: {event['data'].get('input', {})}")
             await self.publisher.publish(channel, "tool_call", {
                 "name": name,
                 "args": event["data"].get("input", {}),
@@ -383,9 +431,12 @@ class AgentRunner:
                     "agent": agent,
                 })
                 return
+            output_str = str(event["data"].get("output", ""))
+            logger.info(f"\n[{sid}] [main] Tool end: {name}")
+            logger.debug(f"[{sid}] [main] Tool output: {output_str[:500]}")
             await self.publisher.publish(channel, "tool_result", {
                 "name": name,
-                "output": str(event["data"].get("output", "")),
+                "output": output_str,
                 "phase": phase,
                 "agent": agent,
             })

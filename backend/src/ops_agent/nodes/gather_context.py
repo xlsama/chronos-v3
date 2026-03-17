@@ -59,10 +59,13 @@ async def _update_incident_project(incident_id: str, project_id: str) -> None:
 
 async def gather_context_node(state: OpsState) -> dict:
     """Run sub-agents to gather context before the main agent starts."""
+    sid = state["incident_id"][:8]
     channel = EventPublisher.channel_for_incident(state["incident_id"])
     description = state["description"]
     project_id = state.get("project_id", "")
     incident_id = state["incident_id"]
+
+    logger.info(f"\n[{sid}] [gather_context] ===== Gathering context started =====")
 
     history_cb, history_pub = _build_callback(channel, agent="history")
     kb_cb, kb_pub = _build_callback(channel, agent="kb")
@@ -72,6 +75,7 @@ async def gather_context_node(state: OpsState) -> dict:
     await kb_cb("agent_status", {"status": "started"})
 
     # Always run both sub-agents in parallel
+    logger.info(f"[{sid}] [gather_context] Starting parallel sub-agents: history + kb")
     history_result, kb_result = await asyncio.gather(
         _safe_run(run_history_agent, description, project_id, history_cb),
         _safe_run(run_kb_agent, description, project_id, kb_cb),
@@ -89,6 +93,8 @@ async def gather_context_node(state: OpsState) -> dict:
     await history_cb("agent_status", {"status": "failed" if history_failed else "completed"})
     await kb_cb("agent_status", {"status": "failed" if kb_failed else "completed"})
 
+    logger.info(f"[{sid}] [gather_context] Sub-agents completed: history={'FAILED' if history_failed else 'OK'}, kb={'FAILED' if kb_failed else 'OK'}")
+
     # Extract project_id from KB agent result
     kb_summary = None
     discovered_project_id = ""
@@ -102,7 +108,10 @@ async def gather_context_node(state: OpsState) -> dict:
 
     # Update incident project_id if discovered (and not already set)
     if final_project_id and not project_id:
+        logger.info(f"[{sid}] [gather_context] Discovered project_id={final_project_id}")
         await _update_incident_project(incident_id, final_project_id)
+
+    logger.info(f"\n[{sid}] [gather_context] ===== Gathering context completed =====")
 
     return {
         "incident_history_summary": history_result if isinstance(history_result, str) else None,

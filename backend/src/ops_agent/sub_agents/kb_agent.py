@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 
 from src.ops_agent.prompts.kb_agent import KB_AGENT_SYSTEM_PROMPT, KB_AGENT_WITH_DISCOVERY_PROMPT
 from src.config import get_settings
+from src.lib.logger import logger
 from src.ops_agent.tools.knowledge_tools import (
     list_projects_for_matching as _list_projects,
     search_knowledge_base as _search_knowledge_base,
@@ -91,6 +92,7 @@ async def run_kb_agent(
         streaming=True,
     )
 
+    mode = "known_project" if project_id else "discover"
     if project_id:
         tools, kb_sources = _build_tools_known_project(project_id)
         system_prompt = KB_AGENT_SYSTEM_PROMPT
@@ -99,6 +101,8 @@ async def run_kb_agent(
         system_prompt = KB_AGENT_WITH_DISCOVERY_PROMPT
 
     llm_with_tools = llm.bind_tools(tools)
+
+    logger.info(f"\n[kb_agent] Started, description='{description[:50]}...', project_id={project_id}, mode={mode}")
 
     messages = [
         SystemMessage(content=system_prompt),
@@ -123,11 +127,16 @@ async def run_kb_agent(
         await event_callback("thinking_done", {})
         messages.append(full_response)
 
+        logger.info(f"\n[kb_agent] LLM response (len={len(full_content)})")
+        if full_content:
+            logger.info(f"\n[kb_agent] LLM content:\n{full_content}\n")
+
         if not full_response.tool_calls:
             break
 
         for tc in full_response.tool_calls:
             tool_name = tc["name"]
+            logger.info(f"\n[kb_agent] Tool call: {tool_name}({tc['args']})")
             await event_callback("tool_call", {
                 "name": tool_name,
                 "args": tc["args"],
@@ -137,9 +146,12 @@ async def run_kb_agent(
             matching_tool = next(t for t in tools if t.name == tool_name)
             result = await matching_tool.ainvoke(tc["args"])
 
+            result_str = str(result)
+            logger.info(f"\n[kb_agent] Tool result: {len(result_str)} chars")
+
             event_data: dict[str, Any] = {
                 "name": tool_name,
-                "output": str(result),
+                "output": result_str,
             }
             if tool_name == "search_knowledge_base":
                 event_data["sources"] = list(kb_sources)
@@ -147,9 +159,9 @@ async def run_kb_agent(
 
             # Parse project info from list_projects result
             if tool_name == "list_projects":
-                _parse_projects_info(str(result), projects_info)
+                _parse_projects_info(result_str, projects_info)
 
-            messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
+            messages.append(ToolMessage(content=result_str, tool_call_id=tc["id"]))
     else:
         # Max iterations reached, get final response
         full_content = ""
@@ -162,12 +174,16 @@ async def run_kb_agent(
     if not full_content:
         full_content = "项目知识库暂无相关信息"
 
+    logger.info(f"[kb_agent] Completed, output_len={len(full_content)}")
+
     # If project_id was pre-set, return simple string
     if project_id:
         return full_content
 
     # Extract project_id from LLM output
     discovered_id = _extract_project_id_from_text(full_content)
+    if discovered_id:
+        logger.info(f"[kb_agent] Discovered project_id={discovered_id}")
     project_info = projects_info.get(discovered_id, {})
 
     return {

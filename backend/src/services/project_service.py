@@ -47,7 +47,7 @@ class ProjectService:
         )
         return result.scalar_one_or_none()
 
-    async def list(self) -> list[Project]:
+    async def list_all(self) -> list[Project]:
         result = await self.session.execute(
             select(Project)
             .options(selectinload(Project.project_servers))

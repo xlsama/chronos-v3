@@ -39,7 +39,7 @@ async def list_projects(
 ):
     total = await session.scalar(select(func.count()).select_from(Project)) or 0
     service = ProjectService(session=session)
-    items = await service.list()
+    items = await service.list_all()
     # Apply pagination manually (service.list already orders by created_at desc)
     start = (page - 1) * page_size
     paged_items = items[start:start + page_size]

@@ -2,6 +2,7 @@ import asyncio
 import time
 import uuid
 
+from src.lib.logger import logger
 from src.ops_agent.ssh import SSHConnector
 from src.ops_agent.tools.safety import CommandSafety, CommandType
 
@@ -127,7 +128,10 @@ async def bash(server_id: str, command: str) -> dict:
     """Execute a shell command on the target server via SSH."""
     cmd_type = CommandSafety.classify(command)
 
+    logger.info(f"\n[bash_tool] Executing: server={server_id[:8]}..., cmd_type={cmd_type.name}, command={command[:100]}")
+
     if cmd_type == CommandType.BLOCKED:
+        logger.warning(f"[bash_tool] BLOCKED: {command[:100]}")
         return {"error": "命令被系统拦截：此命令过于危险，禁止执行"}
 
     # READ / WRITE / DANGEROUS all execute here
@@ -135,12 +139,28 @@ async def bash(server_id: str, command: str) -> dict:
     try:
         connector = await get_connector(server_id)
     except ValueError as e:
+        logger.error(f"[bash_tool] Connection error: {e}")
         return {"error": str(e)}
-    result = await connector.execute(command)
+    try:
+        result = await connector.execute(command)
+    except (asyncio.TimeoutError, TimeoutError):
+        logger.warning(f"[bash_tool] Timeout after {connector.timeout}s")
+        return {
+            "exit_code": -1,
+            "stdout": "",
+            "stderr": f"命令执行超时（{connector.timeout}秒）。如果是后台启动命令，进程可能已成功启动，请用 ps/pgrep 确认。",
+            "error": None,
+        }
+
+    stdout_compressed = CommandSafety.compress_output(result.stdout)
+    logger.info(f"[bash_tool] Result: exit_code={result.exit_code}, stdout_len={len(stdout_compressed)}, stderr_len={len(result.stderr)}")
+    logger.debug(f"[bash_tool] stdout: {stdout_compressed[:500]}")
+    if result.stderr:
+        logger.debug(f"[bash_tool] stderr: {result.stderr[:500]}")
 
     return {
         "exit_code": result.exit_code,
-        "stdout": CommandSafety.compress_output(result.stdout),
+        "stdout": stdout_compressed,
         "stderr": result.stderr,
         "error": None,
     }

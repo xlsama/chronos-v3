@@ -194,30 +194,38 @@ class IncidentHistoryService:
     async def auto_save(self, incident: Incident, summary_md: str) -> dict:
         """Auto-save with similarity dedup. Returns {"action": "created|updated|skipped"}."""
         embedding = await self.embedder.embed_text(summary_md)
+        logger.info("[history_service] Embedding computed")
+
         similar = await self.find_similar(embedding, project_id=incident.project_id)
 
         if similar:
+            for rec, dist in similar:
+                logger.info(f"[history_service] Similar: id={str(rec.id)[:8]}, title='{rec.title}', distance={dist:.4f}")
+
             best, distance = similar[0]
             # distance < 0.08 → similarity > 0.92 → skip
             if distance < 0.08:
-                logger.info(f"Auto-save skipped: too similar to {best.id} (distance={distance:.4f})")
+                logger.info(f"[history_service] Decision: SKIP (distance={distance:.4f} < 0.08)")
                 return {"action": "skipped"}
             # distance 0.08~0.15 → similarity 0.85~0.92 → merge & update occurrence
             if distance < 0.15:
+                logger.info(f"[history_service] Decision: MERGE (distance={distance:.4f}, 0.08~0.15)")
                 merged = await _merge_summaries(best.summary_md, summary_md)
                 if merged:
                     best.summary_md = merged
                     best.embedding = await self.embedder.embed_text(merged)
                     _rewrite_md_file(best.id, merged)
-                    logger.info(f"Auto-save merged summary for {best.id}")
+                    logger.info(f"[history_service] Merge result: content updated")
+                else:
+                    logger.info(f"[history_service] Merge result: NO_CHANGE")
                 best.occurrence_count += 1
                 best.last_seen_at = datetime.now(timezone.utc)
                 incident.saved_to_memory = True
                 await self.session.commit()
-                logger.info(f"Auto-save updated occurrence for {best.id} (distance={distance:.4f})")
                 return {"action": "updated", "history_id": str(best.id)}
 
         # No match → create new
+        logger.info("[history_service] Decision: CREATE NEW")
         title = incident.summary_title or incident.description[:80]
 
         record = IncidentHistory(
@@ -235,7 +243,7 @@ class IncidentHistoryService:
         except Exception:
             filename = title
         _write_md_file(filename, summary_md, record_id=record.id)
-        logger.info(f"Auto-save created new history {record.id}")
+        logger.info(f"[history_service] Created: id={str(record.id)[:8]}, title='{title}'")
         return {"action": "created", "history_id": str(record.id)}
 
     async def list_all(

@@ -1,5 +1,6 @@
 from langchain_core.messages import ToolMessage
 
+from src.lib.logger import logger
 from src.ops_agent.state import OpsState
 
 
@@ -11,9 +12,12 @@ async def human_approval_node(state: OpsState) -> dict:
     On initial entry (before interrupt): sets needs_approval + pending_tool_call.
     On resume (after interrupt): checks approval_decision to route accordingly.
     """
+    sid = state["incident_id"][:8]
+
     if state.get("needs_approval"):
         # Resume path: check approval decision
         decision = state.get("approval_decision")
+        logger.info(f"[{sid}] [approval] Resume: decision={decision}")
 
         if decision == "rejected":
             # Inject a ToolMessage telling the LLM the command was rejected
@@ -47,6 +51,8 @@ async def human_approval_node(state: OpsState) -> dict:
     bash_calls = [
         tc for tc in last_message.tool_calls if tc["name"] == "bash"
     ]
+
+    logger.info(f"[{sid}] [approval] Initial entry: pending bash_calls={len(bash_calls)}")
 
     return {
         "needs_approval": True,

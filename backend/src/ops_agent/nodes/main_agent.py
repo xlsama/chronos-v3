@@ -84,6 +84,7 @@ async def _invoke_llm_with_retry(llm, messages):
 
 
 async def main_agent_node(state: OpsState) -> dict:
+    sid = state["incident_id"][:8]
     tools = build_tools()
     llm = get_llm().bind_tools(tools)
 
@@ -120,34 +121,50 @@ async def main_agent_node(state: OpsState) -> dict:
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
 
+    logger.info(f"[{sid}] [main] main_agent_node invoked, history={'yes' if history_summary else 'no'}, kb={'yes' if kb_summary else 'no'}")
+
     response = await _invoke_llm_with_retry(llm, messages)
+
+    content_text = response.content if hasattr(response, "content") else ""
+    tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
+    logger.info(f"\n[{sid}] [main] LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}")
+    if content_text:
+        logger.info(f"\n[{sid}] [main] LLM content:\n{content_text}\n")
+    for tc in tool_calls:
+        logger.info(f"\n[{sid}] [main] LLM tool_call: {tc['name']}({tc.get('args', {})})")
 
     return {"messages": [response]}
 
 
 def route_decision(state: OpsState) -> str:
+    sid = state["incident_id"][:8]
     last_message = state["messages"][-1]
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
         # Check ask_human count to prevent infinite loops
         if state.get("ask_human_count", 0) >= 5:
-            logger.warning(f"ask_human count exceeded limit for incident {state['incident_id']}, forcing complete")
+            logger.warning(f"[{sid}] [main] ask_human count exceeded limit, forcing complete")
             return "complete"
+        logger.info(f"[{sid}] [main] route_decision: no tool_calls -> ask_human")
         return "ask_human"
 
     for tool_call in last_message.tool_calls:
         name = tool_call["name"]
         if name == "complete":
+            logger.info(f"[{sid}] [main] route_decision: tool=complete -> complete")
             return "complete"
         if name == "ask_human":
             # Check ask_human count
             if state.get("ask_human_count", 0) >= 5:
-                logger.warning(f"ask_human count exceeded limit for incident {state['incident_id']}, forcing complete")
+                logger.warning(f"[{sid}] [main] ask_human count exceeded limit, forcing complete")
                 return "complete"
+            logger.info(f"[{sid}] [main] route_decision: tool=ask_human -> ask_human")
             return "ask_human"
         if name == "bash":
             cmd_type = CommandSafety.classify(tool_call["args"].get("command", ""))
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
+                logger.info(f"[{sid}] [main] route_decision: need_approval (cmd_type={cmd_type.name})")
                 return "need_approval"
 
+    logger.info(f"[{sid}] [main] route_decision: -> continue")
     return "continue"
