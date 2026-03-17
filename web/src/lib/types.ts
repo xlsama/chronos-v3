@@ -1,67 +1,14 @@
-export interface Connection {
+export interface Server {
   id: string;
   name: string;
-  type: string;
   description: string | null;
   host: string;
   port: number;
   username: string;
   status: string;
-  capabilities: string[];
-  scope_metadata: Record<string, unknown>;
   auth_method: "password" | "private_key" | "none";
-  project_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Service {
-  id: string;
-  project_id: string;
-  name: string;
-  slug: string;
-  service_type: string;
-  description: string | null;
-  business_context: string | null;
-  owner: string | null;
-  keywords: string[];
-  status: string;
-  source: string;
-  metadata: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ServiceDependency {
-  id: string;
-  project_id: string;
-  from_service_id: string;
-  to_service_id: string;
-  dependency_type: string;
-  description: string | null;
-  confidence: number;
-  created_at: string;
-}
-
-export interface ServiceConnectionBinding {
-  id: string;
-  project_id: string;
-  service_id: string;
-  connection_id: string;
-  usage_type: string;
-  priority: number;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface MonitoringSource {
-  id: string;
-  project_id: string;
-  name: string;
-  source_type: string;
-  endpoint: string;
-  status: string;
+  has_bastion: boolean;
+  bastion_host: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -78,12 +25,12 @@ export interface Attachment {
 
 export interface Incident {
   id: string;
-  title: string;
   description: string;
   status: string;
   severity: string;
   project_id: string | null;
   summary_md: string | null;
+  summary_title: string | null;
   thread_id: string | null;
   saved_to_memory: boolean;
   attachments?: Attachment[];
@@ -118,6 +65,7 @@ export interface SSEEvent {
   timestamp: string;
   phase?: string;
   agent?: string;
+  replay?: boolean;
 }
 
 export interface Project {
@@ -125,16 +73,9 @@ export interface Project {
   name: string;
   slug: string;
   description: string | null;
+  linked_server_ids: string[];
   created_at: string;
   updated_at: string;
-}
-
-export interface ProjectTopology {
-  project: Project;
-  services: Service[];
-  dependencies: ServiceDependency[];
-  connections: Connection[];
-  bindings: ServiceConnectionBinding[];
 }
 
 export interface ProjectDocument {
@@ -151,5 +92,27 @@ export interface ProjectDocumentDetail extends ProjectDocument {
   content: string;
 }
 
+export interface IncidentHistory {
+  id: string;
+  project_id: string | null;
+  title: string;
+  summary_md: string;
+  occurrence_count: number;
+  last_seen_at: string;
+  created_at: string;
+}
+
+export interface Skill {
+  slug: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillDetail extends Skill {
+  content: string;
+}
+
 export type SeverityLevel = "low" | "medium" | "high" | "critical";
-export type IncidentStatus = "open" | "investigating" | "resolved" | "closed";
+export type IncidentStatus = "open" | "investigating" | "resolved" | "closed" | "stopped";

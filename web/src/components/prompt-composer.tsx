@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Mic, Paperclip, Send, X } from "lucide-react";
+import { Check, Mic, Paperclip, Plus, Send, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -203,10 +203,10 @@ export function PromptComposer({
         </AnimatePresence>
 
         <PromptInputActions className="justify-between px-2 pb-1">
-          <PromptInputAction tooltip="添加附件">
+          <PromptInputAction tooltip="上传文件">
             <FileUploadTrigger asChild>
               <Button variant="ghost" size="icon" className="size-8 rounded-full" disabled={isRecording}>
-                <Paperclip className="size-4" />
+                <Plus className="size-4" />
               </Button>
             </FileUploadTrigger>
           </PromptInputAction>

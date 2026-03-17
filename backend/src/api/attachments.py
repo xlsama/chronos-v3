@@ -22,6 +22,7 @@ async def upload_files(
 ):
     settings = get_settings()
     upload_dir = Path(settings.upload_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
     results: list[Attachment] = []
 
     for file in files:

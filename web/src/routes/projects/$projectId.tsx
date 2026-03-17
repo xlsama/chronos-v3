@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getProject } from "@/api/projects";
-import { DocumentUpload } from "@/components/projects/document-upload";
+import { CreateDocumentButton, UploadDocumentButton } from "@/components/projects/document-upload";
 import { DocumentList } from "@/components/projects/document-list";
-import { ProjectTopologyPanel } from "@/components/projects/project-topology-panel";
+import { LinkedServersEditor } from "@/components/projects/linked-servers-editor";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/projects/$projectId")({
   component: ProjectDetailPage,
@@ -34,27 +33,28 @@ function ProjectDetailPage() {
 
   return (
     <div className="h-full">
-      <div className="border-b px-6 py-4">
-        <h1 className="text-base font-medium">{project.name}</h1>
-        {project.description && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            {project.description}
-          </p>
-        )}
+      <div className="border-b px-6 py-4 space-y-3">
+        <div>
+          <h1 className="text-base font-medium">{project.name}</h1>
+          {project.description && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {project.description}
+            </p>
+          )}
+        </div>
+        <LinkedServersEditor project={project} />
       </div>
 
-      <Tabs defaultValue="documents">
-        <div className="px-6 pt-4">
-          <TabsList>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-            <TabsTrigger value="topology">Topology</TabsTrigger>
-          </TabsList>
+      <div className="space-y-4 p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium">文档</h2>
+          <div className="flex items-center gap-2">
+            <UploadDocumentButton projectId={projectId} />
+            <CreateDocumentButton projectId={projectId} />
+          </div>
         </div>
-        <TabsContent value="documents" className="space-y-6 p-6">
-          <DocumentUpload projectId={projectId} />
-          <DocumentList projectId={projectId} />
-        </TabsContent>
-      </Tabs>
+        <DocumentList projectId={projectId} />
+      </div>
     </div>
   );
 }

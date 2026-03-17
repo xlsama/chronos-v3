@@ -25,6 +25,11 @@ class ForbiddenError(AppError):
         super().__init__(message, status_code=403)
 
 
+class BadRequestError(AppError):
+    def __init__(self, message: str = "Bad request"):
+        super().__init__(message, status_code=400)
+
+
 class ConflictError(AppError):
     def __init__(self, message: str = "Resource already modified"):
         super().__init__(message, status_code=409)

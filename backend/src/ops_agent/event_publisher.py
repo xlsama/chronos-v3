@@ -12,12 +12,16 @@ _EVENT_ROLE = {
     "thinking": "assistant",
     "tool_call": "assistant",
     "tool_result": "assistant",
+    "skill_used": "assistant",
     "ask_human": "assistant",
     "summary": "assistant",
     "approval_required": "system",
     "approval_decided": "system",
     "error": "system",
+    "incident_stopped": "system",
 }
+
+THINKING_FLUSH_THRESHOLD = 500
 
 
 class EventPublisher:
@@ -27,6 +31,7 @@ class EventPublisher:
         self._thinking_buffer: dict[tuple[str, str, str], dict] = {}  # (channel, phase, agent) -> {content, phase, agent}
 
     async def publish(self, channel: str, event_type: str, data: dict) -> None:
+        ts = datetime.now(timezone.utc)
         phase = data.get("phase", "")
         agent = data.get("agent", "")
 
@@ -37,28 +42,33 @@ class EventPublisher:
                 buf_key, {"content": "", "phase": phase, "agent": agent}
             )
             buf["content"] += data.get("content", "")
-            await self._publish_sse(channel, event_type, data)
+            await self._publish_sse(channel, event_type, data, ts)
+            # Auto-flush when buffer exceeds threshold to limit data loss window
+            if len(buf["content"]) >= THINKING_FLUSH_THRESHOLD:
+                await self._persist(channel, "thinking", buf, ts)
+                buf["content"] = ""
             return
 
         # Non-thinking event: flush accumulated thinking for this (channel, phase, agent) first
-        await self._flush_thinking(channel, phase, agent)
-        await self._persist(channel, event_type, data)
-        await self._publish_sse(channel, event_type, data)
+        await self._flush_thinking(channel, phase, agent, ts)
+        await self._persist(channel, event_type, data, ts)
+        await self._publish_sse(channel, event_type, data, ts)
 
     async def flush_remaining(self, channel: str) -> None:
         """Call when agent run ends to flush any remaining thinking buffer."""
+        ts = datetime.now(timezone.utc)
         keys_to_flush = [k for k in self._thinking_buffer if k[0] == channel]
         for key in keys_to_flush:
             buf = self._thinking_buffer.pop(key, None)
             if buf and buf["content"]:
-                await self._persist(channel, "thinking", buf)
+                await self._persist(channel, "thinking", buf, ts)
 
-    async def _flush_thinking(self, channel: str, phase: str = "", agent: str = "") -> None:
+    async def _flush_thinking(self, channel: str, phase: str = "", agent: str = "", ts: datetime | None = None) -> None:
         buf = self._thinking_buffer.pop((channel, phase, agent), None)
         if buf and buf["content"]:
-            await self._persist(channel, "thinking", buf)
+            await self._persist(channel, "thinking", buf, ts or datetime.now(timezone.utc))
 
-    async def _persist(self, channel: str, event_type: str, data: dict) -> None:
+    async def _persist(self, channel: str, event_type: str, data: dict, ts: datetime) -> None:
         if not self.session_factory:
             return
         try:
@@ -78,17 +88,18 @@ class EventPublisher:
                     event_type=event_type,
                     content=content,
                     metadata_json=metadata_str,
+                    created_at=ts,
                 )
                 session.add(msg)
                 await session.commit()
         except Exception as e:
             logger.error(f"Failed to persist event {event_type}: {e}")
 
-    async def _publish_sse(self, channel: str, event_type: str, data: dict) -> None:
+    async def _publish_sse(self, channel: str, event_type: str, data: dict, ts: datetime) -> None:
         payload = orjson.dumps({
             "event_type": event_type,
             "data": data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": ts.isoformat(),
         }).decode()
 
         await self.redis.publish(channel, payload)
@@ -102,12 +113,16 @@ class EventPublisher:
             return data.get("name", "")
         if event_type == "tool_result":
             return data.get("output", "")
+        if event_type == "skill_used":
+            return data.get("skill_name", "")
         if event_type == "ask_human":
             return data.get("question", "")
         if event_type == "summary":
             return data.get("summary_md", "")
         if event_type == "error":
             return data.get("message", "")
+        if event_type == "incident_stopped":
+            return data.get("reason", "")
         return ""
 
     @staticmethod
@@ -127,10 +142,18 @@ class EventPublisher:
                 "agent": data.get("agent", ""),
             }
         if event_type == "tool_result":
-            return {
+            meta = {
                 "name": data.get("name", ""),
                 "phase": data.get("phase", ""),
                 "agent": data.get("agent", ""),
+            }
+            if data.get("sources"):
+                meta["sources"] = data["sources"]
+            return meta
+        if event_type == "skill_used":
+            return {
+                "skill_name": data.get("skill_name", ""),
+                "content": data.get("content", ""),
             }
         if event_type == "approval_required":
             return {

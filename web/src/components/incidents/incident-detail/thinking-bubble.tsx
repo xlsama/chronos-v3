@@ -18,7 +18,7 @@ export function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
       <div className="mb-1 text-xs font-medium text-muted-foreground">
         Agent Thinking {isStreaming && "..."}
       </div>
-      <Markdown content={content} streaming={isStreaming} />
+      <Markdown content={content} streaming={isStreaming} variant="compact" />
     </div>
   );
 }

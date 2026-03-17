@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { getIncidentEvents } from "@/api/incidents";
 import { sseEventSchema } from "@/lib/schemas";
@@ -12,6 +12,7 @@ export function useIncidentStream(
   incidentId: string | undefined,
   status: string | undefined,
 ) {
+  const queryClient = useQueryClient();
   const eventSourceRef = useRef<EventSource | null>(null);
   const retriesRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -24,6 +25,8 @@ export function useIncidentStream(
     addEvent,
     appendThinking,
     clearThinking,
+    appendReportStream,
+    clearReportStream,
     appendSubAgentThinking,
     flushSubAgentThinking,
     addSubAgentEvent,
@@ -65,13 +68,17 @@ export function useIncidentStream(
 
     // Gate SSE on history being loaded
     if (loadedForRef.current !== incidentId) return;
-    // No SSE for completed incidents
-    if (status === "resolved" || status === "closed") return;
+    // No SSE for terminal incidents
+    if (status === "resolved" || status === "closed" || status === "stopped") return;
 
     retriesRef.current = 0;
 
     function connect() {
-      const es = new EventSource(`/api/incidents/${incidentId}/stream`);
+      let url = `/api/incidents/${incidentId}/stream`;
+      if (lastTimestampRef.current) {
+        url += `?since=${encodeURIComponent(lastTimestampRef.current)}`;
+      }
+      const es = new EventSource(url);
       eventSourceRef.current = es;
 
       es.onopen = () => {
@@ -86,33 +93,57 @@ export function useIncidentStream(
           if (!result.success) return;
 
           const event = result.data as SSEEvent;
+          const isReplay = event.replay === true;
 
-          // Dedup: skip events already covered by history
+          // Dedup: skip events already covered by history (only for non-replay)
           if (
+            !isReplay &&
             lastTimestampRef.current &&
             event.timestamp <= lastTimestampRef.current
           ) {
             return;
           }
 
+          // Update lastTimestamp for reconnection
+          lastTimestampRef.current = event.timestamp;
+
           const phase = (event.data.phase as string) || "";
           const agent = (event.data.agent as string) || "";
 
-          if (phase === "discover_project" || phase === "gather_context") {
+          // Replay events: DB records with complete content, route like loadHistory
+          if (isReplay) {
+            if (event.event_type === "approval_decided") {
+              setApprovalDecided(
+                event.data.approval_id as string,
+                event.data.decision as string,
+              );
+            } else if (
+              phase === "gather_context" &&
+              (agent === "history" || agent === "kb")
+            ) {
+              addSubAgentEvent(agent, event);
+            } else {
+              addEvent(event);
+            }
+            // Update phase state
+            if (phase === "gather_context") {
+              updatePhase("gather_context");
+            } else if (event.event_type === "summary") {
+              updatePhase("summary_complete");
+            } else if (phase) {
+              updatePhase(phase);
+            } else {
+              updatePhase("main");
+            }
+            return;
+          }
+
+          // Real-time events
+          if (phase === "gather_context") {
             updatePhase("gather_context");
           }
 
-          if (phase === "discover_project") {
-            if (event.event_type === "thinking") {
-              appendSubAgentThinking(
-                "discovery",
-                event.data.content as string,
-              );
-            } else {
-              flushSubAgentThinking("discovery", event.timestamp);
-              addSubAgentEvent("discovery", event);
-            }
-          } else if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
+          if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
             if (event.event_type === "thinking") {
               appendSubAgentThinking(agent, event.data.content as string);
             } else {
@@ -126,9 +157,22 @@ export function useIncidentStream(
               event.data.approval_id as string,
               event.data.decision as string,
             );
+          } else if (phase === "summarize" && event.event_type === "thinking") {
+            appendReportStream(event.data.content as string);
           } else if (event.event_type === "summary") {
-            updatePhase("summarize");
+            clearReportStream();
+            updatePhase("summary_complete");
             addEvent(event);
+            queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
+            queryClient.invalidateQueries({ queryKey: ["incidents"] });
+          } else if (event.event_type === "incident_stopped") {
+            addEvent(event);
+            // Close SSE and invalidate queries to refresh status
+            es.close();
+            eventSourceRef.current = null;
+            setConnected(false);
+            queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
+            queryClient.invalidateQueries({ queryKey: ["incidents"] });
           } else if (event.event_type === "ask_human") {
             updatePhase("main");
             setAskHumanQuestion(event.data.question as string);

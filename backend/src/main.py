@@ -12,13 +12,9 @@ from src.api.approvals import router as approvals_router
 from src.api.attachments import router as attachments_router
 from src.api.documents import router as documents_router
 from src.api.incidents import router as incidents_router
-from src.api.connections import router as connections_router
+from src.api.servers import router as servers_router
 from src.api.projects import router as projects_router
 from src.api.asr import router as asr_router
-from src.api.monitoring_sources import router as monitoring_sources_router
-from src.api.services import router as services_router
-from src.api.service_dependencies import router as service_dependencies_router
-from src.api.service_bindings import router as service_bindings_router
 from src.config import get_settings
 from src.lib.errors import AppError
 from src.lib.logger import logger
@@ -43,6 +39,7 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
     os.makedirs(settings.upload_dir, exist_ok=True)
+    os.makedirs("data/skills", exist_ok=True)
 
     for warning in settings.validate_production_secrets():
         logger.warning(warning)
@@ -56,7 +53,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize EventPublisher + AgentRunner
     publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
-    app.state.agent_runner = AgentRunner(publisher=publisher, checkpointer=checkpointer)
+    app.state.agent_runner = AgentRunner(publisher=publisher, checkpointer=checkpointer, redis=get_redis())
 
     logger.info("Agent runner initialized")
 
@@ -91,14 +88,17 @@ async def health():
     return {"status": "ok"}
 
 
-app.include_router(connections_router)
+from src.api.incident_history import router as incident_history_router
+from src.api.notification_settings import router as notification_settings_router
+from src.api.skills import router as skills_router
+
+app.include_router(servers_router)
 app.include_router(incidents_router)
 app.include_router(approvals_router)
 app.include_router(attachments_router)
 app.include_router(projects_router)
 app.include_router(documents_router)
-app.include_router(services_router)
-app.include_router(service_dependencies_router)
-app.include_router(service_bindings_router)
-app.include_router(monitoring_sources_router)
 app.include_router(asr_router)
+app.include_router(incident_history_router)
+app.include_router(notification_settings_router)
+app.include_router(skills_router)

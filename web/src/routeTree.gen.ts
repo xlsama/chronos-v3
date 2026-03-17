@@ -11,9 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SkillsIndexRouteImport } from './routes/skills/index'
+import { Route as ServersIndexRouteImport } from './routes/servers/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as IncidentsIndexRouteImport } from './routes/incidents/index'
-import { Route as ConnectionsIndexRouteImport } from './routes/connections/index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
 import { Route as IncidentsIncidentIdRouteImport } from './routes/incidents/$incidentId'
 
@@ -27,6 +27,11 @@ const SkillsIndexRoute = SkillsIndexRouteImport.update({
   path: '/skills/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ServersIndexRoute = ServersIndexRouteImport.update({
+  id: '/servers/',
+  path: '/servers/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
@@ -35,11 +40,6 @@ const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
 const IncidentsIndexRoute = IncidentsIndexRouteImport.update({
   id: '/incidents/',
   path: '/incidents/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ConnectionsIndexRoute = ConnectionsIndexRouteImport.update({
-  id: '/connections/',
-  path: '/connections/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
@@ -57,18 +57,18 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/connections/': typeof ConnectionsIndexRoute
   '/incidents/': typeof IncidentsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/servers/': typeof ServersIndexRoute
   '/skills/': typeof SkillsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/connections': typeof ConnectionsIndexRoute
   '/incidents': typeof IncidentsIndexRoute
   '/projects': typeof ProjectsIndexRoute
+  '/servers': typeof ServersIndexRoute
   '/skills': typeof SkillsIndexRoute
 }
 export interface FileRoutesById {
@@ -76,9 +76,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/connections/': typeof ConnectionsIndexRoute
   '/incidents/': typeof IncidentsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/servers/': typeof ServersIndexRoute
   '/skills/': typeof SkillsIndexRoute
 }
 export interface FileRouteTypes {
@@ -87,27 +87,27 @@ export interface FileRouteTypes {
     | '/'
     | '/incidents/$incidentId'
     | '/projects/$projectId'
-    | '/connections/'
     | '/incidents/'
     | '/projects/'
+    | '/servers/'
     | '/skills/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/incidents/$incidentId'
     | '/projects/$projectId'
-    | '/connections'
     | '/incidents'
     | '/projects'
+    | '/servers'
     | '/skills'
   id:
     | '__root__'
     | '/'
     | '/incidents/$incidentId'
     | '/projects/$projectId'
-    | '/connections/'
     | '/incidents/'
     | '/projects/'
+    | '/servers/'
     | '/skills/'
   fileRoutesById: FileRoutesById
 }
@@ -115,9 +115,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   IncidentsIncidentIdRoute: typeof IncidentsIncidentIdRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
-  ConnectionsIndexRoute: typeof ConnectionsIndexRoute
   IncidentsIndexRoute: typeof IncidentsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
+  ServersIndexRoute: typeof ServersIndexRoute
   SkillsIndexRoute: typeof SkillsIndexRoute
 }
 
@@ -137,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SkillsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/servers/': {
+      id: '/servers/'
+      path: '/servers'
+      fullPath: '/servers/'
+      preLoaderRoute: typeof ServersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects/': {
       id: '/projects/'
       path: '/projects'
@@ -149,13 +156,6 @@ declare module '@tanstack/react-router' {
       path: '/incidents'
       fullPath: '/incidents/'
       preLoaderRoute: typeof IncidentsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/connections/': {
-      id: '/connections/'
-      path: '/connections'
-      fullPath: '/connections/'
-      preLoaderRoute: typeof ConnectionsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/$projectId': {
@@ -179,9 +179,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   IncidentsIncidentIdRoute: IncidentsIncidentIdRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
-  ConnectionsIndexRoute: ConnectionsIndexRoute,
   IncidentsIndexRoute: IncidentsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
+  ServersIndexRoute: ServersIndexRoute,
   SkillsIndexRoute: SkillsIndexRoute,
 }
 export const routeTree = rootRouteImport

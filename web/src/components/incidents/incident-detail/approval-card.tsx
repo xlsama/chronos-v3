@@ -1,22 +1,17 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { motion } from "motion/react";
-import { ShieldAlert } from "lucide-react";
+import { ShieldAlert, AlertTriangle } from "lucide-react";
 import { decideApproval } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ShellCodeBlock } from "@/components/ui/shell-code-block";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 
 interface ApprovalCardProps {
   toolCall: Record<string, unknown> | null;
   approvalId?: string;
 }
-
-const riskColors: Record<string, string> = {
-  LOW: "bg-green-100 text-green-800",
-  MEDIUM: "bg-yellow-100 text-yellow-800",
-  HIGH: "bg-red-100 text-red-800",
-};
 
 export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
   const decidedApprovals = useIncidentStreamStore((s) => s.decidedApprovals);
@@ -51,53 +46,72 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
 
   const riskLevel = toolCall?.risk_level as string | undefined;
   const explanation = toolCall?.explanation as string | undefined;
-  const riskDetail = toolCall?.risk_detail as string | undefined;
+  const command = toolCall?.command as string | undefined;
+  const isHigh = riskLevel === "HIGH";
 
   return (
     <motion.div
-      className="rounded-lg border-2 border-yellow-300 bg-yellow-50/50 p-4"
+      className={cn(
+        "rounded-lg border-2 p-4",
+        isHigh
+          ? "border-red-300 bg-red-50/50"
+          : "border-yellow-300 bg-yellow-50/50",
+      )}
       data-testid="approval-card"
       data-approval-id={approvalId}
       initial={{ scale: 0.95, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
-      <div className="flex items-center gap-2 text-sm font-semibold text-yellow-800">
-        <ShieldAlert className="h-5 w-5" />
-        Approval Required
+      <div
+        className={cn(
+          "flex items-center gap-2 text-sm font-semibold",
+          isHigh ? "text-red-800" : "text-yellow-800",
+        )}
+      >
+        {isHigh ? (
+          <AlertTriangle className="h-5 w-5" />
+        ) : (
+          <ShieldAlert className="h-5 w-5" />
+        )}
+        {isHigh ? "高危操作审批" : "操作审批"}
+        {riskLevel && (
+          <span
+            className={cn(
+              "ml-2 inline-block rounded px-2 py-0.5 text-xs font-medium",
+              isHigh
+                ? "bg-red-100 text-red-800"
+                : "bg-yellow-100 text-yellow-800",
+            )}
+            data-testid="risk-level"
+          >
+            {riskLevel}
+          </span>
+        )}
       </div>
+
+      {isHigh && (
+        <div className="mt-2 rounded border border-red-200 bg-red-100/50 px-3 py-2 text-xs text-red-700">
+          此命令被识别为高危操作，请仔细确认后再审批
+        </div>
+      )}
 
       {toolCall && (
         <div className="mt-3 space-y-2">
-          <p className="text-sm">
-            <span className="font-medium">Command:</span>{" "}
-            {(toolCall as Record<string, string>)?.command ?? "N/A"}
-          </p>
+          {command && (
+            <div>
+              <span className="text-sm font-medium">命令:</span>
+              <ShellCodeBlock
+                code={command}
+                showPrompt={false}
+                className="mt-1 overflow-x-auto rounded bg-background p-2 text-xs"
+              />
+            </div>
+          )}
 
           {explanation && (
             <p className="text-sm">
-              <span className="font-medium">Explanation:</span> {explanation}
-            </p>
-          )}
-
-          {riskLevel && (
-            <p className="text-sm">
-              <span className="font-medium">Risk Level:</span>{" "}
-              <span
-                className={cn(
-                  "ml-1 inline-block rounded px-2 py-0.5 text-xs font-medium",
-                  riskColors[riskLevel] ?? "bg-gray-100 text-gray-800",
-                )}
-                data-testid="risk-level"
-              >
-                {riskLevel}
-              </span>
-            </p>
-          )}
-
-          {riskDetail && (
-            <p className="text-sm">
-              <span className="font-medium">Risk Detail:</span> {riskDetail}
+              <span className="font-medium">说明:</span> {explanation}
             </p>
           )}
         </div>
@@ -111,7 +125,7 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
             disabled={decideMutation.isPending}
             data-testid="approve-button"
           >
-            Approve
+            批准
           </Button>
           <Button
             size="sm"
@@ -120,7 +134,7 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
             disabled={decideMutation.isPending}
             data-testid="reject-button"
           >
-            Reject
+            拒绝
           </Button>
         </div>
       )}
@@ -128,10 +142,15 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
       {resolvedDecision && (
         <div className="mt-3">
           <span
-            className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800"
+            className={cn(
+              "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
+              resolvedDecision === "approved"
+                ? "bg-green-100 text-green-800"
+                : "bg-red-100 text-red-800",
+            )}
             data-testid="approval-decision"
           >
-            {resolvedDecision === "approved" ? "Approved" : "Rejected"}
+            {resolvedDecision === "approved" ? "已批准" : "已拒绝"}
           </span>
         </div>
       )}

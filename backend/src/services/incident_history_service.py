@@ -1,14 +1,114 @@
+import re
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Incident, IncidentHistory
 from src.lib.embedder import Embedder
+from src.lib.logger import logger
 from src.lib.reranker import Reranker
 
-HISTORY_DIR = Path(__file__).parent.parent.parent / "data" / "incident_history"
+
+async def _generate_title(summary_md: str) -> str:
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_openai import ChatOpenAI
+
+    from src.config import get_settings
+
+    s = get_settings()
+    llm = ChatOpenAI(model=s.mini_model, base_url=s.llm_base_url, api_key=s.dashscope_api_key)
+    resp = await llm.ainvoke([
+        SystemMessage(content=(
+            "你是一个标题生成器。根据以下事件排查报告，生成一个简短的中文标题（15-30字以内），"
+            "概括事件的核心问题和根因。只输出标题文本，不要加引号或其他格式。"
+        )),
+        HumanMessage(content=summary_md[:3000]),
+    ])
+    title = resp.content.strip().strip("\"'《》")
+    return title if title and len(title) <= 60 else summary_md[:30].replace("\n", " ")
+
+
+async def _generate_filename(title: str) -> str:
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_openai import ChatOpenAI
+
+    from src.config import get_settings
+
+    s = get_settings()
+    llm = ChatOpenAI(model=s.mini_model, base_url=s.llm_base_url, api_key=s.dashscope_api_key)
+    resp = await llm.ainvoke([
+        SystemMessage(content=(
+            "将以下中文标题翻译为英文文件名，使用 kebab-case 格式，3-8 个单词，"
+            "只输出文件名，不要加扩展名或其他格式。"
+        )),
+        HumanMessage(content=title),
+    ])
+    name = resp.content.strip().strip("\"'").lower()
+    name = re.sub(r"[^a-z0-9-]", "-", name)
+    name = re.sub(r"-+", "-", name).strip("-")
+    return name if name and len(name) <= 80 else "incident"
+
+
+async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_openai import ChatOpenAI
+
+    from src.config import get_settings
+
+    s = get_settings()
+    llm = ChatOpenAI(model=s.mini_model, base_url=s.llm_base_url, api_key=s.dashscope_api_key)
+    resp = await llm.ainvoke([
+        SystemMessage(content=(
+            "你是一个事件记录合并助手。你需要对比两份事件排查报告，将新报告中有价值的信息补充到已有报告中。\n\n"
+            "规则：\n"
+            "1. 以「已有报告」为基础，保持其整体结构和格式\n"
+            "2. 从「新报告」中提取真实的、有价值的新增信息，补充到对应章节中\n"
+            "3. 可补充的信息包括：不同的触发条件、额外的排查步骤、补充的根因细节、替代的修复方案\n"
+            "4. 不要编造任何信息，只补充新报告中实际记录的内容\n"
+            "5. 如果新报告没有任何值得补充的新信息，只输出 \"NO_CHANGE\"\n"
+            "6. 输出完整的合并后报告（Markdown 格式），不要输出解释说明"
+        )),
+        HumanMessage(content=f"## 已有报告\n\n{existing_md}\n\n## 新报告\n\n{new_md}"),
+    ])
+    result = resp.content.strip()
+    if result == "NO_CHANGE":
+        return None
+    return result
+
+
+def _sanitize_filename(title: str, max_length: int = 80) -> str:
+    name = re.sub(r'[<>:"/\\|?*\n\r\t]', '_', title)
+    name = re.sub(r'_+', '_', name).strip('_. ')
+    if len(name) > max_length:
+        name = name[:max_length].rstrip('_. ')
+    return name or "untitled"
+
+
+def _write_md_file(title: str, summary_md: str, record_id: uuid.UUID | None = None) -> Path | None:
+    try:
+        dir_path = Path("data/incident_history")
+        dir_path.mkdir(parents=True, exist_ok=True)
+        prefix = record_id.hex[:8] if record_id else uuid.uuid4().hex[:8]
+        filename = f"{prefix}_{_sanitize_filename(title)}.md"
+        file_path = dir_path / filename
+        file_path.write_text(summary_md, encoding="utf-8")
+        logger.info(f"Wrote incident history to {file_path}")
+        return file_path
+    except Exception as e:
+        logger.error(f"Failed to write incident history file: {e}")
+        return None
+
+
+def _rewrite_md_file(record_id: uuid.UUID, summary_md: str) -> None:
+    dir_path = Path("data/incident_history")
+    prefix = record_id.hex[:8]
+    matches = list(dir_path.glob(f"{prefix}_*.md"))
+    if matches:
+        matches[0].write_text(summary_md, encoding="utf-8")
+        logger.info(f"Rewrote incident history file: {matches[0]}")
 
 
 class IncidentHistoryService:
@@ -24,7 +124,6 @@ class IncidentHistoryService:
 
     async def save(
         self,
-        incident_id: uuid.UUID,
         project_id: uuid.UUID | None,
         title: str,
         summary_md: str,
@@ -32,28 +131,127 @@ class IncidentHistoryService:
         embedding = await self.embedder.embed_text(summary_md)
 
         record = IncidentHistory(
-            incident_id=incident_id,
             project_id=project_id,
             title=title,
             summary_md=summary_md,
             embedding=embedding,
         )
         self.session.add(record)
-
-        # Update incident.saved_to_memory
-        incident = await self.session.get(Incident, incident_id)
-        if incident:
-            incident.saved_to_memory = True
-
         await self.session.commit()
         await self.session.refresh(record)
-
-        # Write markdown file
-        HISTORY_DIR.mkdir(parents=True, exist_ok=True)
-        filename = f"{str(record.id)[:8]}_{title[:40].replace('/', '_')}.md"
-        (HISTORY_DIR / filename).write_text(summary_md, encoding="utf-8")
-
         return record
+
+    async def find_similar(
+        self,
+        embedding: list[float],
+        project_id: uuid.UUID | None = None,
+        limit: int = 5,
+    ) -> list[tuple[IncidentHistory, float]]:
+        stmt = (
+            select(
+                IncidentHistory,
+                IncidentHistory.embedding.cosine_distance(embedding).label("distance"),
+            )
+            .where(IncidentHistory.embedding.isnot(None))
+            .order_by("distance")
+            .limit(limit)
+        )
+        if project_id:
+            stmt = stmt.where(IncidentHistory.project_id == project_id)
+
+        result = await self.session.execute(stmt)
+        return [(row[0], row[1]) for row in result.all()]
+
+    async def update_occurrence(self, history_id: uuid.UUID) -> None:
+        record = await self.session.get(IncidentHistory, history_id)
+        if record:
+            record.occurrence_count += 1
+            record.last_seen_at = datetime.now(timezone.utc)
+            await self.session.commit()
+
+    async def auto_save(self, incident: Incident, summary_md: str) -> dict:
+        """Auto-save with similarity dedup. Returns {"action": "created|updated|skipped"}."""
+        embedding = await self.embedder.embed_text(summary_md)
+        similar = await self.find_similar(embedding, project_id=incident.project_id)
+
+        if similar:
+            best, distance = similar[0]
+            # distance < 0.08 → similarity > 0.92 → skip
+            if distance < 0.08:
+                logger.info(f"Auto-save skipped: too similar to {best.id} (distance={distance:.4f})")
+                return {"action": "skipped"}
+            # distance 0.08~0.15 → similarity 0.85~0.92 → merge & update occurrence
+            if distance < 0.15:
+                merged = await _merge_summaries(best.summary_md, summary_md)
+                if merged:
+                    best.summary_md = merged
+                    best.embedding = await self.embedder.embed_text(merged)
+                    _rewrite_md_file(best.id, merged)
+                    logger.info(f"Auto-save merged summary for {best.id}")
+                best.occurrence_count += 1
+                best.last_seen_at = datetime.now(timezone.utc)
+                incident.saved_to_memory = True
+                await self.session.commit()
+                logger.info(f"Auto-save updated occurrence for {best.id} (distance={distance:.4f})")
+                return {"action": "updated", "history_id": str(best.id)}
+
+        # No match → create new
+        title = incident.summary_title or incident.description[:80]
+
+        record = IncidentHistory(
+            project_id=incident.project_id,
+            title=title,
+            summary_md=summary_md,
+            embedding=embedding,
+        )
+        self.session.add(record)
+        incident.saved_to_memory = True
+        await self.session.commit()
+        await self.session.refresh(record)
+        try:
+            filename = await _generate_filename(title)
+        except Exception:
+            filename = title
+        _write_md_file(filename, summary_md, record_id=record.id)
+        logger.info(f"Auto-save created new history {record.id}")
+        return {"action": "created", "history_id": str(record.id)}
+
+    async def list_all(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        project_id: uuid.UUID | None = None,
+        query: str | None = None,
+    ) -> tuple[list[IncidentHistory], int]:
+        base = select(IncidentHistory)
+        if project_id:
+            base = base.where(IncidentHistory.project_id == project_id)
+        if query:
+            base = base.where(IncidentHistory.title.ilike(f"%{query}%"))
+
+        count_result = await self.session.execute(
+            select(func.count()).select_from(base.subquery())
+        )
+        total = count_result.scalar() or 0
+
+        stmt = (
+            base.order_by(IncidentHistory.last_seen_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all()), total
+
+    async def get(self, history_id: uuid.UUID) -> IncidentHistory | None:
+        return await self.session.get(IncidentHistory, history_id)
+
+    async def delete(self, history_id: uuid.UUID) -> bool:
+        record = await self.session.get(IncidentHistory, history_id)
+        if not record:
+            return False
+        await self.session.delete(record)
+        await self.session.commit()
+        return True
 
     async def search(
         self,
@@ -65,6 +263,7 @@ class IncidentHistoryService:
 
         stmt = (
             select(
+                IncidentHistory.id,
                 IncidentHistory.title,
                 IncidentHistory.summary_md,
                 IncidentHistory.embedding.cosine_distance(query_embedding).label("distance"),
@@ -82,6 +281,7 @@ class IncidentHistoryService:
 
         candidates = [
             {
+                "id": str(row.id),
                 "title": row.title,
                 "summary_md": row.summary_md,
                 "distance": row.distance,

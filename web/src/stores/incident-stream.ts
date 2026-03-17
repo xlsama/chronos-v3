@@ -16,17 +16,19 @@ interface SubAgentState {
 
 interface IncidentStreamState {
   events: SSEEvent[];
-  discoveryAgentState: SubAgentState;
   historyAgentState: SubAgentState;
   kbAgentState: SubAgentState;
   phaseState: PhaseState;
   isConnected: boolean;
   thinkingContent: string;
+  reportStreamContent: string;
   askHumanQuestion: string | null;
   decidedApprovals: Map<string, string>;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
+  appendReportStream: (content: string) => void;
+  clearReportStream: () => void;
   appendSubAgentThinking: (agent: string, content: string) => void;
   flushSubAgentThinking: (agent: string, timestamp: string) => void;
   addSubAgentEvent: (agent: string, event: SSEEvent) => void;
@@ -51,12 +53,12 @@ const initialPhaseState = (): PhaseState => ({
 
 export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   events: [],
-  discoveryAgentState: emptySubAgent(),
   historyAgentState: emptySubAgent(),
   kbAgentState: emptySubAgent(),
   phaseState: initialPhaseState(),
   isConnected: false,
   thinkingContent: "",
+  reportStreamContent: "",
   askHumanQuestion: null,
   decidedApprovals: new Map(),
 
@@ -69,14 +71,22 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   clearThinking: () => set({ thinkingContent: "" }),
 
+  appendReportStream: (content) =>
+    set((state) => {
+      const ps = { ...state.phaseState };
+      if (ps.investigation === "active") ps.investigation = "completed";
+      if (ps.report !== "active") ps.report = "active";
+      return {
+        reportStreamContent: state.reportStreamContent + content,
+        phaseState: ps,
+      };
+    }),
+
+  clearReportStream: () => set({ reportStreamContent: "" }),
+
   appendSubAgentThinking: (agent, content) =>
     set((state) => {
-      const key =
-        agent === "discovery"
-          ? "discoveryAgentState"
-          : agent === "kb"
-            ? "kbAgentState"
-            : "historyAgentState";
+      const key = agent === "kb" ? "kbAgentState" : "historyAgentState";
       return {
         [key]: {
           ...state[key],
@@ -87,12 +97,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   flushSubAgentThinking: (agent, timestamp) =>
     set((state) => {
-      const key =
-        agent === "discovery"
-          ? "discoveryAgentState"
-          : agent === "kb"
-            ? "kbAgentState"
-            : "historyAgentState";
+      const key = agent === "kb" ? "kbAgentState" : "historyAgentState";
       const agentState = state[key];
       if (!agentState.thinkingContent) return {};
       return {
@@ -103,7 +108,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
               event_type: "thinking",
               data: {
                 content: agentState.thinkingContent,
-                phase: agent === "discovery" ? "discover_project" : "gather_context",
+                phase: "gather_context",
                 agent,
               },
               timestamp,
@@ -116,12 +121,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   addSubAgentEvent: (agent, event) =>
     set((state) => {
-      const key =
-        agent === "discovery"
-          ? "discoveryAgentState"
-          : agent === "kb"
-            ? "kbAgentState"
-            : "historyAgentState";
+      const key = agent === "kb" ? "kbAgentState" : "historyAgentState";
       return {
         [key]: {
           ...state[key],
@@ -133,12 +133,16 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   updatePhase: (phase) =>
     set((state) => {
       const ps = { ...state.phaseState };
-      if (phase === "gather_context" || phase === "discover_project") {
+      if (phase === "gather_context") {
         if (ps.contextGathering === "pending") ps.contextGathering = "active";
       } else if (phase === "main") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
         if (ps.investigation === "pending") ps.investigation = "active";
       } else if (phase === "summarize") {
+        if (ps.contextGathering === "active") ps.contextGathering = "completed";
+        if (ps.investigation === "active") ps.investigation = "completed";
+        if (ps.report === "pending") ps.report = "active";
+      } else if (phase === "summary_complete") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
         if (ps.investigation === "active") ps.investigation = "completed";
         ps.report = "completed";
@@ -158,7 +162,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   setConnected: (connected) => set({ isConnected: connected }),
 
   loadHistory: (events) => {
-    const discoveryEvents: SSEEvent[] = [];
     const historyEvents: SSEEvent[] = [];
     const kbEvents: SSEEvent[] = [];
     const mainEvents: SSEEvent[] = [];
@@ -180,15 +183,13 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      if (event.event_type === "user_message") {
+      if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_used") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
         mainEvents.push(event);
         continue;
       }
 
-      if (phase === "discover_project") {
-        discoveryEvents.push(event);
-      } else if (phase === "gather_context") {
+      if (phase === "gather_context") {
         if (agent === "kb") {
           kbEvents.push(event);
         } else if (agent === "history") {
@@ -212,7 +213,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     }
 
     // Derive phase state from loaded events
-    const hasContext = discoveryEvents.length > 0 || historyEvents.length > 0 || kbEvents.length > 0;
+    const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
     const hasMain = mainEvents.some((e) => e.event_type !== "summary" && e.event_type !== "ask_human");
     const hasSummary = mainEvents.some((e) => e.event_type === "summary");
 
@@ -224,7 +225,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
     set({
       events: mainEvents,
-      discoveryAgentState: { events: discoveryEvents, thinkingContent: "" },
       historyAgentState: { events: historyEvents, thinkingContent: "" },
       kbAgentState: { events: kbEvents, thinkingContent: "" },
       phaseState: derivedPhase,
@@ -236,12 +236,12 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   reset: () =>
     set({
       events: [],
-      discoveryAgentState: emptySubAgent(),
       historyAgentState: emptySubAgent(),
       kbAgentState: emptySubAgent(),
       phaseState: initialPhaseState(),
       isConnected: false,
       thinkingContent: "",
+      reportStreamContent: "",
       askHumanQuestion: null,
       decidedApprovals: new Map(),
     }),

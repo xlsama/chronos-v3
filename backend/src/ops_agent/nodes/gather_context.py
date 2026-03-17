@@ -1,7 +1,10 @@
 import asyncio
+import uuid
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from src.db.connection import get_session_factory
+from src.db.models import Incident
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.state import OpsState
 from src.ops_agent.sub_agents.history_agent import run_history_agent
@@ -20,7 +23,7 @@ def _build_callback(channel: str, agent: str) -> EventCallback:
         return noop
 
     redis = get_redis()
-    publisher = EventPublisher(redis=redis)
+    publisher = EventPublisher(redis=redis, session_factory=get_session_factory())
 
     async def callback(event_type: str, data: dict) -> None:
         await publisher.publish(
@@ -32,7 +35,7 @@ def _build_callback(channel: str, agent: str) -> EventCallback:
     return callback
 
 
-async def _safe_run(coro_func, *args) -> str | None:
+async def _safe_run(coro_func, *args) -> Any:
     """Run a coroutine and return None on failure instead of raising."""
     try:
         return await coro_func(*args)
@@ -41,24 +44,52 @@ async def _safe_run(coro_func, *args) -> str | None:
         return None
 
 
+async def _update_incident_project(incident_id: str, project_id: str) -> None:
+    """Update incident's project_id in the database."""
+    try:
+        async with get_session_factory()() as session:
+            incident = await session.get(Incident, uuid.UUID(incident_id))
+            if incident:
+                incident.project_id = uuid.UUID(project_id)
+                await session.commit()
+                logger.info(f"Set project_id={project_id} for incident {incident_id}")
+    except Exception as e:
+        logger.error(f"Failed to update incident project: {e}")
+
+
 async def gather_context_node(state: OpsState) -> dict:
     """Run sub-agents to gather context before the main agent starts."""
     channel = state.get("_event_channel", "")
-    title = state["title"]
     description = state["description"]
     project_id = state.get("project_id", "")
+    incident_id = state["incident_id"]
 
     history_cb = _build_callback(channel, agent="history")
     kb_cb = _build_callback(channel, agent="kb")
 
-    # Build tasks list — always run history, run KB only if project_id is set
-    tasks = [_safe_run(run_history_agent, title, description, project_id, history_cb)]
-    if project_id:
-        tasks.append(_safe_run(run_kb_agent, title, description, project_id, kb_cb))
+    # Always run both sub-agents in parallel
+    history_result, kb_result = await asyncio.gather(
+        _safe_run(run_history_agent, description, project_id, history_cb),
+        _safe_run(run_kb_agent, description, project_id, kb_cb),
+    )
 
-    results = await asyncio.gather(*tasks)
+    # Extract project_id from KB agent result
+    kb_summary = None
+    discovered_project_id = ""
+    if isinstance(kb_result, dict):
+        kb_summary = kb_result.get("summary")
+        discovered_project_id = kb_result.get("project_id", "")
+    elif isinstance(kb_result, str):
+        kb_summary = kb_result
+
+    final_project_id = project_id or discovered_project_id
+
+    # Update incident project_id if discovered (and not already set)
+    if final_project_id and not project_id:
+        await _update_incident_project(incident_id, final_project_id)
 
     return {
-        "incident_history_summary": results[0],
-        "kb_summary": results[1] if len(results) > 1 else None,
+        "incident_history_summary": history_result if isinstance(history_result, str) else None,
+        "kb_summary": kb_summary,
+        "project_id": final_project_id or project_id,
     }

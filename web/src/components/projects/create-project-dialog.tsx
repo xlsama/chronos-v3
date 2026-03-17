@@ -26,7 +26,7 @@ export function CreateProjectDialog() {
   const mutation = useMutation({
     mutationFn: createProject,
     onSuccess: (project) => {
-      toast.success("Project created");
+      toast.success("项目已创建");
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       setOpen(false);
       navigate({
@@ -54,10 +54,10 @@ export function CreateProjectDialog() {
         if (!open) form.reset();
       }}
     >
-      <DialogTrigger render={<Button size="sm" />}>New Project</DialogTrigger>
+      <DialogTrigger render={<Button size="sm" />}>新建项目</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Project</DialogTitle>
+          <DialogTitle>创建项目</DialogTitle>
         </DialogHeader>
         <form
           onSubmit={(e) => {
@@ -79,9 +79,9 @@ export function CreateProjectDialog() {
                     field.state.meta.errors.length > 0 || undefined
                   }
                 >
-                  <FieldLabel>Name</FieldLabel>
+                  <FieldLabel>名称</FieldLabel>
                   <Input
-                    placeholder="Project name"
+                    placeholder="项目名称"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
@@ -97,9 +97,9 @@ export function CreateProjectDialog() {
             <form.Field name="description">
               {(field) => (
                 <Field>
-                  <FieldLabel>Description</FieldLabel>
+                  <FieldLabel>描述</FieldLabel>
                   <Textarea
-                    placeholder="Description (optional)"
+                    placeholder="描述（选填）"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     rows={3}
@@ -110,10 +110,10 @@ export function CreateProjectDialog() {
           </div>
           <DialogFooter className="mt-4">
             <DialogClose render={<Button variant="outline" />}>
-              Cancel
+              取消
             </DialogClose>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Creating..." : "Create"}
+              {mutation.isPending ? "创建中..." : "创建"}
             </Button>
           </DialogFooter>
         </form>

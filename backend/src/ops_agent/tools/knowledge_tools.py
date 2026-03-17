@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy import select
 
 from src.db.connection import get_session_factory
-from src.db.models import Connection, Project, Service, ServiceConnectionBinding, ServiceDependency
+from src.db.models import Server, Project, ProjectDocument
 from src.db.vector_store import VectorStore
 from src.lib.embedder import Embedder
 from src.lib.reranker import Reranker
@@ -49,7 +49,46 @@ def _format_source(filename: str, metadata: dict) -> str:
     return label
 
 
-async def search_knowledge_base(query: str, project_id: str) -> str:
+async def list_projects_for_matching() -> str:
+    """List all projects with their descriptions and linked servers for matching.
+
+    Returns:
+        Formatted string with all project information.
+    """
+    async with get_session_ctx() as session:
+        result = await session.execute(
+            select(Project).order_by(Project.created_at.desc())
+        )
+        projects = list(result.scalars().all())
+
+        if not projects:
+            return "当前没有任何项目。"
+
+        sections = []
+        for project in projects:
+            lines = [f"## 项目: {project.name} (ID: {project.id})"]
+            if project.description:
+                lines.append(f"描述: {project.description}")
+
+            # Get linked servers
+            server_ids = [uuid.UUID(sid) for sid in (project.linked_server_ids or [])]
+            if server_ids:
+                server_result = await session.execute(
+                    select(Server).where(Server.id.in_(server_ids))
+                )
+                servers = list(server_result.scalars().all())
+                if servers:
+                    lines.append("关联服务器:")
+                    for s in servers:
+                        host_info = f", host: {s.host}" if s.host else ""
+                        lines.append(f"  - {s.name} (ID: {s.id}{host_info})")
+
+            sections.append("\n".join(lines))
+
+        return "\n---\n".join(sections)
+
+
+async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[dict]]:
     """Search the project knowledge base for relevant context.
 
     Args:
@@ -57,81 +96,53 @@ async def search_knowledge_base(query: str, project_id: str) -> str:
         project_id: The project ID to search within.
 
     Returns:
-        Formatted string with relevant knowledge base context.
+        Tuple of (formatted text, sources list).
     """
     async with get_session_ctx() as session:
         project = await session.get(Project, uuid.UUID(project_id))
         if not project:
-            return f"未找到项目 (ID: {project_id})"
+            return (f"未找到项目 (ID: {project_id})", [])
 
         sections = []
+        sources: list[dict] = []
+        seen_doc_ids: set[str] = set()
 
-        service_result = await session.execute(
-            select(Service).where(Service.project_id == uuid.UUID(project_id)).order_by(Service.name)
+        # Get SERVICE.md
+        service_map_result = await session.execute(
+            select(ProjectDocument).where(
+                ProjectDocument.project_id == uuid.UUID(project_id),
+                ProjectDocument.doc_type == "service_map",
+            ).limit(1)
         )
-        dependency_result = await session.execute(
-            select(ServiceDependency).where(ServiceDependency.project_id == uuid.UUID(project_id))
-        )
-        connection_result = await session.execute(
-            select(Connection).where(Connection.status != "offline").order_by(Connection.name)
-        )
-        binding_result = await session.execute(
-            select(ServiceConnectionBinding).where(ServiceConnectionBinding.project_id == uuid.UUID(project_id))
-        )
+        service_map = service_map_result.scalar_one_or_none()
+        if service_map:
+            sections.append(f"## 服务架构\n\n{service_map.content}")
+            sources.append({"type": "document", "id": str(service_map.id), "filename": service_map.filename})
+            seen_doc_ids.add(str(service_map.id))
 
-        services = list(service_result.scalars().all())
-        dependencies = list(dependency_result.scalars().all())
-        connections = list(connection_result.scalars().all())
-        bindings = list(binding_result.scalars().all())
+        # Get servers via project.linked_server_ids
+        server_ids = [uuid.UUID(sid) for sid in (project.linked_server_ids or [])]
+        if server_ids:
+            server_result = await session.execute(
+                select(Server).where(
+                    Server.id.in_(server_ids),
+                    Server.status != "offline",
+                ).order_by(Server.name)
+            )
+            servers = list(server_result.scalars().all())
+        else:
+            servers = []
 
-        if services:
-            service_lines = []
-            for service in services:
-                service_lines.append(f"### {service.name} ({service.service_type}, id: {service.id})")
-                if service.description:
-                    service_lines.append(f"- 描述: {service.description}")
-                if service.business_context:
-                    service_lines.append(f"- 业务上下文: {service.business_context}")
-                if service.keywords:
-                    service_lines.append(f"- 关键词: {', '.join(service.keywords)}")
-                service_lines.append(f"- 状态: {service.status}")
-            sections.append("## 服务拓扑\n\n" + "\n".join(service_lines))
-
-        if dependencies:
-            service_name_map = {str(service.id): service.name for service in services}
-            dependency_lines = []
-            for dependency in dependencies:
-                dependency_lines.append(
-                    f"- {service_name_map.get(str(dependency.from_service_id), str(dependency.from_service_id))} "
-                    f"--[{dependency.dependency_type}]--> "
-                    f"{service_name_map.get(str(dependency.to_service_id), str(dependency.to_service_id))}"
-                )
-            sections.append("## 服务依赖\n\n" + "\n".join(dependency_lines))
-
-        if connections:
-            connection_lines = []
-            for conn in connections:
-                connection_lines.append(f"### {conn.name} ({conn.type}, id: {conn.id})")
-                if conn.description:
-                    connection_lines.append(f"- 描述: {conn.description}")
-                connection_lines.append(f"- 状态: {conn.status}")
-                if conn.host:
-                    connection_lines.append(f"- 入口: {conn.username}@{conn.host}:{conn.port}")
-                if conn.capabilities:
-                    connection_lines.append(f"- 能力: {', '.join(conn.capabilities)}")
-            sections.append("## 执行入口\n\n" + "\n".join(connection_lines))
-
-        if bindings:
-            service_name_map = {str(service.id): service.name for service in services}
-            connection_name_map = {str(conn.id): conn.name for conn in connections}
-            binding_lines = []
-            for binding in bindings:
-                binding_lines.append(
-                    f"- {service_name_map.get(str(binding.service_id), str(binding.service_id))} -> "
-                    f"{connection_name_map.get(str(binding.connection_id), str(binding.connection_id))} "
-                    f"({binding.usage_type}, priority={binding.priority})"
-                )
-            sections.append("## 服务与执行入口绑定\n\n" + "\n".join(binding_lines))
+        if servers:
+            server_lines = []
+            for s in servers:
+                server_lines.append(f"### {s.name} (SSH, id: {s.id})")
+                if s.description:
+                    server_lines.append(f"- 描述: {s.description}")
+                server_lines.append(f"- 状态: {s.status}")
+                if s.host:
+                    server_lines.append(f"- 入口: {s.username}@{s.host}:{s.port}")
+            sections.append("## 执行入口\n\n" + "\n".join(server_lines))
 
         # Vector search for relevant document chunks
         embedder = _get_embedder()
@@ -162,7 +173,17 @@ async def search_knowledge_base(query: str, project_id: str) -> str:
             )
             sections.append(f"## 相关文档片段\n\n{chunks_text}")
 
-        if not sections:
-            return "没有找到与查询相关的知识库内容。"
+            # Collect unique document sources
+            for r in results:
+                doc_id = r["document_id"]
+                if doc_id not in seen_doc_ids:
+                    seen_doc_ids.add(doc_id)
+                    source: dict = {"type": "document", "id": doc_id, "filename": r["filename"]}
+                    if "page" in r.get("metadata", {}):
+                        source["page"] = r["metadata"]["page"]
+                    sources.append(source)
 
-        return "\n\n---\n\n".join(sections)
+        if not sections:
+            return ("没有找到与查询相关的知识库内容。", [])
+
+        return ("\n\n---\n\n".join(sections), sources)

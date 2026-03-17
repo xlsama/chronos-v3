@@ -36,9 +36,10 @@ export function getIncidentEvents(incidentId: string) {
   return request<SSEEvent[]>(`/incidents/${incidentId}/events`);
 }
 
-export function saveToMemory(incidentId: string) {
-  return request<{ ok: boolean; incident_history_id?: string; error?: string }>(
-    `/incidents/${incidentId}/save-to-memory`,
-    { method: "POST" },
-  );
+
+export function stopIncident(incidentId: string) {
+  return request<{ ok: boolean }>(`/incidents/${incidentId}/stop`, {
+    method: "POST",
+  });
 }
+

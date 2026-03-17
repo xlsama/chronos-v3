@@ -1,5 +1,5 @@
 import { request } from "@/lib/request";
-import type { Project, ProjectTopology } from "@/lib/types";
+import type { Project } from "@/lib/types";
 
 export function getProjects() {
   return request<Project[]>("/projects");
@@ -13,8 +13,15 @@ export function createProject(data: { name: string; description?: string }) {
   return request<Project>("/projects", { method: "POST", body: data });
 }
 
-export function getProjectTopology(id: string) {
-  return request<ProjectTopology>(`/projects/${id}/topology`);
+export function updateProject(
+  id: string,
+  data: {
+    name?: string;
+    description?: string;
+    linked_server_ids?: string[];
+  },
+) {
+  return request<Project>(`/projects/${id}`, { method: "PATCH", body: data });
 }
 
 export function deleteProject(id: string) {

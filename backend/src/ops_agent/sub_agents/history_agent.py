@@ -13,16 +13,20 @@ EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
 
 
 def _build_search_tool(project_id: str):
+    _last_sources: list[dict] = []
+
     @tool
     async def search_incident_history(query: str) -> str:
         """Search historical incident records for similar past events."""
-        return await _search_incident_history(query=query, project_id=project_id)
+        text, sources = await _search_incident_history(query=query, project_id=project_id)
+        _last_sources.clear()
+        _last_sources.extend(sources)
+        return text
 
-    return search_incident_history
+    return search_incident_history, _last_sources
 
 
 async def run_history_agent(
-    title: str,
     description: str,
     project_id: str,
     event_callback: EventCallback,
@@ -39,12 +43,12 @@ async def run_history_agent(
         streaming=True,
     )
 
-    search_tool = _build_search_tool(project_id)
+    search_tool, last_sources = _build_search_tool(project_id)
     llm_with_tools = llm.bind_tools([search_tool])
 
     messages = [
         SystemMessage(content=HISTORY_AGENT_SYSTEM_PROMPT),
-        HumanMessage(content=f"当前事件标题: {title}\n当前事件描述: {description}"),
+        HumanMessage(content=f"当前事件描述: {description}"),
     ]
 
     max_iterations = 5
@@ -78,6 +82,7 @@ async def run_history_agent(
             await event_callback("tool_result", {
                 "name": "search_incident_history",
                 "output": str(result),
+                "sources": list(last_sources),
             })
 
             from langchain_core.messages import ToolMessage

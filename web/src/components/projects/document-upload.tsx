@@ -1,50 +1,31 @@
-import { useCallback } from "react";
-import { useDropzone } from "react-dropzone";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
-import { Upload } from "lucide-react";
+import { FilePlus, Upload } from "lucide-react";
 import { uploadDocument, uploadDocumentFile } from "@/api/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-const ACCEPTED_TYPES: Record<string, string[]> = {
-  "application/pdf": [".pdf"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-    ".docx",
-  ],
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-    ".xlsx",
-  ],
-  "application/vnd.ms-excel": [".xls"],
-  "text/csv": [".csv"],
-  "text/markdown": [".md"],
-  "text/plain": [".txt"],
-};
+const ACCEPTED_EXTENSIONS = ".pdf,.docx,.xlsx,.xls,.csv,.md,.txt";
 
 interface DocumentUploadProps {
   projectId: string;
 }
 
-export function DocumentUpload({ projectId }: DocumentUploadProps) {
+export function UploadDocumentButton({ projectId }: DocumentUploadProps) {
   const queryClient = useQueryClient();
-
-  const textMutation = useMutation({
-    mutationFn: (data: { filename: string; content: string }) =>
-      uploadDocument(projectId, {
-        filename: data.filename,
-        content: data.content,
-        doc_type: "markdown",
-      }),
-    onSuccess: () => {
-      toast.success("文件已上传，正在索引中...");
-      queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
-      form.reset();
-    },
-  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fileMutation = useMutation({
     mutationFn: (file: File) => uploadDocumentFile(projectId, file),
@@ -57,70 +38,76 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
     },
   });
 
+  return (
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_EXTENSIONS}
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          if (!files) return;
+          for (const file of Array.from(files)) {
+            fileMutation.mutate(file);
+          }
+          e.target.value = "";
+        }}
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={fileMutation.isPending}
+      >
+        <Upload className="mr-1 h-3.5 w-3.5" />
+        {fileMutation.isPending ? "上传中..." : "上传文档"}
+      </Button>
+    </>
+  );
+}
+
+export function CreateDocumentButton({ projectId }: DocumentUploadProps) {
+  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const createMutation = useMutation({
+    mutationFn: (data: { filename: string; content: string }) =>
+      uploadDocument(projectId, {
+        filename: data.filename,
+        content: data.content,
+        doc_type: "markdown",
+      }),
+    onSuccess: () => {
+      toast.success("文档已创建，正在索引中...");
+      queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
+      setOpen(false);
+      form.reset();
+    },
+  });
+
   const form = useForm({
     defaultValues: { filename: "", content: "" },
     onSubmit: ({ value }) => {
-      textMutation.mutate(value);
+      const filename = value.filename.endsWith(".md")
+        ? value.filename
+        : `${value.filename}.md`;
+      createMutation.mutate({ filename, content: value.content });
     },
-  });
-
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      for (const file of acceptedFiles) {
-        fileMutation.mutate(file);
-      }
-    },
-    [fileMutation],
-  );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: ACCEPTED_TYPES,
-    multiple: true,
   });
 
   return (
-    <div className="space-y-4 rounded-lg border p-4">
-      <h3 className="text-sm font-medium">Upload Document</h3>
-
-      <Tabs defaultValue="file">
-        <TabsList variant="line">
-          <TabsTrigger value="file">File Upload</TabsTrigger>
-          <TabsTrigger value="text">Paste Text</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="file" className="pt-4">
-          <div
-            {...getRootProps()}
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
-              isDragActive
-                ? "border-primary bg-primary/5"
-                : "border-muted-foreground/25 hover:border-primary/50"
-            }`}
-          >
-            <input {...getInputProps()} />
-            <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
-            {isDragActive ? (
-              <p className="text-sm text-primary">Drop files here...</p>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Drag & drop files here, or click to select
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground/70">
-                  PDF, Word, Excel, CSV, Markdown, Text
-                </p>
-              </>
-            )}
-            {fileMutation.isPending && (
-              <p className="mt-2 text-sm text-primary animate-pulse">
-                Uploading...
-              </p>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="text" className="pt-4">
+    <>
+      <Button size="sm" onClick={() => setOpen(true)}>
+        <FilePlus className="mr-1 h-3.5 w-3.5" />
+        新建文档
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>新建文档</DialogTitle>
+          </DialogHeader>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -141,7 +128,7 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
                     field.state.meta.errors.length > 0 || undefined
                   }
                 >
-                  <FieldLabel>Filename</FieldLabel>
+                  <FieldLabel>文件名</FieldLabel>
                   <Input
                     placeholder="e.g. deploy-guide.md"
                     value={field.state.value}
@@ -169,13 +156,13 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
                     field.state.meta.errors.length > 0 || undefined
                   }
                 >
-                  <FieldLabel>Content</FieldLabel>
+                  <FieldLabel>内容</FieldLabel>
                   <MarkdownEditor
                     value={field.state.value}
                     onChange={field.handleChange}
                     onBlur={field.handleBlur}
-                    minHeight={160}
-                    placeholder="Paste document content here..."
+                    minHeight={200}
+                    placeholder="输入 Markdown 内容..."
                   />
                   <FieldError
                     errors={field.state.meta.errors.map((e) => ({
@@ -185,12 +172,17 @@ export function DocumentUpload({ projectId }: DocumentUploadProps) {
                 </Field>
               )}
             </form.Field>
-            <Button size="sm" type="submit" disabled={textMutation.isPending}>
-              {textMutation.isPending ? "Uploading..." : "Upload"}
-            </Button>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" />}>
+                取消
+              </DialogClose>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "创建中..." : "创建"}
+              </Button>
+            </DialogFooter>
           </form>
-        </TabsContent>
-      </Tabs>
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

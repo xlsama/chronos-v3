@@ -19,12 +19,13 @@ from src.api.schemas import (
 from src.config import get_settings
 from src.db.connection import get_session, get_session_factory
 from src.db.models import Attachment, Incident, Message
-from src.lib.errors import NotFoundError
+from src.lib.errors import BadRequestError, NotFoundError
 from src.lib.logger import logger
 from src.lib.redis import get_redis
+from src.ops_agent.event_publisher import EventPublisher
 from src.services.agent_runner import AgentRunner
-from src.services.incident_history_service import IncidentHistoryService
 from src.services.incident_service import IncidentService
+from src.services.notification_service import notify_fire_and_forget
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -32,7 +33,6 @@ router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 async def _start_agent_background(
     runner: AgentRunner,
     incident_id: str,
-    title: str,
     description: str,
     severity: str,
     project_id: str,
@@ -40,7 +40,6 @@ async def _start_agent_background(
     try:
         thread_id = await runner.start(
             incident_id=incident_id,
-            title=title,
             description=description,
             severity=severity,
             project_id=project_id,
@@ -54,6 +53,7 @@ async def _start_agent_background(
                 incident.status = "investigating"
                 await session.commit()
                 logger.info(f"Agent started for incident {incident_id}, thread {thread_id}")
+                notify_fire_and_forget("investigating", incident_id, description[:80])
     except Exception as e:
         logger.error(f"Failed to start agent for incident {incident_id}: {e}")
 
@@ -74,11 +74,12 @@ async def create_incident(
         _start_agent_background,
         runner,
         str(incident.id),
-        incident.title,
         body.description,
         body.severity,
         str(body.project_id or ""),
     )
+
+    notify_fire_and_forget("open", str(incident.id), body.description[:80])
 
     return incident
 
@@ -147,6 +148,10 @@ def _message_to_event(m: Message) -> dict:
         data = metadata
     elif m.event_type == "user_message":
         data = {"content": m.content}
+    elif m.event_type == "skill_used":
+        data = metadata
+    elif m.event_type == "incident_stopped":
+        data = {"reason": m.content}
     else:
         data = {"content": m.content}
 
@@ -171,17 +176,46 @@ async def get_incident_events(
 
 
 @router.get("/{incident_id}/stream")
-async def stream_incident(incident_id: uuid.UUID):
+async def stream_incident(incident_id: uuid.UUID, since: str | None = None):
     redis = get_redis()
     channel = f"incident:{incident_id}"
 
     async def event_generator():
         pubsub = redis.pubsub()
-        await pubsub.subscribe(channel)
+        await pubsub.subscribe(channel)  # Subscribe first to avoid gap
+        last_ts = since or ""
         try:
+            # Replay events from DB that occurred after `since`
+            if since:
+                from datetime import datetime
+
+                since_dt = datetime.fromisoformat(since)
+                factory = get_session_factory()
+                async with factory() as session:
+                    result = await session.execute(
+                        select(Message)
+                        .where(Message.incident_id == incident_id)
+                        .where(Message.created_at > since_dt)
+                        .order_by(Message.created_at)
+                    )
+                    for m in result.scalars():
+                        evt = _message_to_event(m)
+                        evt["replay"] = True
+                        last_ts = evt["timestamp"]
+                        yield {"data": orjson.dumps(evt).decode()}
+
+            # Real-time mode: forward Redis pubsub messages, dedup against replayed events
             while True:
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if msg and msg["type"] == "message":
+                    if last_ts:
+                        try:
+                            parsed = orjson.loads(msg["data"])
+                            if parsed.get("timestamp", "") <= last_ts:
+                                continue
+                            last_ts = parsed["timestamp"]
+                        except Exception:
+                            pass
                     yield {"data": msg["data"]}
                 else:
                     await asyncio.sleep(0.1)
@@ -233,27 +267,34 @@ async def send_user_message(
     return {"ok": True, "message_id": str(message.id)}
 
 
-@router.post("/{incident_id}/save-to-memory")
-async def save_to_memory(
+
+@router.post("/{incident_id}/stop")
+async def stop_incident(
     incident_id: uuid.UUID,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     incident = await session.get(Incident, incident_id)
     if not incident:
         raise NotFoundError("Incident not found")
+    if incident.status not in ("open", "investigating"):
+        raise BadRequestError("Incident is not active")
 
-    if incident.saved_to_memory:
-        return {"ok": False, "error": "already_saved"}
+    # Set Redis cancel flag
+    redis = get_redis()
+    await redis.set(f"incident:{incident_id}:cancel", "stopped", ex=300)
 
-    if not incident.summary_md:
-        return {"ok": False, "error": "no_summary"}
+    # Update DB status
+    incident.status = "stopped"
+    await session.commit()
 
-    service = IncidentHistoryService(session=session)
-    record = await service.save(
-        incident_id=incident.id,
-        project_id=incident.project_id,
-        title=incident.title,
-        summary_md=incident.summary_md,
-    )
+    # Publish SSE event
+    runner: AgentRunner = request.app.state.agent_runner
+    channel = EventPublisher.channel_for_incident(str(incident_id))
+    await runner.publisher.publish(channel, "incident_stopped", {"reason": "stopped"})
 
-    return {"ok": True, "incident_history_id": str(record.id)}
+    notify_fire_and_forget("stopped", str(incident_id), incident.summary_title or incident.description[:80])
+
+    return {"ok": True}
+
+

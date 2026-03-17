@@ -10,19 +10,19 @@ async def human_approval_node(state: OpsState) -> dict:
     On resume (after interrupt): clears approval state so graph continues to tools.
     """
     if state.get("needs_approval"):
-        # Resume path: clear approval state (Gap D)
+        # Resume path: clear approval state
         return {
             "needs_approval": False,
             "pending_tool_call": None,
         }
 
-    # Initial entry: extract pending write tool call
+    # Initial entry: extract pending bash tool call
     last_message = state["messages"][-1]
-    write_calls = [
-        tc for tc in last_message.tool_calls if tc["name"] == "exec_write"
+    bash_calls = [
+        tc for tc in last_message.tool_calls if tc["name"] == "bash"
     ]
 
     return {
         "needs_approval": True,
-        "pending_tool_call": write_calls[0] if write_calls else None,
+        "pending_tool_call": bash_calls[0] if bash_calls else None,
     }

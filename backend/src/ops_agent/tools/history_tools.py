@@ -4,7 +4,7 @@ from src.db.connection import get_session_factory
 from src.services.incident_history_service import IncidentHistoryService
 
 
-async def search_incident_history(query: str, project_id: str = "") -> str:
+async def search_incident_history(query: str, project_id: str = "") -> tuple[str, list[dict]]:
     """Search historical incident records for similar past events.
 
     Args:
@@ -12,7 +12,7 @@ async def search_incident_history(query: str, project_id: str = "") -> str:
         project_id: Optional project ID to filter results.
 
     Returns:
-        Formatted string with relevant historical incidents.
+        Tuple of (formatted text, sources list).
     """
     factory = get_session_factory()
     async with factory() as session:
@@ -21,7 +21,12 @@ async def search_incident_history(query: str, project_id: str = "") -> str:
         results = await service.search(query=query, project_id=pid, limit=5)
 
     if not results:
-        return "暂无相似历史事件。"
+        return ("暂无相似历史事件。", [])
+
+    sources = [
+        {"type": "incident_history", "id": r["id"], "title": r["title"]}
+        for r in results
+    ]
 
     sections = []
     for r in results:
@@ -31,4 +36,5 @@ async def search_incident_history(query: str, project_id: str = "") -> str:
             f"{r['summary_md']}"
         )
 
-    return "## 历史事件参考\n\n" + "\n\n---\n\n".join(sections)
+    text = "## 历史事件参考\n\n" + "\n\n---\n\n".join(sections)
+    return (text, sources)

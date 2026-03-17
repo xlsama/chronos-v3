@@ -201,3 +201,17 @@
 
   strong { font-weight: 600; }
 }
+
+.prose :where(code):not(:where(pre *)) {
+  background-color: oklch(0.95 0 0);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  font-weight: 500;
+  color: oklch(0.4 0 0);
+}
+
+.prose :where(code):not(:where(pre *))::before,
+.prose :where(code):not(:where(pre *))::after {
+  content: none;
+}

@@ -7,11 +7,18 @@ import { useIncidentStreamStore } from "@/stores/incident-stream";
 
 interface UserInputBarProps {
   incidentId: string;
+  incidentStatus?: string;
 }
 
-export function UserInputBar({ incidentId }: UserInputBarProps) {
+const TERMINAL_STATUSES = ["resolved", "closed", "stopped"];
+
+export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) {
   const queryClient = useQueryClient();
   const { askHumanQuestion, setAskHumanQuestion } = useIncidentStreamStore();
+
+  const isTerminal = !!incidentStatus && TERMINAL_STATUSES.includes(incidentStatus);
+  const isAgentWorking = incidentStatus === "investigating" && !askHumanQuestion;
+  const isInputDisabled = isTerminal || isAgentWorking;
 
   const mutation = useMutation({
     mutationFn: async ({
@@ -41,6 +48,14 @@ export function UserInputBar({ incidentId }: UserInputBarProps) {
     [mutation],
   );
 
+  const placeholder = isTerminal
+    ? "事件已结束"
+    : isAgentWorking
+      ? "Agent 正在调查中..."
+      : askHumanQuestion
+        ? "回复 Agent 的问题..."
+        : "Send a message to the agent...";
+
   return (
     <div className="border-t p-4">
       {askHumanQuestion && (
@@ -54,12 +69,8 @@ export function UserInputBar({ incidentId }: UserInputBarProps) {
       <PromptComposer
         onSubmit={handleSubmit}
         isLoading={mutation.isPending}
-        disabled={mutation.isPending}
-        placeholder={
-          askHumanQuestion
-            ? "回复 Agent 的问题..."
-            : "Send a message to the agent..."
-        }
+        disabled={isInputDisabled || mutation.isPending}
+        placeholder={placeholder}
       />
     </div>
   );

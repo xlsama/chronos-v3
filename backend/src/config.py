@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     asr_model: str = "qwen3-asr-flash-realtime"
     dashscope_ws_url: str = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
 
+    # Agent
+    agent_recursion_limit: int = 200
+
     # Upload
     upload_dir: str = "uploads"
 

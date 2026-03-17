@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export type FileType =
   | "markdown"
+  | "service_map"
   | "text"
   | "log"
   | "json"
@@ -29,6 +30,7 @@ export interface FilePreviewProps {
 /** 以 markdown 渲染的类型 */
 const MARKDOWN_TYPES = new Set<FileType>([
   "markdown",
+  "service_map",
   "word",
   "excel",
   "pptx",
@@ -68,7 +70,7 @@ export function FilePreview({
     return (
       <ScrollArea className={cn("h-full", className)}>
         <div className="p-4">
-          <Markdown content={content} />
+          <Markdown content={content} variant="compact" />
         </div>
       </ScrollArea>
     );

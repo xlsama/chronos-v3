@@ -13,17 +13,11 @@ class IncidentService:
     async def create(
         self,
         description: str,
-        title: str = "",
         severity: str = "medium",
         project_id: uuid.UUID | None = None,
         attachment_ids: list[uuid.UUID] | None = None,
     ) -> Incident:
-        if not title:
-            first_line = description.split("\n", 1)[0].strip()
-            title = first_line[:120] if first_line else "Untitled Incident"
-
         incident = Incident(
-            title=title,
             description=description,
             status="open",
             severity=severity,

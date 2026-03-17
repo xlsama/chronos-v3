@@ -1,11 +1,12 @@
 import { useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, Brain, FileText, MessageCircleQuestion } from "lucide-react";
+import { Search, Brain, FileText, MessageCircleQuestion, Loader2, Square, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
-import { getConnections } from "@/api/connections";
+import { getServers } from "@/api/servers";
 import { formatRelativeTime, formatDuration } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
+import { Markdown } from "@/components/ui/markdown";
 import { PhaseSection } from "./phase-section";
 import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
@@ -13,10 +14,13 @@ import { ApprovalCard } from "./approval-card";
 import { SummarySection } from "./summary-section";
 import { SubAgentCard } from "./sub-agent-card";
 import { UserMessageBubble } from "./user-message-bubble";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 interface EventTimelineProps {
-  incidentId?: string;
-  savedToMemory?: boolean;
   summaryMarkdown?: string | null;
 }
 
@@ -26,7 +30,9 @@ type TimelineItem =
   | { type: "approval_required"; event: SSEEvent }
   | { type: "ask_human"; event: SSEEvent }
   | { type: "error"; event: SSEEvent }
-  | { type: "user_message"; event: SSEEvent };
+  | { type: "user_message"; event: SSEEvent }
+  | { type: "incident_stopped"; event: SSEEvent }
+  | { type: "skill_used"; event: SSEEvent };
 
 const itemVariants = {
   hidden: { opacity: 0, y: 12 },
@@ -74,6 +80,12 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
       case "user_message":
         items.push({ type: "user_message", event });
         break;
+      case "incident_stopped":
+        items.push({ type: "incident_stopped", event });
+        break;
+      case "skill_used":
+        items.push({ type: "skill_used", event });
+        break;
       default:
         break;
     }
@@ -81,42 +93,39 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   return items;
 }
 
-export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: EventTimelineProps) {
+export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
   const {
     events,
-    discoveryAgentState,
     historyAgentState,
     kbAgentState,
     phaseState,
     thinkingContent,
+    reportStreamContent,
   } = useIncidentStreamStore();
 
-  // Connections for resolving connection_id → name
-  const { data: connections } = useQuery({
-    queryKey: ["connections"],
-    queryFn: getConnections,
+  // Servers for resolving server_id → name
+  const { data: servers } = useQuery({
+    queryKey: ["servers"],
+    queryFn: getServers,
     staleTime: 5 * 60 * 1000,
   });
 
-  const connectionMap = useMemo(() => {
+  const serverMap = useMemo(() => {
     const map = new Map<string, string>();
-    if (connections) {
-      for (const c of connections) {
-        map.set(c.id, c.name);
+    if (servers) {
+      for (const s of servers) {
+        map.set(s.id, s.name);
       }
     }
     return map;
-  }, [connections]);
+  }, [servers]);
 
-  const hasDiscovery =
-    discoveryAgentState.events.length > 0 ||
-    !!discoveryAgentState.thinkingContent;
   const hasHistory =
     historyAgentState.events.length > 0 ||
     !!historyAgentState.thinkingContent;
   const hasKB =
     kbAgentState.events.length > 0 || !!kbAgentState.thinkingContent;
-  const hasGatherContext = hasDiscovery || hasHistory || hasKB;
+  const hasGatherContext = hasHistory || hasKB;
 
   const mainEvents = events.filter((e) => e.event_type !== "summary");
   const summaryEvent = events.find((e) => e.event_type === "summary");
@@ -144,7 +153,6 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
   // Context gathering subtitle
   const contextSubtitle = useMemo(() => {
     const allContextEvents = [
-      ...discoveryAgentState.events,
       ...historyAgentState.events,
       ...kbAgentState.events,
     ];
@@ -152,7 +160,7 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
     const sorted = allContextEvents.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     const dur = formatDuration(sorted[0].timestamp, sorted[sorted.length - 1].timestamp);
     return dur !== "0s" ? dur : "";
-  }, [discoveryAgentState.events, historyAgentState.events, kbAgentState.events]);
+  }, [historyAgentState.events, kbAgentState.events]);
 
   return (
     <div className="space-y-3 p-4" data-testid="event-timeline">
@@ -165,20 +173,13 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
           icon={Search}
         >
           <div className="space-y-3">
-            {hasDiscovery && (
-              <SubAgentCard
-                agentName="discovery"
-                events={discoveryAgentState.events}
-                isStreaming={!!discoveryAgentState.thinkingContent}
-                streamingContent={discoveryAgentState.thinkingContent}
-              />
-            )}
             {hasHistory && (
               <SubAgentCard
                 agentName="history"
                 events={historyAgentState.events}
                 isStreaming={!!historyAgentState.thinkingContent}
                 streamingContent={historyAgentState.thinkingContent}
+                forceExpanded={phaseState.contextGathering === "active"}
               />
             )}
             {hasKB && (
@@ -187,6 +188,7 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
                 events={kbAgentState.events}
                 isStreaming={!!kbAgentState.thinkingContent}
                 streamingContent={kbAgentState.thinkingContent}
+                forceExpanded={phaseState.contextGathering === "active"}
               />
             )}
           </div>
@@ -196,7 +198,7 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
       {/* Phase 2: Investigation */}
       {(hasInvestigation || phaseState.investigation !== "pending") && (
         <PhaseSection
-          title="调查分析"
+          title="排查处置"
           subtitle={phaseSubtitle}
           status={phaseState.investigation}
           icon={Brain}
@@ -212,10 +214,10 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
                       </motion.div>
                     );
                   case "paired_tool": {
-                    const connId = item.toolCall.data.args
-                      ? (item.toolCall.data.args as Record<string, unknown>).connection_id as string | undefined
+                    const serverId = item.toolCall.data.args
+                      ? (item.toolCall.data.args as Record<string, unknown>).server_id as string | undefined
                       : undefined;
-                    const connName = connId ? connectionMap.get(connId) : undefined;
+                    const serverName = serverId ? serverMap.get(serverId) : undefined;
                     const relTime = baseTimestamp
                       ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
                       : undefined;
@@ -227,7 +229,7 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
                           output={item.toolResult?.data.output as string | undefined}
                           isExecuting={!item.toolResult}
                           relativeTime={relTime}
-                          connectionInfo={connName}
+                          serverInfo={serverName}
                         />
                       </motion.div>
                     );
@@ -278,6 +280,35 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
                         </div>
                       </motion.div>
                     );
+                  case "incident_stopped":
+                    return (
+                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                        <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                          <Square className="h-5 w-5 shrink-0 text-gray-500" />
+                          <p className="text-sm text-gray-600">事件已被手动停止</p>
+                        </div>
+                      </motion.div>
+                    );
+                  case "skill_used": {
+                    const skillName = item.event.data.skill_name as string;
+                    const skillContent = item.event.data.content as string;
+                    return (
+                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                        <div className="flex items-center gap-2 text-sm text-indigo-700">
+                          <Sparkles className="h-4 w-4" />
+                          <span>使用技能：</span>
+                          <HoverCard>
+                            <HoverCardTrigger className="cursor-pointer underline decoration-dotted">
+                              {skillName}
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-96 max-h-80 overflow-y-auto">
+                              <Markdown content={skillContent} variant="compact" />
+                            </HoverCardContent>
+                          </HoverCard>
+                        </div>
+                      </motion.div>
+                    );
+                  }
                   default:
                     return null;
                 }
@@ -303,18 +334,31 @@ export function EventTimeline({ incidentId, savedToMemory, summaryMarkdown }: Ev
       )}
 
       {/* Phase 3: Report */}
-      {hasReport && (
+      {(hasReport || phaseState.report !== "pending") && (
         <PhaseSection
-          title="调查报告"
+          title="事件总结"
           status={phaseState.report}
           icon={FileText}
-          defaultExpanded={phaseState.report === "completed"}
+          defaultExpanded={phaseState.report !== "pending"}
         >
-          <SummarySection
-            markdown={summaryEvent ? (summaryEvent.data.summary_md as string) : summaryMarkdown!}
-            incidentId={incidentId}
-            savedToMemory={savedToMemory}
-          />
+          {phaseState.report === "active" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                正在生成排查报告...
+              </div>
+              {reportStreamContent && (
+                <div className="rounded-lg border-l-2 border-primary bg-muted p-4 text-sm">
+                  <Markdown content={reportStreamContent} streaming variant="compact" />
+                </div>
+              )}
+            </div>
+          )}
+          {phaseState.report === "completed" && (
+            <SummarySection
+              markdown={summaryEvent ? (summaryEvent.data.summary_md as string) : summaryMarkdown!}
+            />
+          )}
         </PhaseSection>
       )}
     </div>

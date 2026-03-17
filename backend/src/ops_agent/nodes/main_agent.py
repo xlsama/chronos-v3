@@ -4,132 +4,56 @@ from langchain_openai import ChatOpenAI
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import OpsState
 from src.config import get_settings
-from src.ops_agent.tools.exec_tools import exec_read as _exec_read, exec_write as _exec_write, list_connections as _list_connections
-from src.ops_agent.tools.http_tools import http_request as _http_request
-from src.ops_agent.tools.monitoring_tools import query_logs as _query_logs, query_metrics as _query_metrics
+from src.ops_agent.tools.bash_tool import bash as _bash, list_servers as _list_servers
+from src.ops_agent.tools.safety import CommandSafety, CommandType
+from src.services.skill_service import SkillService
 
 
-def build_tools(has_prometheus: bool = False, has_loki: bool = False):
+def build_tools():
     from langchain_core.tools import tool
 
     @tool
-    async def exec_read(connection_id: str, command: str) -> dict:
-        """Execute a read-only command on the target connection.
-        Use this for diagnostic commands like: df -h, free -m, ps aux, cat, etc.
-        Works for both SSH servers and Kubernetes clusters.
-        connection_id: Must be a valid UUID from list_connections() or KB context.
+    async def bash(server_id: str, command: str, explanation: str = "") -> dict:
+        """在目标服务器执行 Shell 命令。
+        系统自动判断命令权限：只读命令直接执行，写操作需人工审批。
+        网络请求用 curl，文件操作用 cat/sed/tee 等标准命令。
+        - server_id: 必须是 list_servers() 返回的有效 UUID
+        - command: 要执行的 Shell 命令
+        - explanation: 可选，写操作时提供操作说明（展示在审批卡片上）
         """
-        return await _exec_read(connection_id=connection_id, command=command)
+        return await _bash(server_id=server_id, command=command)
 
     @tool
-    async def exec_write(
-        connection_id: str,
-        command: str,
-        explanation: str,
-        risk_level: str,
-        risk_detail: str,
-    ) -> dict:
-        """Execute a write command on the target connection.
-        This requires human approval.
-        - connection_id: Must be a valid UUID from list_connections() or KB context.
-        - explanation: 操作说明（为什么需要执行这个命令）
-        - risk_level: LOW / MEDIUM / HIGH
-        - risk_detail: 风险说明（可能的影响）
-        """
-        return await _exec_write(connection_id=connection_id, command=command)
-
-    @tool
-    async def http_request(
-        method: str,
-        url: str,
-        headers: str | None = None,
-        body: str | None = None,
-    ) -> dict:
-        """Execute an HTTP request to test APIs, health endpoints, or external services.
-        - method: GET, POST, PUT, DELETE, PATCH, HEAD
-        - url: Full URL (e.g. http://localhost:8080/health)
-        - headers: Optional JSON string, e.g. '{"Authorization": "Bearer xxx"}'
-        - body: Optional request body
-        """
-        return await _http_request(method=method, url=url, headers=headers, body=body)
-
-    @tool
-    async def list_connections(project_id: str = "") -> list[dict]:
-        """List available connections. Returns id, name, type, host, status, project_id.
-        Use this to discover target connection when KB context is insufficient.
+    async def list_servers(project_id: str = "") -> list[dict]:
+        """List available servers. Returns id, name, host, status.
+        Use this to discover target server when KB context is insufficient.
         Optionally pass project_id to filter by project.
         """
-        return await _list_connections(project_id=project_id)
+        return await _list_servers(project_id=project_id)
 
     @tool
     def ask_human(question: str) -> str:
         """当你缺少关键信息无法继续排查时，向用户提问。
-        例如：不确定事件涉及哪个服务、哪个连接、需要额外上下文等。
+        例如：不确定事件涉及哪个服务、哪个服务器、需要额外上下文等。
         """
         return question
+
+    @tool
+    async def use_skill(skill_name: str) -> str:
+        """调用预设技能获取详细排查步骤。传入技能名称，返回完整排查指南。"""
+        service = SkillService()
+        try:
+            meta, content = service.get_skill_by_name(skill_name)
+            return f"## 技能: {meta.name}\n\n{content}"
+        except FileNotFoundError:
+            return f"未找到名为 '{skill_name}' 的技能"
 
     @tool
     def complete(summary: str) -> str:
         """Call this when the investigation is complete. Provide a brief summary."""
         return summary
 
-    tools = [
-        exec_read,
-        exec_write,
-        list_connections,
-        http_request,
-        ask_human,
-        complete,
-    ]
-
-    if has_prometheus:
-        @tool
-        async def query_metrics(
-            project_id: str,
-            query: str,
-            start: str | None = None,
-            end: str | None = None,
-            step: str = "60s",
-        ) -> dict:
-            """Query Prometheus metrics using PromQL.
-            - project_id: The project ID to find the Prometheus data source
-            - query: PromQL expression (e.g. 'rate(http_requests_total[5m])')
-            - start/end: RFC3339 timestamps for range query. Omit for instant query.
-            - step: Query resolution step (default '60s')
-            """
-            return await _query_metrics(
-                project_id=project_id, query=query, start=start, end=end, step=step
-            )
-
-        tools.append(query_metrics)
-
-    if has_loki:
-        @tool
-        async def query_logs(
-            project_id: str,
-            query: str,
-            start: str | None = None,
-            end: str | None = None,
-            limit: int = 100,
-        ) -> dict:
-            """Query logs using LogQL (Loki).
-            - project_id: The project ID to find the Loki data source
-            - query: LogQL expression (e.g. '{app="myapp"} |= "error"')
-            - start/end: RFC3339 timestamps for the query range
-            - limit: Max number of log lines (default 100)
-            """
-            return await _query_logs(
-                project_id=project_id, query=query, start=start, end=end, limit=limit
-            )
-
-        tools.append(query_logs)
-
-    return tools
-
-
-def build_all_tools():
-    """Build all tools including conditional ones (for ToolNode registration)."""
-    return build_tools(has_prometheus=True, has_loki=True)
+    return [bash, list_servers, use_skill, ask_human, complete]
 
 
 def get_llm():
@@ -143,9 +67,7 @@ def get_llm():
 
 
 async def main_agent_node(state: OpsState) -> dict:
-    has_prometheus = state.get("has_prometheus", False)
-    has_loki = state.get("has_loki", False)
-    tools = build_tools(has_prometheus=has_prometheus, has_loki=has_loki)
+    tools = build_tools()
     llm = get_llm().bind_tools(tools)
 
     history_summary = state.get("incident_history_summary")
@@ -160,21 +82,23 @@ async def main_agent_node(state: OpsState) -> dict:
     else:
         kb_context = ""
 
-    # Build conditional tool docs
-    extra_tools_doc = ""
-    if has_prometheus:
-        extra_tools_doc += "- **query_metrics**: 查询 Prometheus 指标（PromQL）\n"
-    if has_loki:
-        extra_tools_doc += "- **query_logs**: 查询 Loki 日志（LogQL）\n"
+    # Build skills context
+    skill_summaries = SkillService().get_all_summaries()
+    if skill_summaries:
+        lines = ["## 可用技能", "你可以通过 use_skill 工具调用以下预设技能：", ""]
+        for s in skill_summaries:
+            lines.append(f"- **{s['name']}**: {s['description']}")
+        skills_context = "\n".join(lines)
+    else:
+        skills_context = ""
 
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
-        title=state["title"],
         description=state["description"],
         severity=state["severity"],
         project_id=state.get("project_id", ""),
         incident_history_context=history_context,
         kb_context=kb_context,
-        extra_tools_doc=extra_tools_doc,
+        skills_context=skills_context,
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
@@ -188,16 +112,17 @@ def route_decision(state: OpsState) -> str:
     last_message = state["messages"][-1]
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-        # No tool calls — agent is sharing analysis or asking for context.
-        # Interrupt so the user can see the response and reply.
         return "ask_human"
 
     for tool_call in last_message.tool_calls:
-        if tool_call["name"] == "complete":
+        name = tool_call["name"]
+        if name == "complete":
             return "complete"
-        if tool_call["name"] == "exec_write":
-            return "need_approval"
-        if tool_call["name"] == "ask_human":
+        if name == "ask_human":
             return "ask_human"
+        if name == "bash":
+            cmd_type = CommandSafety.classify(tool_call["args"].get("command", ""))
+            if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
+                return "need_approval"
 
     return "continue"

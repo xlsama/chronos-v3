@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { FileText, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { deleteDocument, getDocuments } from "@/api/documents";
+import { CreateDocumentButton, UploadDocumentButton } from "./document-upload";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,24 +99,34 @@ export function DocumentList({ projectId }: DocumentListProps) {
 
   if (!documents?.length) {
     return (
-      <Empty className="rounded-lg border py-8">
+      <Empty className="rounded-lg border py-12">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <FileText />
           </EmptyMedia>
-          <EmptyTitle>No documents uploaded</EmptyTitle>
+          <EmptyTitle>暂无文档</EmptyTitle>
           <EmptyDescription>
-            Upload a document above to get started.
+            上传或新建文档以开始构建知识库。
           </EmptyDescription>
         </EmptyHeader>
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <UploadDocumentButton projectId={projectId} />
+          <CreateDocumentButton projectId={projectId} />
+        </div>
       </Empty>
     );
   }
 
+  const sortedDocuments = [...documents].sort((a, b) => {
+    if (a.doc_type === "service_map" && b.doc_type !== "service_map") return -1;
+    if (a.doc_type !== "service_map" && b.doc_type === "service_map") return 1;
+    return 0;
+  });
+
   return (
     <>
       <div className="divide-y rounded-lg border">
-        {documents.map((doc) => (
+        {sortedDocuments.map((doc) => (
           <div
             key={doc.id}
             className="flex cursor-pointer items-center gap-3 p-3 hover:bg-muted/50"
@@ -129,14 +140,15 @@ export function DocumentList({ projectId }: DocumentListProps) {
                 {dayjs(doc.created_at).fromNow()}
               </p>
             </div>
+            {doc.doc_type === "service_map" && (
+              <Badge className="bg-blue-100 text-blue-800 border-transparent">
+                内置
+              </Badge>
+            )}
             {doc.status === "error" && doc.error_message ? (
               <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    className={statusColors.error}
-                  >
+                <TooltipTrigger render={<Badge className={statusColors.error} />}>
                     {statusLabels.error}
-                  </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
                   {doc.error_message}

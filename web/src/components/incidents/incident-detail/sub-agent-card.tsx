@@ -1,15 +1,38 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ChevronDown, ChevronRight, Search, BookOpen, Crosshair } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  ChevronRight,
+  Search,
+  BookOpen,
+  FileText,
+  Loader2,
+} from "lucide-react";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 import { formatDuration } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { getIncidentHistory } from "@/api/incident-history";
+import { DocumentViewer } from "@/components/projects/document-viewer";
+
+interface Source {
+  type: "incident_history" | "document";
+  id: string;
+  title?: string;
+  filename?: string;
+  page?: number;
+}
 
 const AGENT_CONFIG: Record<
   string,
   { label: string; icon: typeof Search }
 > = {
-  discovery: { label: "项目识别", icon: Crosshair },
   history: { label: "历史事件检索", icon: Search },
   kb: { label: "知识库检索", icon: BookOpen },
 };
@@ -19,6 +42,7 @@ interface SubAgentCardProps {
   events: SSEEvent[];
   isStreaming?: boolean;
   streamingContent?: string;
+  forceExpanded?: boolean;
 }
 
 export function SubAgentCard({
@@ -26,8 +50,21 @@ export function SubAgentCard({
   events,
   isStreaming,
   streamingContent,
+  forceExpanded,
 }: SubAgentCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [localExpanded, setLocalExpanded] = useState(false);
+  const expanded = forceExpanded || localExpanded;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Preview state
+  const [previewSource, setPreviewSource] = useState<Source | null>(null);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [events.length, streamingContent]);
 
   const hasEvents = events.length > 0 || !!streamingContent;
   const config = AGENT_CONFIG[agentName] ?? {
@@ -43,6 +80,22 @@ export function SubAgentCard({
       dur = formatDuration(events[0].timestamp, events[events.length - 1].timestamp);
     }
     return { toolCallCount: count, duration: dur };
+  }, [events]);
+
+  const sources = useMemo(() => {
+    const all: Source[] = [];
+    const seen = new Set<string>();
+    for (const e of events) {
+      if (e.event_type === "tool_result" && Array.isArray(e.data.sources)) {
+        for (const s of e.data.sources as Source[]) {
+          if (!seen.has(s.id)) {
+            seen.add(s.id);
+            all.push(s);
+          }
+        }
+      }
+    }
+    return all;
   }, [events]);
 
   const statusText = isStreaming
@@ -61,7 +114,7 @@ export function SubAgentCard({
     >
       <button
         className="flex w-full items-center gap-2 text-left text-sm font-medium text-blue-800"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => setLocalExpanded(!localExpanded)}
       >
         {expanded ? (
           <ChevronDown className="h-4 w-4" />
@@ -73,21 +126,42 @@ export function SubAgentCard({
         <span className="ml-auto text-xs text-blue-600">{statusText}</span>
       </button>
 
+      {/* Sources row */}
+      {!isStreaming && sources.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1 pl-6 text-xs text-blue-700">
+          <FileText className="h-3 w-3 shrink-0 opacity-60" />
+          {sources.map((s, i) => (
+            <span key={s.id} className="inline-flex items-center">
+              {i > 0 && <span className="mx-1 opacity-40">&middot;</span>}
+              <button
+                className="hover:text-blue-900 hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewSource(s);
+                }}
+              >
+                {s.title || s.filename || s.id.slice(0, 8)}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <AnimatePresence initial={false}>
         {expanded && hasEvents && (
         <motion.div
-          className="mt-2 space-y-2 pl-6 text-sm text-blue-900/80"
+          className="mt-2 max-h-[200px] overflow-y-auto space-y-2 pl-6 text-sm text-blue-900/80"
+          ref={scrollContainerRef}
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.2 }}
-          style={{ overflow: "hidden" }}
         >
           {events.map((event, i) => {
             if (event.event_type === "thinking") {
               return (
                 <div key={i} className="text-xs opacity-80">
-                  <Markdown content={event.data.content as string} />
+                  <Markdown content={event.data.content as string} variant="compact" />
                 </div>
               );
             }
@@ -126,12 +200,62 @@ export function SubAgentCard({
 
           {isStreaming && streamingContent && (
             <div className="text-xs opacity-80 animate-pulse">
-              <Markdown content={streamingContent} streaming />
+              <Markdown content={streamingContent} streaming variant="compact" />
             </div>
           )}
         </motion.div>
       )}
       </AnimatePresence>
+
+      {/* Preview dialogs */}
+      {previewSource?.type === "incident_history" && (
+        <IncidentHistoryPreview
+          id={previewSource.id}
+          onClose={() => setPreviewSource(null)}
+        />
+      )}
+      {previewSource?.type === "document" && (
+        <DocumentViewer
+          documentId={previewSource.id}
+          onClose={() => setPreviewSource(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function IncidentHistoryPreview({
+  id,
+  onClose,
+}: {
+  id: string;
+  onClose: () => void;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["incident-history", id],
+    queryFn: () => getIncidentHistory(id),
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex h-[80vh] flex-col sm:max-w-[70vw]">
+        <DialogHeader>
+          <DialogTitle className="truncate">
+            {data?.title ?? "历史事件"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : data ? (
+            <Markdown content={data.summary_md} />
+          ) : (
+            <p className="text-muted-foreground">未找到历史记录</p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

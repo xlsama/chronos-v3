@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Terminal, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ShellCodeBlock } from "@/components/ui/shell-code-block";
 
 interface ToolCallCardProps {
   name: string;
@@ -8,7 +9,7 @@ interface ToolCallCardProps {
   output?: string;
   isExecuting?: boolean;
   relativeTime?: string;
-  connectionInfo?: string;
+  serverInfo?: string;
 }
 
 export function ToolCallCard({
@@ -17,9 +18,12 @@ export function ToolCallCard({
   output,
   isExecuting,
   relativeTime,
-  connectionInfo,
+  serverInfo,
 }: ToolCallCardProps) {
-  const [argsExpanded, setArgsExpanded] = useState(false);
+  const [outputExpanded, setOutputExpanded] = useState(true);
+
+  const isBash = name === "bash";
+  const command = isBash ? (args?.command as string | undefined) : undefined;
 
   return (
     <div
@@ -30,9 +34,9 @@ export function ToolCallCard({
       <div className="flex items-center gap-2 text-sm">
         <Terminal className="h-4 w-4 shrink-0 text-blue-700" />
         <span className="font-medium text-blue-900" data-testid="tool-name">{name}</span>
-        {connectionInfo && (
+        {serverInfo && (
           <Badge variant="secondary" className="text-xs">
-            {connectionInfo}
+            {serverInfo}
           </Badge>
         )}
         {relativeTime && (
@@ -40,21 +44,21 @@ export function ToolCallCard({
         )}
       </div>
 
-      {/* Args — collapsible */}
-      {args && Object.keys(args).length > 0 && (
+      {/* Bash command — show inline */}
+      {command && (
+        <ShellCodeBlock
+          code={command}
+          showPrompt
+          className="mt-2 overflow-x-auto rounded bg-background p-2 text-xs"
+        />
+      )}
+
+      {/* Non-bash args — collapsible */}
+      {!isBash && args && Object.keys(args).length > 0 && (
         <div className="mt-2">
-          <button
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setArgsExpanded(!argsExpanded)}
-          >
-            {argsExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            参数
-          </button>
-          {argsExpanded && (
-            <pre className="mt-1 overflow-x-auto rounded bg-background p-2 text-xs">
-              {JSON.stringify(args, null, 2)}
-            </pre>
-          )}
+          <pre className="overflow-x-auto rounded bg-background p-2 text-xs">
+            {JSON.stringify(args, null, 2)}
+          </pre>
         </div>
       )}
 
@@ -66,14 +70,27 @@ export function ToolCallCard({
         </div>
       )}
 
-      {/* Result */}
+      {/* Result — collapsible for long output */}
       {output && (
-        <pre
-          className="mt-2 max-h-60 overflow-auto rounded border-l-2 border-green-400 bg-background p-2 text-xs"
-          data-testid="tool-output"
-        >
-          {output}
-        </pre>
+        <div className="mt-2">
+          {output.length > 500 && (
+            <button
+              className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setOutputExpanded(!outputExpanded)}
+            >
+              {outputExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              输出 ({output.length} chars)
+            </button>
+          )}
+          {(output.length <= 500 || outputExpanded) && (
+            <pre
+              className="max-h-60 overflow-auto rounded border-l-2 border-green-400 bg-background p-2 text-xs"
+              data-testid="tool-output"
+            >
+              {output}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   );

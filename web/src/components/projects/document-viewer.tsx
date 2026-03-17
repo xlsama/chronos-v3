@@ -26,6 +26,7 @@ interface DocumentViewerProps {
 
 const EDITABLE_TYPES = new Set([
   "markdown",
+  "service_map",
   "text",
   "log",
   "json",
@@ -56,7 +57,7 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
   });
 
   const isEditable = doc ? EDITABLE_TYPES.has(doc.doc_type) : false;
-  const isMarkdown = doc?.doc_type === "markdown";
+  const isMarkdown = doc?.doc_type === "markdown" || doc?.doc_type === "service_map";
 
   function startEditing() {
     if (doc) {
