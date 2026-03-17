@@ -136,11 +136,11 @@ export function IncidentList() {
                   </div>
                 )}
               </div>
-              <Badge className={severityColors[incident.severity]}>
-                {incident.severity}
-              </Badge>
               <Badge className={statusColors[incident.status]}>
                 {statusLabels[incident.status] ?? incident.status}
+              </Badge>
+              <Badge className={severityColors[incident.severity]}>
+                {incident.severity}
               </Badge>
               <span className="text-xs text-muted-foreground">
                 {dayjs(incident.created_at).fromNow()}
@@ -149,7 +149,7 @@ export function IncidentList() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
