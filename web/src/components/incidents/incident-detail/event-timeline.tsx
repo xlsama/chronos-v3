@@ -358,6 +358,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                           content={item.event.data.content as string}
                           attachments={item.event.data.attachments as { filename: string; content_type: string; size: number; preview_url: string | null }[]}
                           attachment_ids={item.event.data.attachment_ids as string[]}
+                          attachments_meta={item.event.data.attachments_meta as { id: string; filename: string; content_type: string; size: number }[]}
                         />
                       </motion.div>
                     );

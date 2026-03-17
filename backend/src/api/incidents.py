@@ -272,17 +272,26 @@ async def send_user_message(
     if not incident:
         raise NotFoundError("Incident not found")
 
+    metadata = {}
     if body.attachment_ids:
         result = await session.execute(
             select(Attachment).where(Attachment.id.in_(body.attachment_ids))
         )
-        for attachment in result.scalars():
+        attachments_list = list(result.scalars())
+        for attachment in attachments_list:
             attachment.incident_id = incident_id
         await session.flush()
 
-    metadata = {}
-    if body.attachment_ids:
         metadata["attachment_ids"] = [str(aid) for aid in body.attachment_ids]
+        metadata["attachments_meta"] = [
+            {
+                "id": str(a.id),
+                "filename": a.filename,
+                "content_type": a.content_type,
+                "size": a.size,
+            }
+            for a in attachments_list
+        ]
 
     service = IncidentService(session=session)
     message = await service.save_message(
