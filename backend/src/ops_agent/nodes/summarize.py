@@ -11,12 +11,20 @@ from src.lib.redis import get_redis
 EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
 
 
-def _build_callback(channel: str) -> EventCallback:
-    """Build an event callback that publishes to Redis with phase=summarize."""
+def _build_callback(
+    channel: str,
+) -> tuple[EventCallback, Callable[[], Coroutine[Any, Any, None]]]:
+    """Build an event callback that publishes to Redis with phase=summarize.
+
+    Returns (callback, flush) — flush must be called when the node finishes
+    to persist any remaining buffered thinking chunks.
+    """
     if not channel:
         async def noop(event_type: str, data: dict) -> None:
             pass
-        return noop
+        async def noop_flush() -> None:
+            pass
+        return noop, noop_flush
 
     redis = get_redis()
     publisher = EventPublisher(redis=redis, session_factory=get_session_factory())
@@ -28,13 +36,16 @@ def _build_callback(channel: str) -> EventCallback:
             {**data, "phase": "summarize", "agent": "summarize"},
         )
 
-    return callback
+    async def flush() -> None:
+        await publisher.flush_remaining(channel)
+
+    return callback, flush
 
 
 async def summarize_node(state: OpsState) -> dict:
     sid = state["incident_id"][:8]
     channel = EventPublisher.channel_for_incident(state["incident_id"])
-    callback = _build_callback(channel)
+    callback, flush = _build_callback(channel)
 
     logger.info(f"\n[{sid}] [summarize] ===== Summarize node started =====")
 
@@ -48,6 +59,8 @@ async def summarize_node(state: OpsState) -> dict:
     except Exception as e:
         logger.error(f"[{sid}] [summarize] Summarize agent failed: {e}", exc_info=True)
         summary_md = f"报告生成失败: {e}"
+    finally:
+        await flush()
 
     logger.info(f"\n[{sid}] [summarize] ===== Summarize node completed =====")
 

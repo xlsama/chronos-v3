@@ -31,7 +31,6 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
       }),
     onSuccess: (_, decision) => {
       setApprovalDecided(approvalId!, decision);
-      toast.success(`Request ${decision}`);
     },
     onError: (error: unknown) => {
       // 409 Conflict → approval already decided, parse actual decision from detail

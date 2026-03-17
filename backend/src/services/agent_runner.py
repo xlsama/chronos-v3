@@ -461,6 +461,7 @@ class AgentRunner:
                                 await self.publisher.publish(channel, "answer", {
                                     "content": answer_md, "phase": phase,
                                 })
+                                await self.publisher.publish(channel, "answer_done", {"phase": phase})
                             break
 
         elif kind == "on_tool_start":

@@ -84,15 +84,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   clearAnswer: () => set({ answerContent: "" }),
 
   appendReportStream: (content) =>
-    set((state) => {
-      const ps = { ...state.phaseState };
-      if (ps.investigation === "active") ps.investigation = "completed";
-      if (ps.report !== "active") ps.report = "active";
-      return {
-        reportStreamContent: state.reportStreamContent + content,
-        phaseState: ps,
-      };
-    }),
+    set((state) => ({
+      reportStreamContent: state.reportStreamContent + content,
+    })),
 
   clearReportStream: () => set({ reportStreamContent: "" }),
 

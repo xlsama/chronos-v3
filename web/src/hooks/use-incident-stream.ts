@@ -34,7 +34,6 @@ export function useIncidentStream(
     appendAnswer,
     clearAnswer,
     appendReportStream,
-    clearReportStream,
     appendSubAgentThinking,
     flushSubAgentThinking,
     addSubAgentEvent,
@@ -232,11 +231,11 @@ export function useIncidentStream(
               event.data.decision as string,
             );
           } else if (phase === "summarize" && event.event_type === "thinking") {
+            updatePhase("summarize");
             appendReportStream(event.data.content as string);
           } else if (event.event_type === "summary") {
-            clearReportStream();
-            updatePhase("summary_complete");
             addEvent(event);
+            updatePhase("summary_complete");
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });

@@ -1,16 +1,14 @@
-import { Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import type { IncidentHistory } from "@/lib/types";
 
 interface IncidentHistoryDetailSheetProps {
@@ -25,46 +23,34 @@ export function IncidentHistoryDetailSheet({
   onDelete,
 }: IncidentHistoryDetailSheetProps) {
   return (
-    <Sheet open={!!item} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg">
+    <Dialog open={!!item} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[90vh] flex-col sm:max-w-[80vw]">
         {item && (
           <>
-            <SheetHeader>
-              <div className="flex items-start justify-between gap-2 pr-8">
-                <div className="min-w-0">
-                  <SheetTitle className="truncate">{item.title}</SheetTitle>
-                  <SheetDescription>
-                    <span className="flex items-center gap-2 mt-1">
-                      {item.occurrence_count > 1 && (
-                        <Badge variant="secondary">
-                          {item.occurrence_count} 次
-                        </Badge>
-                      )}
-                      <span>
-                        首次: {dayjs(item.created_at).format("YYYY-MM-DD HH:mm")}
-                      </span>
-                      <span>
-                        最近: {dayjs(item.last_seen_at).format("YYYY-MM-DD HH:mm")}
-                      </span>
-                    </span>
-                  </SheetDescription>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => onDelete(item.id)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            </SheetHeader>
-            <ScrollArea className="flex-1 px-4 pb-4">
-              <Markdown content={item.summary_md} />
+            <DialogHeader>
+              <DialogTitle className="truncate">{item.title}</DialogTitle>
+              <DialogDescription>
+                <span className="flex items-center gap-6 mt-1">
+                  {item.occurrence_count > 1 && (
+                    <Badge variant="secondary">
+                      {item.occurrence_count} 次
+                    </Badge>
+                  )}
+                  <span>
+                    创建时间: {dayjs(item.created_at).format("YYYY-MM-DD HH:mm")}
+                  </span>
+                  <span>
+                    最后一次更新时间: {dayjs(item.last_seen_at).format("YYYY-MM-DD HH:mm")}
+                  </span>
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="min-h-0 flex-1">
+              <Markdown content={item.summary_md} variant="compact" />
             </ScrollArea>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

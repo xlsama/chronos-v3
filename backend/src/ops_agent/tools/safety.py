@@ -23,6 +23,7 @@ READ_PREFIXES = [
     "docker compose config", "docker compose images", "docker compose version",
     "kubectl get", "kubectl describe", "kubectl logs", "kubectl top",
     "date", "timedatectl", "env", "printenv", "id", "groups",
+    "xargs",
     "file", "stat", "wc", "sort", "uniq", "cut", "tr",
     "mount", "lsblk", "blkid", "fdisk -l",
     "nginx -t", "nginx -T",
@@ -97,6 +98,59 @@ BLOCKED_PATTERNS = [
 ]
 
 
+def _split_outside_quotes(cmd: str, delimiters: list[str]) -> list[str]:
+    """Split *cmd* on any of *delimiters*, but only outside single/double quotes.
+
+    Longer delimiters are matched first so that ``||`` is preferred over ``|``.
+    """
+    # Sort longest-first so "||" is tried before "|"
+    delimiters = sorted(delimiters, key=len, reverse=True)
+    parts: list[str] = []
+    current: list[str] = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(cmd):
+        ch = cmd[i]
+        # Handle escape sequences
+        if ch == '\\' and i + 1 < len(cmd):
+            current.append(ch)
+            current.append(cmd[i + 1])
+            i += 2
+            continue
+        # Track quote state
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        # Try delimiter match only outside quotes
+        if not in_single and not in_double:
+            matched = False
+            for delim in delimiters:
+                if cmd[i:i + len(delim)] == delim:
+                    parts.append(''.join(current).strip())
+                    current = []
+                    i += len(delim)
+                    matched = True
+                    break
+            if matched:
+                continue
+        current.append(ch)
+        i += 1
+    parts.append(''.join(current).strip())
+    return [p for p in parts if p]
+
+
+def _split_compounds(cmd: str) -> list[str]:
+    """Split on ``||``, ``&&``, ``;`` outside quotes."""
+    return _split_outside_quotes(cmd, ["||", "&&", ";"])
+
+
+def _split_pipes(cmd: str) -> list[str]:
+    """Split on pipe ``|`` outside quotes (not ``||``)."""
+    return _split_outside_quotes(cmd, ["|"])
+
+
 class CommandSafety:
     @staticmethod
     def classify(command: str) -> CommandType:
@@ -117,10 +171,10 @@ class CommandSafety:
             if re.search(pattern, cmd, re.IGNORECASE):
                 return CommandType.WRITE
 
-        # 4. Split compound commands (||, &&, ;) then pipes
-        sub_commands = re.split(r'\|\||&&|;', cmd)
+        # 4. Split compound commands (||, &&, ;) then pipes — quote-aware
+        sub_commands = _split_compounds(cmd)
         for sub_cmd in sub_commands:
-            parts = [p.strip() for p in sub_cmd.split("|")]
+            parts = _split_pipes(sub_cmd)
             for part in parts:
                 if not part:
                     continue

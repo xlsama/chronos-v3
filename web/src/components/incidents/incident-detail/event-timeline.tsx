@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, Brain, FileText, MessageCircleQuestion, Loader2, Square, Sparkles } from "lucide-react";
+import { Search, Brain, FileText, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { getServers } from "@/api/servers";
@@ -11,7 +11,7 @@ import { PhaseSection } from "./phase-section";
 import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
 import { ApprovalCard } from "./approval-card";
-import { SummarySection } from "./summary-section";
+
 import { SubAgentCard } from "./sub-agent-card";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
@@ -141,18 +141,44 @@ function LiveAnswerSection() {
   );
 }
 
-function ReportStreamSection() {
+function ReportSection({ fallbackMarkdown }: { fallbackMarkdown?: string }) {
   const reportStreamContent = useIncidentStreamStore((s) => s.reportStreamContent);
+  const reportStatus = useIncidentStreamStore((s) => s.phaseState.report);
+  const content = reportStreamContent || fallbackMarkdown;
+  const isActive = reportStatus === "active";
+
+  if (!content && !isActive) return null;
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        正在生成排查报告...
+    <div
+      className={
+        isActive
+          ? "rounded-lg border-l-2 border-primary bg-muted p-4"
+          : "rounded-lg border border-green-200 bg-green-50/30 p-4"
+      }
+      data-testid="summary-section"
+    >
+      <div
+        className={
+          isActive
+            ? "flex items-center gap-2 text-sm text-muted-foreground"
+            : "flex items-center gap-2 text-sm font-semibold text-green-800"
+        }
+      >
+        {isActive ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            正在生成排查报告...
+          </>
+        ) : (
+          <>
+            <CheckCircle className="h-5 w-5" />
+            排查完成
+          </>
+        )}
       </div>
-      {reportStreamContent && (
-        <div className="rounded-lg border-l-2 border-primary bg-muted p-4 text-sm">
-          <Markdown content={reportStreamContent} streaming variant="compact" />
-        </div>
+      {content && (
+        <Markdown content={content} streaming={isActive} variant="compact" className="mt-3" />
       )}
     </div>
   );
@@ -402,12 +428,9 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
           icon={FileText}
           defaultExpanded={phaseState.report !== "pending"}
         >
-          {phaseState.report === "active" && <ReportStreamSection />}
-          {phaseState.report === "completed" && (
-            <SummarySection
-              markdown={summaryEvent ? (summaryEvent.data.summary_md as string) : summaryMarkdown!}
-            />
-          )}
+          <ReportSection
+            fallbackMarkdown={summaryEvent ? (summaryEvent.data.summary_md as string) : summaryMarkdown ?? undefined}
+          />
         </PhaseSection>
       )}
     </div>

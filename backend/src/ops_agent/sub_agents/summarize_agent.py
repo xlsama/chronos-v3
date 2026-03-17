@@ -80,5 +80,7 @@ async def run_summarize_agent(
             full_content += chunk.content
             await event_callback("thinking", {"content": chunk.content})
 
+    await event_callback("thinking_done", {})
+
     logger.info(f"[summarize] Completed, report_len={len(full_content)}")
     return full_content or "报告生成失败"
