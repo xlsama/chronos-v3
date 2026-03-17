@@ -13,6 +13,7 @@ async def ask_human_node(state: OpsState) -> dict:
     2. Agent replied with plain text (no tool_calls) → use text as question, return HumanMessage
     """
     last_msg = state["messages"][-1]
+    current_count = state.get("ask_human_count", 0)
 
     # Case 1: explicit ask_human tool call
     if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
@@ -21,12 +22,14 @@ async def ask_human_node(state: OpsState) -> dict:
                 question = tc["args"].get("question", "")
                 user_response = interrupt({"question": question})
                 return {
-                    "messages": [ToolMessage(content=str(user_response), tool_call_id=tc["id"])]
+                    "messages": [ToolMessage(content=str(user_response), tool_call_id=tc["id"])],
+                    "ask_human_count": current_count + 1,
                 }
 
     # Case 2: plain text response (no tool calls) — agent is sharing analysis or asking implicitly
     question = last_msg.content if hasattr(last_msg, "content") else ""
     user_response = interrupt({"question": question})
     return {
-        "messages": [HumanMessage(content=str(user_response))]
+        "messages": [HumanMessage(content=str(user_response))],
+        "ask_human_count": current_count + 1,
     }

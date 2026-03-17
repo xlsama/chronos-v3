@@ -120,6 +120,7 @@ async def run_kb_agent(
             full_response = chunk if full_response is None else full_response + chunk
 
         assert full_response is not None
+        await event_callback("thinking_done", {})
         messages.append(full_response)
 
         if not full_response.tool_calls:
@@ -156,6 +157,7 @@ async def run_kb_agent(
             if chunk.content:
                 full_content += chunk.content
                 await event_callback("thinking", {"content": chunk.content})
+        await event_callback("thinking_done", {})
 
     if not full_content:
         full_content = "项目知识库暂无相关信息"

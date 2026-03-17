@@ -12,6 +12,7 @@ export interface PhaseState {
 interface SubAgentState {
   events: SSEEvent[];
   thinkingContent: string;
+  status: "idle" | "started" | "completed" | "failed";
 }
 
 interface IncidentStreamState {
@@ -23,7 +24,7 @@ interface IncidentStreamState {
   thinkingContent: string;
   reportStreamContent: string;
   askHumanQuestion: string | null;
-  decidedApprovals: Map<string, string>;
+  decidedApprovals: Record<string, string>;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
@@ -32,6 +33,7 @@ interface IncidentStreamState {
   appendSubAgentThinking: (agent: string, content: string) => void;
   flushSubAgentThinking: (agent: string, timestamp: string) => void;
   addSubAgentEvent: (agent: string, event: SSEEvent) => void;
+  setSubAgentStatus: (agent: string, status: "idle" | "started" | "completed" | "failed") => void;
   updatePhase: (phase: string) => void;
   setAskHumanQuestion: (question: string | null) => void;
   setApprovalDecided: (approvalId: string, decision: string) => void;
@@ -43,6 +45,7 @@ interface IncidentStreamState {
 const emptySubAgent = (): SubAgentState => ({
   events: [],
   thinkingContent: "",
+  status: "idle",
 });
 
 const initialPhaseState = (): PhaseState => ({
@@ -60,7 +63,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   thinkingContent: "",
   reportStreamContent: "",
   askHumanQuestion: null,
-  decidedApprovals: new Map(),
+  decidedApprovals: {},
 
   addEvent: (event) => {
     set((state) => ({ events: [...state.events, event] }));
@@ -130,6 +133,17 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       };
     }),
 
+  setSubAgentStatus: (agent, status) =>
+    set((state) => {
+      const key = agent === "kb" ? "kbAgentState" : "historyAgentState";
+      return {
+        [key]: {
+          ...state[key],
+          status,
+        },
+      };
+    }),
+
   updatePhase: (phase) =>
     set((state) => {
       const ps = { ...state.phaseState };
@@ -153,11 +167,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   setAskHumanQuestion: (question) => set({ askHumanQuestion: question }),
 
   setApprovalDecided: (approvalId, decision) =>
-    set((state) => {
-      const next = new Map(state.decidedApprovals);
-      next.set(approvalId, decision);
-      return { decidedApprovals: next };
-    }),
+    set((state) => ({
+      decidedApprovals: { ...state.decidedApprovals, [approvalId]: decision },
+    })),
 
   setConnected: (connected) => set({ isConnected: connected }),
 
@@ -165,10 +177,12 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     const historyEvents: SSEEvent[] = [];
     const kbEvents: SSEEvent[] = [];
     const mainEvents: SSEEvent[] = [];
-    const decided = new Map<string, string>();
+    const decided: Record<string, string> = {};
     let askQuestion: string | null = null;
     let lastAskHumanIndex = -1;
     let hasUserMessageAfterAsk = false;
+    let historyStatus: "idle" | "started" | "completed" | "failed" = "idle";
+    let kbStatus: "idle" | "started" | "completed" | "failed" = "idle";
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -176,15 +190,32 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       const agent = (event.data.agent as string) || "";
 
       if (event.event_type === "approval_decided") {
-        decided.set(
-          event.data.approval_id as string,
-          event.data.decision as string,
-        );
+        decided[event.data.approval_id as string] =
+          event.data.decision as string;
+        continue;
+      }
+
+      // agent_status → update sub-agent status, don't add to any event list
+      if (event.event_type === "agent_status") {
+        const status = event.data.status as "started" | "completed" | "failed";
+        if (agent === "history") historyStatus = status;
+        else if (agent === "kb") kbStatus = status;
+        continue;
+      }
+
+      // thinking_done → DB boundary marker, skip in UI
+      if (event.event_type === "thinking_done") {
         continue;
       }
 
       if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_used") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
+        mainEvents.push(event);
+        continue;
+      }
+
+      // answer → directly add to mainEvents
+      if (event.event_type === "answer") {
         mainEvents.push(event);
         continue;
       }
@@ -214,7 +245,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
     // Derive phase state from loaded events
     const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
-    const hasMain = mainEvents.some((e) => e.event_type !== "summary" && e.event_type !== "ask_human");
+    const hasMain = mainEvents.some((e) => e.event_type !== "summary" && e.event_type !== "ask_human" && e.event_type !== "answer");
     const hasSummary = mainEvents.some((e) => e.event_type === "summary");
 
     const derivedPhase: PhaseState = {
@@ -225,8 +256,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
     set({
       events: mainEvents,
-      historyAgentState: { events: historyEvents, thinkingContent: "" },
-      kbAgentState: { events: kbEvents, thinkingContent: "" },
+      historyAgentState: { events: historyEvents, thinkingContent: "", status: historyStatus },
+      kbAgentState: { events: kbEvents, thinkingContent: "", status: kbStatus },
       phaseState: derivedPhase,
       decidedApprovals: decided,
       askHumanQuestion: askQuestion,
@@ -243,6 +274,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       thinkingContent: "",
       reportStreamContent: "",
       askHumanQuestion: null,
-      decidedApprovals: new Map(),
+      decidedApprovals: {},
     }),
 }));

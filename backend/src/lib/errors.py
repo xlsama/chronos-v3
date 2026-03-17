@@ -33,3 +33,13 @@ class BadRequestError(AppError):
 class ConflictError(AppError):
     def __init__(self, message: str = "Resource already modified"):
         super().__init__(message, status_code=409)
+
+
+class ApprovalNotFoundError(NotFoundError):
+    def __init__(self, message: str = "Approval request not found"):
+        super().__init__(message)
+
+
+class ApprovalAlreadyDecidedError(ConflictError):
+    def __init__(self, message: str = "Approval request already decided"):
+        super().__init__(message)

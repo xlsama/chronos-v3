@@ -1,22 +1,51 @@
+import asyncio
+import time
 import uuid
 
 from src.ops_agent.ssh import SSHConnector
 from src.ops_agent.tools.safety import CommandSafety, CommandType
 
-# Registry of connectors by server ID
-_connector_registry: dict[str, SSHConnector] = {}
+# Registry of connectors by server ID with TTL and capacity management
+_connector_registry: dict[str, tuple[SSHConnector, float]] = {}  # server_id -> (connector, last_used_time)
+_registry_lock = asyncio.Lock()
+_CONNECTOR_TTL = 600  # 10 minutes
+_CONNECTOR_MAX_SIZE = 100
+
+
+def _evict_expired() -> None:
+    """Remove expired connectors from registry (must be called under lock)."""
+    now = time.monotonic()
+    expired = [k for k, (_, ts) in _connector_registry.items() if now - ts > _CONNECTOR_TTL]
+    for k in expired:
+        del _connector_registry[k]
+
+
+async def invalidate_connector(server_id: str) -> None:
+    """Remove a connector from cache, e.g. after credentials update."""
+    async with _registry_lock:
+        _connector_registry.pop(server_id, None)
 
 
 def register_connector(server_id: str, connector: SSHConnector):
-    _connector_registry[server_id] = connector
+    _connector_registry[server_id] = (connector, time.monotonic())
 
 
 async def get_connector(server_id: str) -> SSHConnector:
-    # 1. Check registry cache
-    if server_id in _connector_registry:
-        return _connector_registry[server_id]
+    async with _registry_lock:
+        _evict_expired()
 
-    # 2. Cache miss → query DB → create connector → cache
+        # Check registry cache
+        if server_id in _connector_registry:
+            connector, _ = _connector_registry[server_id]
+            _connector_registry[server_id] = (connector, time.monotonic())
+            return connector
+
+        # Enforce capacity limit
+        if len(_connector_registry) >= _CONNECTOR_MAX_SIZE:
+            oldest_key = min(_connector_registry, key=lambda k: _connector_registry[k][1])
+            del _connector_registry[oldest_key]
+
+    # Cache miss → query DB → create connector → cache
     from src.config import get_settings
     from src.db.connection import get_session_factory
     from src.db.models import Server
@@ -54,7 +83,8 @@ async def get_connector(server_id: str) -> SSHConnector:
             bastion_private_key=bastion_private_key,
         )
 
-        _connector_registry[server_id] = connector
+        async with _registry_lock:
+            _connector_registry[server_id] = (connector, time.monotonic())
         return connector
 
 
@@ -63,17 +93,19 @@ async def list_servers(project_id: str = "") -> list[dict]:
     from sqlalchemy import select
 
     from src.db.connection import get_session_factory
-    from src.db.models import Server, Project
+    from src.db.models import Server, ProjectServer
 
     factory = get_session_factory()
     async with factory() as session:
         stmt = select(Server).where(Server.status != "offline")
         if project_id:
             try:
-                project = await session.get(Project, uuid.UUID(project_id))
-                if project and project.linked_server_ids:
-                    server_ids = [uuid.UUID(sid) for sid in project.linked_server_ids]
-                    stmt = stmt.where(Server.id.in_(server_ids))
+                project_uuid = uuid.UUID(project_id)
+                stmt = stmt.where(
+                    Server.id.in_(
+                        select(ProjectServer.server_id).where(ProjectServer.project_id == project_uuid)
+                    )
+                )
             except ValueError:
                 pass  # invalid project_id, skip filter and return all
 

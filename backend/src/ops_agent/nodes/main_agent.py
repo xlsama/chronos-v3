@@ -1,5 +1,8 @@
+import asyncio
+
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import OpsState
@@ -7,6 +10,7 @@ from src.config import get_settings
 from src.ops_agent.tools.bash_tool import bash as _bash, list_servers as _list_servers
 from src.ops_agent.tools.safety import CommandSafety, CommandType
 from src.services.skill_service import SkillService
+from src.lib.logger import logger
 
 
 def build_tools():
@@ -49,9 +53,9 @@ def build_tools():
             return f"未找到名为 '{skill_name}' 的技能"
 
     @tool
-    def complete(summary: str) -> str:
-        """Call this when the investigation is complete. Provide a brief summary."""
-        return summary
+    def complete(answer_md: str) -> str:
+        """排查完成后调用。answer_md 是给用户看的正式回答，要直面问题、给出结论和建议。"""
+        return answer_md
 
     return [bash, list_servers, use_skill, ask_human, complete]
 
@@ -64,6 +68,19 @@ def get_llm():
         api_key=s.dashscope_api_key,
         streaming=True,
     )
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    retry=retry_if_exception_type((TimeoutError, ConnectionError, OSError)),
+    before_sleep=lambda retry_state: logger.warning(
+        f"LLM call failed (attempt {retry_state.attempt_number}), retrying: {retry_state.outcome.exception()}"
+    ),
+)
+async def _invoke_llm_with_retry(llm, messages):
+    """Invoke LLM with retry and timeout."""
+    return await asyncio.wait_for(llm.ainvoke(messages), timeout=120)
 
 
 async def main_agent_node(state: OpsState) -> dict:
@@ -103,7 +120,7 @@ async def main_agent_node(state: OpsState) -> dict:
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
 
-    response = await llm.ainvoke(messages)
+    response = await _invoke_llm_with_retry(llm, messages)
 
     return {"messages": [response]}
 
@@ -112,6 +129,10 @@ def route_decision(state: OpsState) -> str:
     last_message = state["messages"][-1]
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+        # Check ask_human count to prevent infinite loops
+        if state.get("ask_human_count", 0) >= 5:
+            logger.warning(f"ask_human count exceeded limit for incident {state['incident_id']}, forcing complete")
+            return "complete"
         return "ask_human"
 
     for tool_call in last_message.tool_calls:
@@ -119,6 +140,10 @@ def route_decision(state: OpsState) -> str:
         if name == "complete":
             return "complete"
         if name == "ask_human":
+            # Check ask_human count
+            if state.get("ask_human_count", 0) >= 5:
+                logger.warning(f"ask_human count exceeded limit for incident {state['incident_id']}, forcing complete")
+                return "complete"
             return "ask_human"
         if name == "bash":
             cmd_type = CommandSafety.classify(tool_call["args"].get("command", ""))

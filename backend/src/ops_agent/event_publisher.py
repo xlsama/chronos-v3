@@ -10,18 +10,19 @@ from src.lib.logger import logger
 # Map event_type to Message role
 _EVENT_ROLE = {
     "thinking": "assistant",
+    "thinking_done": "assistant",
+    "answer": "assistant",
     "tool_call": "assistant",
     "tool_result": "assistant",
     "skill_used": "assistant",
     "ask_human": "assistant",
     "summary": "assistant",
+    "agent_status": "system",
     "approval_required": "system",
     "approval_decided": "system",
     "error": "system",
     "incident_stopped": "system",
 }
-
-THINKING_FLUSH_THRESHOLD = 500
 
 
 class EventPublisher:
@@ -36,20 +37,23 @@ class EventPublisher:
         agent = data.get("agent", "")
 
         if event_type == "thinking":
-            # Accumulate thinking tokens, don't persist yet, but still push SSE
+            # Accumulate thinking tokens, push SSE immediately but don't persist
             buf_key = (channel, phase, agent)
             buf = self._thinking_buffer.setdefault(
                 buf_key, {"content": "", "phase": phase, "agent": agent}
             )
             buf["content"] += data.get("content", "")
             await self._publish_sse(channel, event_type, data, ts)
-            # Auto-flush when buffer exceeds threshold to limit data loss window
-            if len(buf["content"]) >= THINKING_FLUSH_THRESHOLD:
-                await self._persist(channel, "thinking", buf, ts)
-                buf["content"] = ""
             return
 
-        # Non-thinking event: flush accumulated thinking for this (channel, phase, agent) first
+        if event_type == "thinking_done":
+            # Flush buffer → persist complete thinking + thinking_done marker + SSE
+            await self._flush_thinking(channel, phase, agent, ts)
+            await self._persist(channel, event_type, data, ts)
+            await self._publish_sse(channel, event_type, data, ts)
+            return
+
+        # Non-thinking event: flush accumulated thinking as safety net, then persist
         await self._flush_thinking(channel, phase, agent, ts)
         await self._persist(channel, event_type, data, ts)
         await self._publish_sse(channel, event_type, data, ts)
@@ -78,8 +82,6 @@ class EventPublisher:
             role = _EVENT_ROLE.get(event_type, "system")
             content = self._extract_content(event_type, data)
             metadata = self._extract_metadata(event_type, data)
-            metadata_str = orjson.dumps(metadata).decode() if metadata else None
-
             async with self.session_factory() as session:
                 msg = Message(
                     id=uuid.uuid4(),
@@ -87,7 +89,7 @@ class EventPublisher:
                     role=role,
                     event_type=event_type,
                     content=content,
-                    metadata_json=metadata_str,
+                    metadata_json=metadata if metadata else None,
                     created_at=ts,
                 )
                 session.add(msg)
@@ -97,6 +99,7 @@ class EventPublisher:
 
     async def _publish_sse(self, channel: str, event_type: str, data: dict, ts: datetime) -> None:
         payload = orjson.dumps({
+            "event_id": str(uuid.uuid4()),
             "event_type": event_type,
             "data": data,
             "timestamp": ts.isoformat(),
@@ -109,6 +112,12 @@ class EventPublisher:
     def _extract_content(event_type: str, data: dict) -> str:
         if event_type == "thinking":
             return data.get("content", "")
+        if event_type == "thinking_done":
+            return ""
+        if event_type == "answer":
+            return data.get("content", "")
+        if event_type == "agent_status":
+            return data.get("status", "")
         if event_type == "tool_call":
             return data.get("name", "")
         if event_type == "tool_result":
@@ -134,6 +143,19 @@ class EventPublisher:
             if data.get("agent"):
                 meta["agent"] = data["agent"]
             return meta or None
+        if event_type == "thinking_done":
+            meta = {}
+            if data.get("phase"):
+                meta["phase"] = data["phase"]
+            if data.get("agent"):
+                meta["agent"] = data["agent"]
+            return meta or None
+        if event_type == "agent_status":
+            return {
+                "phase": data.get("phase", ""),
+                "agent": data.get("agent", ""),
+                "status": data.get("status", ""),
+            }
         if event_type == "tool_call":
             return {
                 "name": data.get("name", ""),

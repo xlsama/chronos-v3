@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useEffect, useCallback, useState } from "react";
-import { ArrowDown, Square } from "lucide-react";
+import { ArrowDown, ArrowLeft, Square } from "lucide-react";
 import { getIncident, stopIncident } from "@/api/incidents";
 import { useIncidentStream } from "@/hooks/use-incident-stream";
 import { EventTimeline } from "@/components/incidents/incident-detail/event-timeline";
@@ -9,6 +9,7 @@ import { UserInputBar } from "@/components/incidents/incident-detail/user-input-
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { statusColors, statusLabels } from "@/lib/incident-constants";
+import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/incidents/$incidentId")({
   component: IncidentDetailPage,
@@ -28,9 +30,11 @@ export const Route = createFileRoute("/incidents/$incidentId")({
 function IncidentDetailPage() {
   const { incidentId } = Route.useParams();
   const queryClient = useQueryClient();
-  const { events, thinkingContent, phaseState } = useIncidentStreamStore();
+  const events = useIncidentStreamStore((s) => s.events);
+  const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
+  const phaseState = useIncidentStreamStore((s) => s.phaseState);
 
-  const { data: incident } = useQuery({
+  const { data: incident, isLoading, isError } = useQuery({
     queryKey: ["incident", incidentId],
     queryFn: () => getIncident(incidentId),
   });
@@ -73,7 +77,42 @@ function IncidentDetailPage() {
     if (shouldAutoScroll.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [events.length, thinkingContent, phaseState.contextGathering]);
+  }, [events.length, hasThinking, phaseState.contextGathering]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="border-b px-6 py-4">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+          <Skeleton className="mt-2 h-4 w-72" />
+        </div>
+        <div className="flex-1 p-4 space-y-4">
+          <Skeleton className="h-24 w-full rounded-lg" />
+          <Skeleton className="h-16 w-full rounded-lg" />
+          <Skeleton className="h-16 w-full rounded-lg" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !incident) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4">
+        <p className="text-sm text-muted-foreground">
+          无法加载事件详情
+        </p>
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/incidents">
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            返回事件列表
+          </Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -82,13 +121,11 @@ function IncidentDetailPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <h1 className="text-base font-medium truncate">
-              {incident?.summary_title || (incident ? incident.description.slice(0, 30) + (incident.description.length > 30 ? "..." : "") : "Loading...")}
+              {incident.summary_title || incident.description.slice(0, 30) + (incident.description.length > 30 ? "..." : "")}
             </h1>
-            {incident && (
-              <Badge className={statusColors[incident.status]}>
-                {statusLabels[incident.status] ?? incident.status}
-              </Badge>
-            )}
+            <Badge className={statusColors[incident.status]}>
+              {statusLabels[incident.status] ?? incident.status}
+            </Badge>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {isActive && (
@@ -103,11 +140,9 @@ function IncidentDetailPage() {
             )}
           </div>
         </div>
-        {incident && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            {incident.description}
-          </p>
-        )}
+        <p className="mt-1 text-sm text-muted-foreground">
+          {incident.description}
+        </p>
       </div>
 
       {/* Stop Dialog */}
@@ -138,7 +173,7 @@ function IncidentDetailPage() {
         onScroll={checkIsAtBottom}
       >
         <EventTimeline
-          summaryMarkdown={incident?.summary_md}
+          summaryMarkdown={incident.summary_md}
         />
         <div ref={bottomRef} />
 
@@ -153,7 +188,7 @@ function IncidentDetailPage() {
       </div>
 
       {/* Input */}
-      <UserInputBar incidentId={incidentId} incidentStatus={incident?.status} />
+      <UserInputBar incidentId={incidentId} incidentStatus={incident.status} />
     </div>
   );
 }

@@ -68,10 +68,11 @@ class AgentRunner:
             "is_complete": False,
             "needs_approval": False,
             "pending_tool_call": None,
+            "approval_decision": None,
             "summary_md": None,
+            "ask_human_count": 0,
             "incident_history_summary": None,
             "kb_summary": None,
-            "_event_channel": channel,
         }
 
         logger.info(f"Starting agent for incident {incident_id}, thread {thread_id}")
@@ -133,11 +134,16 @@ class AgentRunner:
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
 
-        logger.info(f"Resuming agent for incident {incident_id}, thread {thread_id}")
+        logger.info(f"Resuming agent for incident {incident_id}, thread {thread_id}, decision={approval_result.get('decision')}")
+
+        from langgraph.types import Command
+
+        decision = approval_result.get("decision", "approved")
+        resume_input = Command(resume=None, update={"approval_decision": decision})
 
         cancelled = False
         try:
-            async for event in self.graph.astream_events(None, config=config, version="v2"):
+            async for event in self.graph.astream_events(resume_input, config=config, version="v2"):
                 cancel_reason = await self._check_cancelled(incident_id)
                 if cancel_reason:
                     logger.info(f"Agent cancelled for incident {incident_id}: {cancel_reason}")
@@ -334,6 +340,25 @@ class AgentRunner:
                     "phase": phase,
                     "agent": agent,
                 })
+
+        elif kind == "on_chat_model_end":
+            output = event["data"].get("output")
+            if not output:
+                return
+            # End current thinking segment
+            await self.publisher.publish(channel, "thinking_done", {
+                "phase": phase, "agent": agent,
+            })
+            # Check for complete tool call → publish answer
+            if hasattr(output, "tool_calls") and output.tool_calls:
+                for tc in output.tool_calls:
+                    if tc["name"] == "complete":
+                        answer_md = tc["args"].get("answer_md", "")
+                        if answer_md:
+                            await self.publisher.publish(channel, "answer", {
+                                "content": answer_md, "phase": phase,
+                            })
+                        break
 
         elif kind == "on_tool_start":
             name = event.get("name", "")

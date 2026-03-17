@@ -1,16 +1,17 @@
 import uuid
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Response
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import (
+    PaginatedResponse,
     ProjectCreate,
     ProjectResponse,
     ProjectUpdate,
 )
 from src.db.connection import get_session
-from src.db.models import Server
+from src.db.models import Project, Server
 from src.lib.errors import NotFoundError, ValidationError
 from src.services.project_service import ProjectService
 from src.services.service_map import ensure_service_map
@@ -30,10 +31,19 @@ async def create_project(
     return project
 
 
-@router.get("", response_model=list[ProjectResponse])
-async def list_projects(session: AsyncSession = Depends(get_session)):
+@router.get("", response_model=PaginatedResponse[ProjectResponse])
+async def list_projects(
+    page: int = 1,
+    page_size: int = 50,
+    session: AsyncSession = Depends(get_session),
+):
+    total = await session.scalar(select(func.count()).select_from(Project)) or 0
     service = ProjectService(session=session)
-    return await service.list()
+    items = await service.list()
+    # Apply pagination manually (service.list already orders by created_at desc)
+    start = (page - 1) * page_size
+    paged_items = items[start:start + page_size]
+    return PaginatedResponse(items=paged_items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -61,9 +71,9 @@ async def update_project(
 
     data = body.model_dump(exclude_unset=True)
 
-    # Validate linked_server_ids if provided
-    if "linked_server_ids" in data and data["linked_server_ids"] is not None:
-        server_ids = data["linked_server_ids"]
+    # Handle linked_server_ids via junction table
+    if "linked_server_ids" in data:
+        server_ids = data.pop("linked_server_ids") or []
         if server_ids:
             result = await session.execute(
                 select(Server.id).where(Server.id.in_(server_ids))
@@ -72,13 +82,15 @@ async def update_project(
             missing = set(server_ids) - found
             if missing:
                 raise ValidationError(f"Servers not found: {', '.join(str(m) for m in missing)}")
-        # Store as string list for JSONB
-        data["linked_server_ids"] = [str(sid) for sid in server_ids]
+        await service.set_linked_servers(project, server_ids)
 
-    return await service.update(project, **data)
+    if data:
+        project = await service.update(project, **data)
+
+    return project
 
 
-@router.delete("/{project_id}")
+@router.delete("/{project_id}", status_code=204)
 async def delete_project(
     project_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
@@ -88,4 +100,4 @@ async def delete_project(
     if not project:
         raise NotFoundError("Project not found")
     await service.delete(project)
-    return {"ok": True}
+    return Response(status_code=204)

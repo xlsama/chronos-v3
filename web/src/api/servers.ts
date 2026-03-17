@@ -1,8 +1,14 @@
 import { request } from "@/lib/request";
-import type { Server } from "@/lib/types";
+import type { PaginatedResponse, Server } from "@/lib/types";
 
-export function getServers() {
-  return request<Server[]>("/servers");
+export function getServers(params?: { page?: number; page_size?: number }) {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.page_size) searchParams.set("page_size", String(params.page_size));
+  const qs = searchParams.toString();
+  return request<PaginatedResponse<Server>>(
+    `/servers${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function createServer(data: {

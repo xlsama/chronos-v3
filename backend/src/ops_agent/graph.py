@@ -9,6 +9,13 @@ from src.ops_agent.nodes.summarize import summarize_node
 from src.ops_agent.state import OpsState
 
 
+def route_after_approval(state: OpsState) -> str:
+    """Route after human_approval: rejected goes back to LLM, approved goes to tools."""
+    if state.get("approval_decision") == "rejected":
+        return "main_agent"
+    return "tools"
+
+
 def build_graph():
     all_tools = build_tools()
     tool_node = ToolNode(all_tools)
@@ -39,7 +46,14 @@ def build_graph():
         },
     )
     graph.add_edge("tools", "main_agent")
-    graph.add_edge("human_approval", "tools")
+    graph.add_conditional_edges(
+        "human_approval",
+        route_after_approval,
+        {
+            "tools": "tools",
+            "main_agent": "main_agent",
+        },
+    )
     graph.add_edge("ask_human", "main_agent")
     graph.add_edge("summarize", END)
 

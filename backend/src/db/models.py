@@ -31,14 +31,36 @@ class Project(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    linked_server_ids: Mapped[list] = mapped_column(
-        JSONB, default=list, server_default=text("'[]'")
+    project_servers: Mapped[list["ProjectServer"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
     )
-
     documents: Mapped[list["ProjectDocument"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
     incidents: Mapped[list["Incident"]] = relationship(back_populates="project")
+
+    @property
+    def linked_server_ids(self) -> list[str]:
+        return [str(ps.server_id) for ps in self.project_servers]
+
+
+class ProjectServer(Base):
+    __tablename__ = "project_servers"
+    __table_args__ = (
+        UniqueConstraint("project_id", "server_id", name="uq_project_server"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    server_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    project: Mapped["Project"] = relationship(back_populates="project_servers")
+    server: Mapped["Server"] = relationship(back_populates="project_servers")
 
 
 class Server(Base):
@@ -66,6 +88,7 @@ class Server(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    project_servers: Mapped[list["ProjectServer"]] = relationship(back_populates="server")
 
 
 class Incident(Base):
@@ -161,7 +184,7 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String(20))
     event_type: Mapped[str] = mapped_column(String(50))
     content: Mapped[str] = mapped_column(Text)
-    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     incident: Mapped["Incident"] = relationship(back_populates="messages")

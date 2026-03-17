@@ -4,7 +4,7 @@ import uuid
 import orjson
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
@@ -14,6 +14,7 @@ from src.api.schemas import (
     IncidentCreate,
     IncidentResponse,
     MessageResponse,
+    PaginatedResponse,
     UserMessageRequest,
 )
 from src.config import get_settings
@@ -90,19 +91,26 @@ async def create_incident(
     return incident
 
 
-@router.get("", response_model=list[IncidentResponse])
+@router.get("", response_model=PaginatedResponse[IncidentResponse])
 async def list_incidents(
     status: str | None = None,
     page: int = 1,
     page_size: int = 20,
     session: AsyncSession = Depends(get_session),
 ):
+    count_query = select(func.count()).select_from(Incident)
+    if status:
+        count_query = count_query.where(Incident.status == status)
+    total = await session.scalar(count_query) or 0
+
     query = select(Incident).options(selectinload(Incident.attachments)).order_by(Incident.created_at.desc())
     if status:
         query = query.where(Incident.status == status)
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await session.execute(query)
-    return result.scalars().all()
+    items = list(result.scalars().all())
+
+    return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{incident_id}", response_model=IncidentResponse)
@@ -134,7 +142,7 @@ async def get_incident_messages(
 
 def _message_to_event(m: Message) -> dict:
     """Reconstruct SSE-compatible event dict from a persisted Message."""
-    metadata = orjson.loads(m.metadata_json) if m.metadata_json else {}
+    metadata = m.metadata_json if m.metadata_json else {}
 
     if m.event_type == "thinking":
         data = {"content": m.content, **metadata}
@@ -158,10 +166,17 @@ def _message_to_event(m: Message) -> dict:
         data = metadata
     elif m.event_type == "incident_stopped":
         data = {"reason": m.content}
+    elif m.event_type == "thinking_done":
+        data = metadata  # {phase, agent}
+    elif m.event_type == "answer":
+        data = {"content": m.content}
+    elif m.event_type == "agent_status":
+        data = metadata  # {phase, agent, status}
     else:
         data = {"content": m.content}
 
     return {
+        "event_id": str(m.id),
         "event_type": m.event_type,
         "data": data,
         "timestamp": m.created_at.isoformat(),
@@ -211,9 +226,11 @@ async def stream_incident(incident_id: uuid.UUID, since: str | None = None):
                         yield {"data": orjson.dumps(evt).decode()}
 
             # Real-time mode: forward Redis pubsub messages, dedup against replayed events
+            idle_seconds = 0.0
             while True:
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if msg and msg["type"] == "message":
+                    idle_seconds = 0.0
                     if last_ts:
                         try:
                             parsed = orjson.loads(msg["data"])
@@ -224,6 +241,10 @@ async def stream_incident(incident_id: uuid.UUID, since: str | None = None):
                             pass
                     yield {"data": msg["data"]}
                 else:
+                    idle_seconds += 0.1
+                    if idle_seconds >= 15:
+                        yield {"comment": "keepalive"}
+                        idle_seconds = 0.0
                     await asyncio.sleep(0.1)
         finally:
             await pubsub.unsubscribe(channel)
@@ -232,7 +253,7 @@ async def stream_incident(incident_id: uuid.UUID, since: str | None = None):
     return EventSourceResponse(event_generator())
 
 
-@router.post("/{incident_id}/messages")
+@router.post("/{incident_id}/messages", response_model=MessageResponse)
 async def send_user_message(
     incident_id: uuid.UUID,
     body: UserMessageRequest,
@@ -270,11 +291,11 @@ async def send_user_message(
             human_input=body.content,
         )
 
-    return {"ok": True, "message_id": str(message.id)}
+    return message
 
 
 
-@router.post("/{incident_id}/stop")
+@router.post("/{incident_id}/stop", response_model=IncidentResponse)
 async def stop_incident(
     incident_id: uuid.UUID,
     request: Request,
@@ -304,6 +325,8 @@ async def stop_incident(
         severity=incident.severity or "", project_id=str(incident.project_id or ""),
     )
 
-    return {"ok": True}
+    # Refresh with attachments for response
+    await session.refresh(incident, ["attachments"])
+    return incident
 
 

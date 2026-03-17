@@ -1,10 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Response
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import (
+    PaginatedResponse,
     ServerCreate,
     ServerResponse,
     ServerTestResponse,
@@ -36,10 +37,21 @@ async def create_server(
     return server
 
 
-@router.get("", response_model=list[ServerResponse])
-async def list_servers(session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Server).order_by(Server.created_at.desc()))
-    return result.scalars().all()
+@router.get("", response_model=PaginatedResponse[ServerResponse])
+async def list_servers(
+    page: int = 1,
+    page_size: int = 50,
+    session: AsyncSession = Depends(get_session),
+):
+    total = await session.scalar(select(func.count()).select_from(Server)) or 0
+    result = await session.execute(
+        select(Server)
+        .order_by(Server.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    items = list(result.scalars().all())
+    return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{server_id}", response_model=ServerResponse)
@@ -67,7 +79,7 @@ async def update_server(
     return await service.update(server, **body.model_dump(exclude_unset=True))
 
 
-@router.delete("/{server_id}")
+@router.delete("/{server_id}", status_code=204)
 async def delete_server(
     server_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
@@ -77,7 +89,7 @@ async def delete_server(
         raise NotFoundError("Server not found")
     await session.delete(server)
     await session.commit()
-    return {"ok": True}
+    return Response(status_code=204)
 
 
 @router.post("/{server_id}/test", response_model=ServerTestResponse)

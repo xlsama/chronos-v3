@@ -54,7 +54,7 @@ class IncidentService:
         role: str,
         event_type: str,
         content: str,
-        metadata_json: str | None = None,
+        metadata_json: dict | None = None,
     ) -> Message:
         message = Message(
             incident_id=incident_id,

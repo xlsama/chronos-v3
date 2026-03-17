@@ -14,7 +14,7 @@ const TERMINAL_STATUSES = ["resolved", "closed", "stopped"];
 
 export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) {
   const queryClient = useQueryClient();
-  const { askHumanQuestion, setAskHumanQuestion } = useIncidentStreamStore();
+  const { askHumanQuestion, setAskHumanQuestion, addEvent } = useIncidentStreamStore();
 
   const isTerminal = !!incidentStatus && TERMINAL_STATUSES.includes(incidentStatus);
   const isAgentWorking = incidentStatus === "investigating" && !askHumanQuestion;
@@ -35,8 +35,16 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
       }
       return sendIncidentMessage(incidentId, content, attachmentIds);
     },
-    onSuccess: () => {
+    onMutate: ({ content }) => {
+      addEvent({
+        event_id: `optimistic-${Date.now()}`,
+        event_type: "user_message",
+        data: { content },
+        timestamp: new Date().toISOString(),
+      });
       setAskHumanQuestion(null);
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["incidents", incidentId] });
     },
   });

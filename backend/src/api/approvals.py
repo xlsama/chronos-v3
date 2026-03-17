@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas import ApprovalDecisionRequest, ApprovalResponse
 from src.db.connection import get_session
 from src.db.models import ApprovalRequest, Incident
-from src.lib.errors import ConflictError, NotFoundError, ValidationError
+from src.lib.errors import NotFoundError
 from src.ops_agent.event_publisher import EventPublisher
 from src.services.approval_service import ApprovalService
 
@@ -32,17 +32,8 @@ async def decide_approval(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
-    if body.decision not in ("approved", "rejected"):
-        raise ValidationError("Decision must be 'approved' or 'rejected'")
-
     service = ApprovalService(session=session)
-    try:
-        approval = await service.decide(approval_id, decision=body.decision, decided_by=body.decided_by)
-    except ValueError as e:
-        msg = str(e)
-        if "already decided" in msg:
-            raise ConflictError(msg)
-        raise NotFoundError(msg)
+    approval = await service.decide(approval_id, decision=body.decision, decided_by=body.decided_by)
 
     # Publish approval_decided SSE event (use app-level publisher for persistence)
     publisher = request.app.state.agent_runner.publisher
@@ -57,16 +48,15 @@ async def decide_approval(
         },
     )
 
-    # Resume graph if approved
-    if body.decision == "approved":
-        incident = await session.get(Incident, approval.incident_id)
-        if incident and incident.thread_id:
-            runner = request.app.state.agent_runner
-            background_tasks.add_task(
-                runner.resume,
-                thread_id=incident.thread_id,
-                incident_id=str(incident.id),
-                approval_result={"decision": "approved"},
-            )
+    # Resume graph for both approved and rejected decisions
+    incident = await session.get(Incident, approval.incident_id)
+    if incident and incident.thread_id:
+        runner = request.app.state.agent_runner
+        background_tasks.add_task(
+            runner.resume,
+            thread_id=incident.thread_id,
+            incident_id=str(incident.id),
+            approval_result={"decision": body.decision},
+        )
 
     return approval

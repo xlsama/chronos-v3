@@ -9,7 +9,8 @@ class OpsState(MessagesState):
     is_complete: bool
     needs_approval: bool
     pending_tool_call: dict | None
+    approval_decision: str | None
     summary_md: str | None
     incident_history_summary: str | None
     kb_summary: str | None
-    _event_channel: str
+    ask_human_count: int

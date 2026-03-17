@@ -14,6 +14,7 @@ import { ApprovalCard } from "./approval-card";
 import { SummarySection } from "./summary-section";
 import { SubAgentCard } from "./sub-agent-card";
 import { UserMessageBubble } from "./user-message-bubble";
+import { AnswerCard } from "./answer-card";
 import {
   HoverCard,
   HoverCardContent,
@@ -32,7 +33,8 @@ type TimelineItem =
   | { type: "error"; event: SSEEvent }
   | { type: "user_message"; event: SSEEvent }
   | { type: "incident_stopped"; event: SSEEvent }
-  | { type: "skill_used"; event: SSEEvent };
+  | { type: "skill_used"; event: SSEEvent }
+  | { type: "answer"; event: SSEEvent };
 
 const itemVariants = {
   hidden: { opacity: 0, y: 12 },
@@ -86,6 +88,12 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
       case "skill_used":
         items.push({ type: "skill_used", event });
         break;
+      case "answer":
+        items.push({ type: "answer", event });
+        break;
+      case "thinking_done":
+      case "agent_status":
+        break;  // Don't render
       default:
         break;
     }
@@ -93,43 +101,79 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   return items;
 }
 
+function LiveThinkingSection() {
+  const thinkingContent = useIncidentStreamStore((s) => s.thinkingContent);
+  return (
+    <AnimatePresence>
+      {thinkingContent && (
+        <motion.div
+          key="live-thinking"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ThinkingBubble content={thinkingContent} isStreaming />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function ReportStreamSection() {
+  const reportStreamContent = useIncidentStreamStore((s) => s.reportStreamContent);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        正在生成排查报告...
+      </div>
+      {reportStreamContent && (
+        <div className="rounded-lg border-l-2 border-primary bg-muted p-4 text-sm">
+          <Markdown content={reportStreamContent} streaming variant="compact" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
-  const {
-    events,
-    historyAgentState,
-    kbAgentState,
-    phaseState,
-    thinkingContent,
-    reportStreamContent,
-  } = useIncidentStreamStore();
+  const events = useIncidentStreamStore((s) => s.events);
+  const historyAgentState = useIncidentStreamStore((s) => s.historyAgentState);
+  const kbAgentState = useIncidentStreamStore((s) => s.kbAgentState);
+  const phaseState = useIncidentStreamStore((s) => s.phaseState);
+  const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
 
   // Servers for resolving server_id → name
-  const { data: servers } = useQuery({
-    queryKey: ["servers"],
-    queryFn: getServers,
+  const { data: serversData } = useQuery({
+    queryKey: ["servers", "all"],
+    queryFn: () => getServers({ page_size: 200 }),
     staleTime: 5 * 60 * 1000,
   });
 
   const serverMap = useMemo(() => {
     const map = new Map<string, string>();
-    if (servers) {
-      for (const s of servers) {
+    if (serversData?.items) {
+      for (const s of serversData.items) {
         map.set(s.id, s.name);
       }
     }
     return map;
-  }, [servers]);
+  }, [serversData]);
 
   const hasHistory =
     historyAgentState.events.length > 0 ||
-    !!historyAgentState.thinkingContent;
+    !!historyAgentState.thinkingContent ||
+    historyAgentState.status !== "idle";
   const hasKB =
-    kbAgentState.events.length > 0 || !!kbAgentState.thinkingContent;
+    kbAgentState.events.length > 0 ||
+    !!kbAgentState.thinkingContent ||
+    kbAgentState.status !== "idle";
   const hasGatherContext = hasHistory || hasKB;
 
   const mainEvents = events.filter((e) => e.event_type !== "summary");
   const summaryEvent = events.find((e) => e.event_type === "summary");
-  const hasInvestigation = mainEvents.length > 0 || !!thinkingContent;
+  const hasInvestigation = mainEvents.length > 0 || hasThinking;
   const hasReport = !!summaryEvent || !!summaryMarkdown;
 
   // Build paired timeline items
@@ -177,7 +221,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
               <SubAgentCard
                 agentName="history"
                 events={historyAgentState.events}
-                isStreaming={!!historyAgentState.thinkingContent}
+                status={historyAgentState.status}
                 streamingContent={historyAgentState.thinkingContent}
                 forceExpanded={phaseState.contextGathering === "active"}
               />
@@ -186,7 +230,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
               <SubAgentCard
                 agentName="kb"
                 events={kbAgentState.events}
-                isStreaming={!!kbAgentState.thinkingContent}
+                status={kbAgentState.status}
                 streamingContent={kbAgentState.thinkingContent}
                 forceExpanded={phaseState.contextGathering === "active"}
               />
@@ -309,26 +353,20 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                       </motion.div>
                     );
                   }
+                  case "answer":
+                    return (
+                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                        <AnswerCard content={item.event.data.content as string} />
+                      </motion.div>
+                    );
                   default:
                     return null;
                 }
               })}
             </AnimatePresence>
 
-            {/* Live thinking stream */}
-            <AnimatePresence>
-              {thinkingContent && (
-                <motion.div
-                  key="live-thinking"
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ThinkingBubble content={thinkingContent} isStreaming />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Live thinking stream — isolated component to avoid re-rendering timeline */}
+            <LiveThinkingSection />
           </div>
         </PhaseSection>
       )}
@@ -336,24 +374,12 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
       {/* Phase 3: Report */}
       {(hasReport || phaseState.report !== "pending") && (
         <PhaseSection
-          title="事件总结"
+          title="归档总结"
           status={phaseState.report}
           icon={FileText}
           defaultExpanded={phaseState.report !== "pending"}
         >
-          {phaseState.report === "active" && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                正在生成排查报告...
-              </div>
-              {reportStreamContent && (
-                <div className="rounded-lg border-l-2 border-primary bg-muted p-4 text-sm">
-                  <Markdown content={reportStreamContent} streaming variant="compact" />
-                </div>
-              )}
-            </div>
-          )}
+          {phaseState.report === "active" && <ReportStreamSection />}
           {phaseState.report === "completed" && (
             <SummarySection
               markdown={summaryEvent ? (summaryEvent.data.summary_md as string) : summaryMarkdown!}

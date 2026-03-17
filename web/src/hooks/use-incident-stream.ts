@@ -5,8 +5,9 @@ import { getIncidentEvents } from "@/api/incidents";
 import { sseEventSchema } from "@/lib/schemas";
 import type { SSEEvent } from "@/lib/types";
 
-const MAX_RETRIES = 5;
 const BASE_DELAY = 1000;
+const MAX_BACKOFF = 30_000;
+const HEARTBEAT_TIMEOUT = 45_000;
 
 export function useIncidentStream(
   incidentId: string | undefined,
@@ -18,7 +19,11 @@ export function useIncidentStream(
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  const heartbeatTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const lastTimestampRef = useRef("");
+  const seenEventIdsRef = useRef<Set<string>>(new Set());
   const loadedForRef = useRef("");
   const loadedEventsRef = useRef<SSEEvent[] | null>(null);
 
@@ -31,6 +36,7 @@ export function useIncidentStream(
     appendSubAgentThinking,
     flushSubAgentThinking,
     addSubAgentEvent,
+    setSubAgentStatus,
     updatePhase,
     setAskHumanQuestion,
     setApprovalDecided,
@@ -54,6 +60,7 @@ export function useIncidentStream(
       loadedForRef.current = "";
       loadedEventsRef.current = null;
       lastTimestampRef.current = "";
+      seenEventIdsRef.current = new Set();
     };
   }, [incidentId]);
 
@@ -64,6 +71,7 @@ export function useIncidentStream(
     if (loadedForRef.current && loadedForRef.current !== incidentId) {
       reset();
       lastTimestampRef.current = "";
+      seenEventIdsRef.current = new Set();
       loadedForRef.current = "";
       loadedEventsRef.current = null;
     }
@@ -73,6 +81,10 @@ export function useIncidentStream(
       loadHistory(historyEvents);
       loadedForRef.current = incidentId;
       loadedEventsRef.current = historyEvents;
+      // Populate seenEventIds from history
+      for (const e of historyEvents) {
+        if (e.event_id) seenEventIdsRef.current.add(e.event_id);
+      }
       if (historyEvents.length > 0) {
         lastTimestampRef.current =
           historyEvents[historyEvents.length - 1].timestamp;
@@ -99,6 +111,19 @@ export function useIncidentStream(
 
     retriesRef.current = 0;
 
+    function resetHeartbeat() {
+      clearTimeout(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = setTimeout(() => {
+        // Heartbeat timeout — force reconnect
+        eventSourceRef.current?.close();
+        eventSourceRef.current = null;
+        setConnected(false);
+        const delay = Math.min(BASE_DELAY * Math.pow(2, retriesRef.current), MAX_BACKOFF);
+        retriesRef.current++;
+        retryTimerRef.current = setTimeout(connect, delay);
+      }, HEARTBEAT_TIMEOUT);
+    }
+
     function connect() {
       let url = `/api/incidents/${incidentId}/stream`;
       if (lastTimestampRef.current) {
@@ -110,9 +135,12 @@ export function useIncidentStream(
       es.onopen = () => {
         retriesRef.current = 0;
         setConnected(true);
+        resetHeartbeat();
       };
 
       es.onmessage = (e) => {
+        resetHeartbeat();
+
         try {
           const raw = JSON.parse(e.data);
           const result = sseEventSchema.safeParse(raw);
@@ -121,12 +149,17 @@ export function useIncidentStream(
           const event = result.data as SSEEvent;
           const isReplay = event.replay === true;
 
-          // Dedup: skip events already covered by history (only for non-replay)
-          if (
+          // Dedup by event_id
+          if (!isReplay && event.event_id) {
+            if (seenEventIdsRef.current.has(event.event_id)) return;
+            seenEventIdsRef.current.add(event.event_id);
+          } else if (
             !isReplay &&
+            !event.event_id &&
             lastTimestampRef.current &&
             event.timestamp <= lastTimestampRef.current
           ) {
+            // Fallback: timestamp-based dedup when no event_id
             return;
           }
 
@@ -138,11 +171,20 @@ export function useIncidentStream(
 
           // Replay events: DB records with complete content, route like loadHistory
           if (isReplay) {
+            if (event.event_id) {
+              seenEventIdsRef.current.add(event.event_id);
+            }
             if (event.event_type === "approval_decided") {
               setApprovalDecided(
                 event.data.approval_id as string,
                 event.data.decision as string,
               );
+            } else if (event.event_type === "thinking_done") {
+              // DB boundary marker, skip
+            } else if (event.event_type === "agent_status") {
+              if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
+                setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
+              }
             } else if (
               phase === "gather_context" &&
               (agent === "history" || agent === "kb")
@@ -170,7 +212,11 @@ export function useIncidentStream(
           }
 
           if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
-            if (event.event_type === "thinking") {
+            if (event.event_type === "agent_status") {
+              setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
+            } else if (event.event_type === "thinking_done") {
+              flushSubAgentThinking(agent, event.timestamp);
+            } else if (event.event_type === "thinking") {
               appendSubAgentThinking(agent, event.data.content as string);
             } else {
               flushSubAgentThinking(agent, event.timestamp);
@@ -198,6 +244,7 @@ export function useIncidentStream(
             es.close();
             eventSourceRef.current = null;
             setConnected(false);
+            clearTimeout(heartbeatTimerRef.current);
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
@@ -208,6 +255,32 @@ export function useIncidentStream(
           } else if (event.event_type === "thinking") {
             updatePhase("main");
             appendThinking(event.data.content as string);
+          } else if (event.event_type === "thinking_done") {
+            // Flush thinking buffer
+            const { thinkingContent } = useIncidentStreamStore.getState();
+            if (thinkingContent) {
+              addEvent({
+                event_type: "thinking",
+                data: { content: thinkingContent },
+                timestamp: event.timestamp,
+              });
+              clearThinking();
+            }
+          } else if (event.event_type === "answer") {
+            updatePhase("main");
+            // Flush any residual thinking
+            const { thinkingContent } = useIncidentStreamStore.getState();
+            if (thinkingContent) {
+              addEvent({
+                event_type: "thinking",
+                data: { content: thinkingContent },
+                timestamp: event.timestamp,
+              });
+              clearThinking();
+            }
+            addEvent(event);
+          } else if (event.event_type === "agent_status") {
+            // main-phase agent_status: ignore (only relevant for gather_context)
           } else {
             updatePhase("main");
             const { thinkingContent } = useIncidentStreamStore.getState();
@@ -230,12 +303,12 @@ export function useIncidentStream(
         es.close();
         eventSourceRef.current = null;
         setConnected(false);
+        clearTimeout(heartbeatTimerRef.current);
 
-        if (retriesRef.current < MAX_RETRIES) {
-          const delay = BASE_DELAY * Math.pow(2, retriesRef.current);
-          retriesRef.current++;
-          retryTimerRef.current = setTimeout(connect, delay);
-        }
+        // Always reconnect with exponential backoff capped at MAX_BACKOFF
+        const delay = Math.min(BASE_DELAY * Math.pow(2, retriesRef.current), MAX_BACKOFF);
+        retriesRef.current++;
+        retryTimerRef.current = setTimeout(connect, delay);
       };
     }
 
@@ -245,6 +318,7 @@ export function useIncidentStream(
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       clearTimeout(retryTimerRef.current);
+      clearTimeout(heartbeatTimerRef.current);
       setConnected(false);
     };
   }, [incidentId, historyEvents, status]);

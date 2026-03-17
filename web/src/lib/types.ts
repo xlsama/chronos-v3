@@ -44,7 +44,7 @@ export interface Message {
   role: string;
   event_type: string;
   content: string;
-  metadata_json: string | null;
+  metadata_json: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -60,6 +60,7 @@ export interface ApprovalRequest {
 }
 
 export interface SSEEvent {
+  event_id?: string;
   event_type: string;
   data: Record<string, unknown>;
   timestamp: string;
@@ -112,6 +113,13 @@ export interface Skill {
 
 export interface SkillDetail extends Skill {
   content: string;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export type SeverityLevel = "P0" | "P1" | "P2" | "P3";

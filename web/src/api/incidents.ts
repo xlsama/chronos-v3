@@ -1,8 +1,19 @@
 import { request } from "@/lib/request";
-import type { Incident, Message, SSEEvent } from "@/lib/types";
+import type { Incident, Message, PaginatedResponse, SSEEvent } from "@/lib/types";
 
-export function getIncidents() {
-  return request<Incident[]>("/incidents");
+export function getIncidents(params?: {
+  status?: string;
+  page?: number;
+  page_size?: number;
+}) {
+  const searchParams = new URLSearchParams();
+  if (params?.status) searchParams.set("status", params.status);
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.page_size) searchParams.set("page_size", String(params.page_size));
+  const qs = searchParams.toString();
+  return request<PaginatedResponse<Incident>>(
+    `/incidents${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function getIncident(id: string) {
@@ -26,7 +37,7 @@ export function sendIncidentMessage(
   content: string,
   attachmentIds?: string[],
 ) {
-  return request(`/incidents/${incidentId}/messages`, {
+  return request<Message>(`/incidents/${incidentId}/messages`, {
     method: "POST",
     body: { content, attachment_ids: attachmentIds },
   });
@@ -36,10 +47,8 @@ export function getIncidentEvents(incidentId: string) {
   return request<SSEEvent[]>(`/incidents/${incidentId}/events`);
 }
 
-
 export function stopIncident(incidentId: string) {
-  return request<{ ok: boolean }>(`/incidents/${incidentId}/stop`, {
+  return request<Incident>(`/incidents/${incidentId}/stop`, {
     method: "POST",
   });
 }
-

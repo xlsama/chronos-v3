@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { AlertCircle, FileText, Square } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, FileText, Square } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { getIncidents, stopIncident } from "@/api/incidents";
 import { getAttachmentUrl } from "@/api/attachments";
@@ -33,10 +33,17 @@ import { severityColors, statusColors, statusLabels } from "@/lib/incident-const
 
 export function IncidentList() {
   const queryClient = useQueryClient();
-  const { data: incidents, isLoading } = useQuery({
-    queryKey: ["incidents"],
-    queryFn: getIncidents,
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["incidents", page],
+    queryFn: () => getIncidents({ page, page_size: pageSize }),
   });
+
+  const incidents = data?.items;
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / pageSize);
 
   const [stopDialogId, setStopDialogId] = useState<string | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
@@ -163,6 +170,36 @@ export function IncidentList() {
           </motion.div>
         ))}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <span className="text-sm text-muted-foreground">
+            共 {total} 条
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="px-2 text-sm">
+              {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <AlertDialog open={!!stopDialogId} onOpenChange={(open) => !open && setStopDialogId(null)}>
         <AlertDialogContent>

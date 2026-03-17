@@ -41,6 +41,14 @@ DANGEROUS_PATTERNS = [
     r"kill\s+-9\b",               # force kill process
     r"kubectl\s+delete\b",        # K8s delete resource
     r"\bredis-cli\b.*\b(FLUSHALL|FLUSHDB|SHUTDOWN)\b",  # Redis dangerous ops
+    r"\bdocker\s+rm\s+",          # docker rm
+    r"\bdocker\s+rmi\s",          # docker rmi
+    r"\bdocker\s+system\s+prune\b",  # docker system prune
+    r"\biptables\b",              # iptables
+    r"\bcrontab\s+-[er]\b",       # crontab -e/-r
+    r"\bsystemctl\s+(stop|restart|disable|enable)\b",  # service lifecycle
+    r"\bdocker\s+compose\s+(down|rm)\b",  # compose down/rm
+    r"\bkubectl\s+(apply|patch|scale|rollout)\b",  # K8s write operations
 ]
 
 # Write patterns — whitelist commands used in write mode (needs approval, MEDIUM)
@@ -48,6 +56,7 @@ WRITE_PATTERNS = [
     r"\bsed\s+.*-i\b",                                    # sed -i (in-place edit)
     r"\bsed\s+.*--in-place\b",                             # sed --in-place
     r"\bcurl\s+.*-X\s*(POST|PUT|DELETE|PATCH)\b",          # curl with write methods
+    r"\bcurl\s+.*--request\s*(POST|PUT|DELETE|PATCH)\b",   # curl --request long option
     r"\bcurl\s+.*(-d\s|--data|--data-raw|--data-binary)",  # curl with request body
     r"\bwget\s",                                            # wget (downloads files)
     r"\btee\s+\S",                                          # tee with file arg (writes)
@@ -82,6 +91,7 @@ READ_PATTERNS = [
 BLOCKED_PATTERNS = [
     r"rm\s+(-[a-zA-Z]*)?r[a-zA-Z]*f[a-zA-Z]*\s+/\s*$",  # rm -rf /
     r"rm\s+(-[a-zA-Z]*)?r[a-zA-Z]*f[a-zA-Z]*\s+/\*",     # rm -rf /*
+    r"rm\s+.*--no-preserve-root",                          # rm --no-preserve-root
     r":\(\)\s*\{",                                          # fork bomb
     r">\s*/dev/sd",                                         # redirect to block device
 ]

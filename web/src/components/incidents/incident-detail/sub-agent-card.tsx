@@ -40,7 +40,7 @@ const AGENT_CONFIG: Record<
 interface SubAgentCardProps {
   agentName: string;
   events: SSEEvent[];
-  isStreaming?: boolean;
+  status: "idle" | "started" | "completed" | "failed";
   streamingContent?: string;
   forceExpanded?: boolean;
 }
@@ -48,7 +48,7 @@ interface SubAgentCardProps {
 export function SubAgentCard({
   agentName,
   events,
-  isStreaming,
+  status,
   streamingContent,
   forceExpanded,
 }: SubAgentCardProps) {
@@ -98,14 +98,17 @@ export function SubAgentCard({
     return all;
   }, [events]);
 
-  const statusText = isStreaming
-    ? "检索中..."
-    : [
-        duration && duration !== "0s" ? duration : null,
-        toolCallCount > 0 ? `${toolCallCount} 次调用` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ") || "完成";
+  const statusText =
+    status === "started"
+      ? "检索中..."
+      : status === "failed"
+        ? "检索失败"
+        : [
+            duration && duration !== "0s" ? duration : null,
+            toolCallCount > 0 ? `${toolCallCount} 次调用` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "完成";
 
   return (
     <div
@@ -127,7 +130,7 @@ export function SubAgentCard({
       </button>
 
       {/* Sources row */}
-      {!isStreaming && sources.length > 0 && (
+      {status !== "started" && sources.length > 0 && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1 pl-6 text-xs text-blue-700">
           <FileText className="h-3 w-3 shrink-0 opacity-60" />
           {sources.map((s, i) => (
@@ -198,7 +201,7 @@ export function SubAgentCard({
             return null;
           })}
 
-          {isStreaming && streamingContent && (
+          {status === "started" && streamingContent && (
             <div className="text-xs opacity-80 animate-pulse">
               <Markdown content={streamingContent} streaming variant="compact" />
             </div>

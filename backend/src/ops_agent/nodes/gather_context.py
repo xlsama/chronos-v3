@@ -36,12 +36,12 @@ def _build_callback(channel: str, agent: str) -> tuple[EventCallback, EventPubli
 
 
 async def _safe_run(coro_func, *args) -> Any:
-    """Run a coroutine and return None on failure instead of raising."""
+    """Run a coroutine and return error string on failure instead of raising."""
     try:
         return await coro_func(*args)
     except Exception as e:
         logger.error(f"{coro_func.__name__} failed: {e}")
-        return None
+        return f"[ERROR] {coro_func.__name__} 执行失败: {e}"
 
 
 async def _update_incident_project(incident_id: str, project_id: str) -> None:
@@ -59,13 +59,17 @@ async def _update_incident_project(incident_id: str, project_id: str) -> None:
 
 async def gather_context_node(state: OpsState) -> dict:
     """Run sub-agents to gather context before the main agent starts."""
-    channel = state.get("_event_channel", "")
+    channel = EventPublisher.channel_for_incident(state["incident_id"])
     description = state["description"]
     project_id = state.get("project_id", "")
     incident_id = state["incident_id"]
 
     history_cb, history_pub = _build_callback(channel, agent="history")
     kb_cb, kb_pub = _build_callback(channel, agent="kb")
+
+    # Publish agent_status started
+    await history_cb("agent_status", {"status": "started"})
+    await kb_cb("agent_status", {"status": "started"})
 
     # Always run both sub-agents in parallel
     history_result, kb_result = await asyncio.gather(
@@ -78,6 +82,12 @@ async def gather_context_node(state: OpsState) -> dict:
         await history_pub.flush_remaining(channel)
     if kb_pub:
         await kb_pub.flush_remaining(channel)
+
+    # Publish agent_status completed/failed
+    history_failed = isinstance(history_result, str) and history_result.startswith("[ERROR]")
+    kb_failed = isinstance(kb_result, str) and kb_result.startswith("[ERROR]")
+    await history_cb("agent_status", {"status": "failed" if history_failed else "completed"})
+    await kb_cb("agent_status", {"status": "failed" if kb_failed else "completed"})
 
     # Extract project_id from KB agent result
     kb_summary = None

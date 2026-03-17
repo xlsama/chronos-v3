@@ -32,7 +32,7 @@ def _build_callback(channel: str) -> EventCallback:
 
 
 async def summarize_node(state: OpsState) -> dict:
-    channel = state.get("_event_channel", "")
+    channel = EventPublisher.channel_for_incident(state["incident_id"])
     callback = _build_callback(channel)
 
     try:

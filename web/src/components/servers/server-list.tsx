@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { EllipsisVertical, KeyRound, Pencil, Server, Trash2, Wifi, WifiOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, EllipsisVertical, KeyRound, Pencil, Server, Trash2, Wifi, WifiOff } from "lucide-react";
 import {
   deleteServer,
   getServers,
@@ -171,10 +171,17 @@ function ServerItem({ server }: { server: ServerType }) {
 }
 
 export function ServerList() {
-  const { data: servers, isLoading } = useQuery({
-    queryKey: ["servers"],
-    queryFn: getServers,
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["servers", page],
+    queryFn: () => getServers({ page, page_size: pageSize }),
   });
+
+  const servers = data?.items;
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / pageSize);
 
   if (isLoading) {
     return (
@@ -214,6 +221,35 @@ export function ServerList() {
       {servers.map((server) => (
         <ServerItem key={server.id} server={server} />
       ))}
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <span className="text-sm text-muted-foreground">
+            共 {total} 台
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="px-2 text-sm">
+              {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

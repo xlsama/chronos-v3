@@ -64,6 +64,7 @@ async def run_history_agent(
             full_response = chunk if full_response is None else full_response + chunk
 
         assert full_response is not None
+        await event_callback("thinking_done", {})
         messages.append(full_response)
 
         # Check for tool calls
@@ -95,4 +96,5 @@ async def run_history_agent(
             full_content += chunk.content
             await event_callback("thinking", {"content": chunk.content})
 
+    await event_callback("thinking_done", {})
     return full_content or "暂无相似历史事件"

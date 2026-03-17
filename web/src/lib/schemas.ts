@@ -91,6 +91,7 @@ export type DocumentPasteFormData = z.infer<typeof documentPasteSchema>;
 // ── SSE Events ──
 
 const baseSSEFields = {
+  event_id: z.string().optional(),
   timestamp: z.string(),
   phase: z.string().optional(),
   agent: z.string().optional(),
@@ -168,6 +169,21 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
     data: z
       .object({ skill_name: z.string(), content: z.string() })
       .passthrough(),
+    ...baseSSEFields,
+  }),
+  z.object({
+    event_type: z.literal("thinking_done"),
+    data: z.object({}).passthrough(),
+    ...baseSSEFields,
+  }),
+  z.object({
+    event_type: z.literal("answer"),
+    data: z.object({ content: z.string() }).passthrough(),
+    ...baseSSEFields,
+  }),
+  z.object({
+    event_type: z.literal("agent_status"),
+    data: z.object({ status: z.string() }).passthrough(),
     ...baseSSEFields,
   }),
 ]);

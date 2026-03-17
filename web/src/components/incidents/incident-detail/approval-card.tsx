@@ -19,7 +19,7 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
     (s) => s.setApprovalDecided,
   );
   const resolvedDecision = approvalId
-    ? (decidedApprovals.get(approvalId) ?? null)
+    ? (decidedApprovals[approvalId] ?? null)
     : null;
 
   const decideMutation = useMutation({
@@ -34,10 +34,11 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
       toast.success(`Request ${decision}`);
     },
     onError: (error: unknown) => {
-      // 409 Conflict → approval already decided, silently mark as decided
-      const status = (error as { status?: number })?.status;
-      if (status === 409) {
-        setApprovalDecided(approvalId!, "approved");
+      // 409 Conflict → approval already decided, parse actual decision from detail
+      const apiErr = error as { status?: number; detail?: string };
+      if (apiErr.status === 409) {
+        const decision = apiErr.detail?.includes("rejected") ? "rejected" : "approved";
+        setApprovalDecided(approvalId!, decision);
         return;
       }
       toast.error("Failed to decide approval");

@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import ApprovalRequest
+from src.lib.errors import ApprovalAlreadyDecidedError, ApprovalNotFoundError
 
 
 class ApprovalService:
@@ -47,10 +48,12 @@ class ApprovalService:
         result = await self.session.execute(stmt)
         approval = result.scalar_one_or_none()
         if approval is None:
-            raise ValueError("Approval request not found")
+            raise ApprovalNotFoundError()
 
         if approval.decision is not None:
-            raise ValueError(f"Approval request already decided: {approval.decision}")
+            raise ApprovalAlreadyDecidedError(
+                f"Approval request already decided: {approval.decision}"
+            )
 
         approval.decision = decision
         approval.decided_by = decided_by

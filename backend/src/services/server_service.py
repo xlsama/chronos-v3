@@ -93,6 +93,11 @@ class ServerService:
 
         await self.session.commit()
         await self.session.refresh(server)
+
+        # Invalidate SSH connector cache so new credentials take effect
+        from src.ops_agent.tools.bash_tool import invalidate_connector
+        await invalidate_connector(str(server.id))
+
         return server
 
     def get_decrypted_credentials(

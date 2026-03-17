@@ -1,8 +1,17 @@
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, Field, model_validator
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    page: int
+    page_size: int
 
 
 class ProjectCreate(BaseModel):
@@ -138,7 +147,7 @@ class MessageResponse(BaseModel):
     role: str
     event_type: str
     content: str
-    metadata_json: str | None
+    metadata_json: dict | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -193,6 +202,7 @@ class DocumentDetailResponse(DocumentResponse):
 
 
 class EventResponse(BaseModel):
+    event_id: str | None = None
     event_type: str
     data: dict[str, Any]
     timestamp: str

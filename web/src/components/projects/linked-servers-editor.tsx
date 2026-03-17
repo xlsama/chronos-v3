@@ -37,10 +37,12 @@ export function LinkedServersEditor({ project }: LinkedServersEditorProps) {
   const [search, setSearch] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const { data: allServers } = useQuery({
-    queryKey: ["servers"],
-    queryFn: getServers,
+  const { data: serversData } = useQuery({
+    queryKey: ["servers", "all"],
+    queryFn: () => getServers({ page_size: 200 }),
   });
+
+  const allServers = serversData?.items;
 
   const updateMutation = useMutation({
     mutationFn: (ids: string[]) =>
