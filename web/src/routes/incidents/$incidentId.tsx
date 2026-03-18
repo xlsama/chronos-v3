@@ -177,6 +177,7 @@ function IncidentDetailPage() {
         onScroll={checkIsAtBottom}
       >
         <EventTimeline
+          incidentId={incidentId}
           summaryMarkdown={incident.summary_md}
         />
         <div ref={bottomRef} />

@@ -176,6 +176,8 @@ def _message_to_event(m: Message) -> dict:
         data = metadata or {}
     elif m.event_type == "agent_status":
         data = metadata  # {phase, agent, status}
+    elif m.event_type == "kb_confirm_required":
+        data = metadata  # {type, summary, message}
     else:
         data = {"content": m.content}
 

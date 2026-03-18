@@ -44,6 +44,7 @@ export function useIncidentStream(
     updatePhase,
     setAskHumanQuestion,
     setKbConfirmData,
+    setKbConfirmResolved,
     setApprovalDecided,
     setConnected,
     reset,
@@ -212,7 +213,13 @@ export function useIncidentStream(
             } else if (event.event_type === "thinking_done" || event.event_type === "answer_done" || event.event_type === "ask_human_done") {
               // DB boundary marker, skip
             } else if (event.event_type === "kb_confirm_required") {
-              // Replay: kb confirm was already handled, skip
+              // Replay: restore kb confirm state, mark as resolved (agent already continued)
+              setKbConfirmData({
+                type: event.data.type as string,
+                summary: event.data.summary as string,
+                message: event.data.message as string,
+              });
+              setKbConfirmResolved(true);
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
                 setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");

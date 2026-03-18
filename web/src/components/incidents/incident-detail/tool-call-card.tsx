@@ -58,19 +58,19 @@ export function ToolCallCard({
 
       {/* Expanded content */}
       {expanded && (
-        <div className="space-y-2 border-t border-blue-100 p-3 pt-2">
+        <div className="flex flex-col gap-3 border-t border-blue-100 p-3 pt-2">
           {/* Bash command */}
           {command && (
             <ShellCodeBlock
               code={command}
               showPrompt
-              className="overflow-x-auto rounded bg-background p-2 text-xs"
+              className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 text-xs"
             />
           )}
 
           {/* Non-bash args */}
           {hasNonBashArgs && (
-            <pre className="overflow-x-auto rounded bg-background p-2 text-xs">
+            <pre className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 text-xs">
               {JSON.stringify(args, null, 2)}
             </pre>
           )}

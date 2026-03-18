@@ -27,6 +27,7 @@ interface IncidentStreamState {
   reportStreamContent: string;
   askHumanQuestion: string | null;
   kbConfirmData: { type: string; summary: string; message: string } | null;
+  kbConfirmResolved: boolean;
   decidedApprovals: Record<string, string>;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
@@ -44,6 +45,7 @@ interface IncidentStreamState {
   updatePhase: (phase: string) => void;
   setAskHumanQuestion: (question: string | null) => void;
   setKbConfirmData: (data: { type: string; summary: string; message: string } | null) => void;
+  setKbConfirmResolved: (resolved: boolean) => void;
   setApprovalDecided: (approvalId: string, decision: string) => void;
   setConnected: (connected: boolean) => void;
   loadHistory: (events: SSEEvent[]) => void;
@@ -74,6 +76,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   reportStreamContent: "",
   askHumanQuestion: null,
   kbConfirmData: null,
+  kbConfirmResolved: false,
   decidedApprovals: {},
 
   addEvent: (event) => {
@@ -183,6 +186,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   setKbConfirmData: (data) => set({ kbConfirmData: data }),
 
+  setKbConfirmResolved: (resolved) => set({ kbConfirmResolved: resolved }),
+
   setApprovalDecided: (approvalId, decision) =>
     set((state) => ({
       decidedApprovals: { ...state.decidedApprovals, [approvalId]: decision },
@@ -200,6 +205,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     let hasUserMessageAfterAsk = false;
     let historyStatus: "idle" | "started" | "completed" | "failed" = "idle";
     let kbStatus: "idle" | "started" | "completed" | "failed" = "idle";
+    let kbConfirm: { type: string; summary: string; message: string } | null = null;
+    let kbConfirmIsResolved = false;
+    let lastKbConfirmIndex = -1;
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -225,8 +233,21 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
+      // kb_confirm_required → extract data, check if followed by user_message
+      if (event.event_type === "kb_confirm_required") {
+        kbConfirm = {
+          type: event.data.type as string,
+          summary: event.data.summary as string,
+          message: event.data.message as string,
+        };
+        lastKbConfirmIndex = i;
+        kbConfirmIsResolved = false;
+        continue;
+      }
+
       if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_used") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
+        if (lastKbConfirmIndex >= 0 && event.event_type === "user_message") kbConfirmIsResolved = true;
         mainEvents.push(event);
         continue;
       }
@@ -278,6 +299,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       phaseState: derivedPhase,
       decidedApprovals: decided,
       askHumanQuestion: askQuestion,
+      kbConfirmData: kbConfirm,
+      kbConfirmResolved: kbConfirmIsResolved,
     });
   },
 
@@ -294,6 +317,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       reportStreamContent: "",
       askHumanQuestion: null,
       kbConfirmData: null,
+      kbConfirmResolved: false,
       decidedApprovals: {},
     }),
 }));

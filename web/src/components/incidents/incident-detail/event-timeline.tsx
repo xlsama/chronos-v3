@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, Brain, FileText, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle, AlertCircle } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
+import { sendIncidentMessage } from "@/api/incidents";
+import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
 import { formatRelativeTime, formatDuration } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
@@ -22,6 +24,7 @@ import {
 } from "@/components/ui/hover-card";
 
 interface EventTimelineProps {
+  incidentId: string;
   summaryMarkdown?: string | null;
 }
 
@@ -173,8 +176,26 @@ function LiveAnswerSection() {
   );
 }
 
-function KbConfirmSection() {
+function KbConfirmSection({ incidentId }: { incidentId: string }) {
   const kbConfirmData = useIncidentStreamStore((s) => s.kbConfirmData);
+  const kbConfirmResolved = useIncidentStreamStore((s) => s.kbConfirmResolved);
+  const setKbConfirmResolved = useIncidentStreamStore((s) => s.setKbConfirmResolved);
+  const setAskHumanQuestion = useIncidentStreamStore((s) => s.setAskHumanQuestion);
+  const addEvent = useIncidentStreamStore((s) => s.addEvent);
+
+  const confirmMutation = useMutation({
+    mutationFn: () => sendIncidentMessage(incidentId, "确认"),
+    onMutate: () => {
+      addEvent({
+        event_id: `optimistic-${Date.now()}`,
+        event_type: "user_message",
+        data: { content: "确认" },
+        timestamp: new Date().toISOString(),
+      });
+      setKbConfirmResolved(true);
+      setAskHumanQuestion(null);
+    },
+  });
 
   if (!kbConfirmData) return null;
 
@@ -195,11 +216,26 @@ function KbConfirmSection() {
               className="card-markdown card-markdown--amber"
             />
           )}
-          <p className="text-xs text-muted-foreground">
-            {isIncomplete
-              ? "请在下方输入补充信息，或输入「确认」跳过"
-              : "请在下方输入「确认」继续，或输入补充信息"}
-          </p>
+          {kbConfirmResolved ? (
+            <span className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
+              已确认
+            </span>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {isIncomplete
+                  ? "请在下方输入补充信息，或点击确认跳过"
+                  : "请点击确认继续，或在下方输入补充信息"}
+              </p>
+              <Button
+                size="sm"
+                onClick={() => confirmMutation.mutate()}
+                disabled={confirmMutation.isPending}
+              >
+                确认
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -249,7 +285,7 @@ function ReportSection({ fallbackMarkdown }: { fallbackMarkdown?: string }) {
   );
 }
 
-export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
+export function EventTimeline({ incidentId, summaryMarkdown }: EventTimelineProps) {
   const events = useIncidentStreamStore((s) => s.events);
   const historyAgentState = useIncidentStreamStore((s) => s.historyAgentState);
   const kbAgentState = useIncidentStreamStore((s) => s.kbAgentState);
@@ -351,7 +387,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                 forceExpanded={phaseState.contextGathering === "active"}
               />
             )}
-            <KbConfirmSection />
+            <KbConfirmSection incidentId={incidentId} />
           </div>
         </PhaseSection>
       )}

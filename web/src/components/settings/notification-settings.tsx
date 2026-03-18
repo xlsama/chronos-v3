@@ -111,7 +111,7 @@ export function NotificationSettings() {
       <div>
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-medium">通知</h3>
-          <Tooltip delay={0}>
+          <Tooltip>
             <TooltipTrigger render={<CircleHelp className="text-muted-foreground size-4 cursor-help" />} />
             <TooltipContent side="right" className="block max-w-xs space-y-2 py-2">
               <p className="font-medium">通知触发场景</p>
