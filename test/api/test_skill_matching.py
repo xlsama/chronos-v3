@@ -1,51 +1,37 @@
-"""Test skill listing and matching logic.
+"""Skill 列表与匹配测试"""
 
-Usage:
-    cd server && uv run python ../test/api/test_skill_matching.py
-"""
+import pytest
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from bootstrap import print_divider
-
-# bootstrap does os.chdir(SERVER_DIR), so relative paths work
-from src.services.skill_service import SkillService
+pytestmark = pytest.mark.api
 
 
-def main():
+def test_get_all_summaries():
+    """get_all_summaries 返回 skill 列表，每项包含 slug/name/description"""
+    from src.services.skill_service import SkillService
+
     svc = SkillService()
-
-    # Step 1: List all skill summaries
-    print_divider("All Skills (summaries)")
     summaries = svc.get_all_summaries()
-    if not summaries:
-        print("No skills found.")
-    else:
-        for s in summaries:
-            print(f"  [{s['slug']}] {s['name']}: {s['description']}")
+    print(f"Found {len(summaries)} skills")
+    for s in summaries:
+        print(f"  [{s['slug']}] {s['name']}: {s['description']}")
+    assert isinstance(summaries, list)
+    assert len(summaries) > 0
+    for s in summaries:
+        assert "slug" in s
+        assert "name" in s
+        assert "description" in s
 
-    # Step 2: List auto_load skills with content preview
-    print_divider("Auto-load Skills (with content)")
+
+def test_get_auto_load_skills():
+    """auto_load skills 返回 (meta, body) 元组列表"""
+    from src.services.skill_service import SkillService
+
+    svc = SkillService()
     auto_skills = svc.get_auto_load_skills()
-    if not auto_skills:
-        print("No auto-load skills.")
-    else:
-        for meta, body in auto_skills:
-            print(f"\n  [{meta.slug}] {meta.name} (auto_load=True)")
-            print(f"  Description: {meta.description}")
-            preview = body[:300]
-            print(f"  Content preview:\n    {preview}")
-            if len(body) > 300:
-                print(f"    ... ({len(body)} chars total)")
-
-    # Note
-    print_divider("Note")
-    print("Skill matching is NOT vector-based.")
-    print("The main agent sees skill summaries in its system prompt,")
-    print("then decides to call use_skill(slug) based on LLM reasoning.")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"Found {len(auto_skills)} auto-load skills")
+    for meta, body in auto_skills:
+        print(f"  [{meta.slug}] {meta.name} (body: {len(body)} chars)")
+    assert isinstance(auto_skills, list)
+    for meta, body in auto_skills:
+        assert meta.auto_load is True
+        assert len(body) > 0

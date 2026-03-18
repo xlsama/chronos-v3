@@ -1,40 +1,23 @@
-"""Test History Sub-Agent full flow with streaming output.
+"""History Sub-Agent 完整流程测试"""
 
-Usage:
-    cd server && uv run python ../test/api/test_history_agent.py -q "数据库连接池耗尽"
-"""
+import pytest
 
-import argparse
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from bootstrap import console_event_callback, print_divider, run_async
+pytestmark = pytest.mark.api
+QUERY = "数据库连接池耗尽"
 
 
-async def main(query: str):
+@pytest.mark.asyncio
+async def test_history_agent(event_callback):
+    """History Agent 返回字符串结果"""
     from src.ops_agent.sub_agents.history_agent import run_history_agent
 
-    print_divider("History Agent Start")
-    print(f"Query: {query}")
-
-    result = await run_history_agent(
-        description=query,
-        event_callback=console_event_callback,
-    )
-
-    print_divider("History Agent Result")
-    print(result)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test History Sub-Agent")
-    parser.add_argument("-q", "--query", type=str, help="Event description")
-    args = parser.parse_args()
-
-    query = args.query or input("Enter event description: ").strip()
-    if not query:
-        print("Query is required.")
-        sys.exit(1)
-
-    run_async(main(query))
+    print(f"Query: {QUERY}")
+    result = await run_history_agent(description=QUERY, event_callback=event_callback)
+    print(f"Result length: {len(result)} chars")
+    print(f"Events captured: {len(event_callback.events)}")
+    for et, data in event_callback.events:
+        if et == "tool_call":
+            print(f"  Tool call: {data.get('name')}")
+    assert isinstance(result, str)
+    assert len(result) > 0
+    print(f"Result preview: {result[:200]}")

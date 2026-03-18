@@ -1,66 +1,52 @@
-"""Test KB vector retrieval + reranking raw results.
+"""KB 向量检索 + Rerank 测试"""
 
-Usage:
-    cd server && uv run python ../test/api/test_kb_retrieval.py -q "数据库超时" -p "<project_uuid>"
-"""
-
-import argparse
-import sys
 import uuid
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from bootstrap import get_embedder, get_reranker, get_session, print_divider, run_async
+import pytest
+
+pytestmark = pytest.mark.api
+QUERY = "数据库连接超时"
 
 
-async def main(query: str, project_id: str):
+@pytest.mark.asyncio
+async def test_embedding(embedder):
+    """Embedder 能正常生成向量"""
+    embedding = await embedder.embed_text(QUERY)
+    print(f"Query: {QUERY}")
+    print(f"Embedding dim: {len(embedding)}")
+    assert len(embedding) > 0
+
+
+@pytest.mark.asyncio
+async def test_vector_search(embedder, db_session, project_id):
+    """VectorStore.search 返回结果且格式正确"""
     from src.db.vector_store import VectorStore
 
-    embedder = get_embedder()
-    reranker = get_reranker()
-
-    # Step 1: Embed query
-    print_divider("Step 1: Embedding")
-    embedding = await embedder.embed_text(query)
-    print(f"Query: {query}")
-    print(f"Embedding dim: {len(embedding)}")
-
-    # Step 2: Vector search
-    print_divider("Step 2: Vector Search (top 20)")
-    async with get_session() as session:
-        vs = VectorStore(session)
-        results = await vs.search(embedding, uuid.UUID(project_id), limit=20)
-
-    if not results:
-        print("No results found.")
-        return
-
+    embedding = await embedder.embed_text(QUERY)
+    vs = VectorStore(db_session)
+    results = await vs.search(embedding, uuid.UUID(project_id), limit=20)
+    print(f"Vector search returned {len(results)} results")
     for i, r in enumerate(results):
-        print(f"\n--- [{i + 1}] distance={r['distance']:.4f} | {r['filename']} (chunk #{r['chunk_index']})")
-        print(r["content"][:300])
-        if len(r["content"]) > 300:
-            print(f"  ... ({len(r['content'])} chars)")
+        print(f"  [{i+1}] distance={r['distance']:.4f} | {r['filename']} (chunk #{r['chunk_index']})")
+    assert len(results) > 0
+    assert "content" in results[0]
+    assert "distance" in results[0]
+    assert "filename" in results[0]
 
-    # Step 3: Rerank
-    print_divider(f"Step 3: Rerank (top 5 from {len(results)})")
+
+@pytest.mark.asyncio
+async def test_rerank(embedder, reranker, db_session, project_id):
+    """Reranker 能对搜索结果重排序，结果数 <= top_n"""
+    from src.db.vector_store import VectorStore
+
+    embedding = await embedder.embed_text(QUERY)
+    vs = VectorStore(db_session)
+    results = await vs.search(embedding, uuid.UUID(project_id), limit=20)
     documents = [r["content"] for r in results]
-    reranked = await reranker.rerank(query, documents, top_n=5)
-
+    reranked = await reranker.rerank(QUERY, documents, top_n=5)
+    print(f"Reranked {len(results)} → {len(reranked)} results")
     for rr in reranked:
         r = results[rr.index]
-        print(f"\n--- [{rr.index + 1}] relevance={rr.relevance_score:.4f} | distance={r['distance']:.4f} | {r['filename']}")
-        print(r["content"][:300])
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test KB vector retrieval + reranking")
-    parser.add_argument("-q", "--query", type=str, help="Search query")
-    parser.add_argument("-p", "--project-id", type=str, required=True, help="Project UUID")
-    args = parser.parse_args()
-
-    query = args.query or input("Enter query: ").strip()
-    if not query:
-        print("Query is required.")
-        sys.exit(1)
-
-    run_async(main(query, args.project_id))
+        print(f"  [{rr.index+1}] relevance={rr.relevance_score:.4f} | {r['filename']}")
+    assert len(reranked) <= 5
+    assert all(rr.relevance_score >= 0 for rr in reranked)

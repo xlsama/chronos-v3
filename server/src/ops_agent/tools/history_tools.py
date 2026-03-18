@@ -14,7 +14,7 @@ async def search_incident_history(query: str) -> tuple[str, list[dict]]:
     factory = get_session_factory()
     async with factory() as session:
         service = IncidentHistoryService(session=session)
-        results = await service.search(query=query, limit=5)
+        results = await service.search(query=query, limit=3)
 
     if not results:
         return ("暂无相似历史事件。", [])

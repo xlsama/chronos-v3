@@ -133,7 +133,7 @@ async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[
             rerank_results = await reranker.rerank(
                 query=query,
                 documents=[c["content"] for c in candidates],
-                top_n=5,
+                top_n=3,
             )
             results = []
             for rr in rerank_results:

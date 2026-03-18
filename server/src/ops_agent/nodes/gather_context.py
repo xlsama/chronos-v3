@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from src.db.connection import get_session_factory
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.state import OpsState
 from src.ops_agent.sub_agents.history_agent import run_history_agent

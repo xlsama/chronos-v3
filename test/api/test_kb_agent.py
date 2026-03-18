@@ -1,48 +1,34 @@
-"""Test KB Sub-Agent full flow with streaming output.
+"""KB Sub-Agent 完整流程测试"""
 
-Usage:
-    cd server && uv run python ../test/api/test_kb_agent.py -q "Nginx 502"
-    cd server && uv run python ../test/api/test_kb_agent.py -q "Nginx 502" -p "<project_uuid>"
-"""
+import pytest
 
-import argparse
-import json
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from bootstrap import console_event_callback, print_divider, run_async
+pytestmark = pytest.mark.api
+QUERY = "Nginx 502 报错"
 
 
-async def main(query: str, project_id: str):
+@pytest.mark.asyncio
+async def test_kb_agent_known_project(project_id, event_callback):
+    """KB Agent 已知项目模式返回结构化结果"""
     from src.ops_agent.sub_agents.kb_agent import run_kb_agent
 
-    print_divider("KB Agent Start")
-    print(f"Query: {query}")
-    print(f"Project ID: {project_id or '(discover mode)'}")
-
-    result = await run_kb_agent(
-        description=query,
-        project_id=project_id,
-        event_callback=console_event_callback,
-    )
-
-    print_divider("KB Agent Result")
-    if isinstance(result, dict):
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        print(result)
+    print(f"Query: {QUERY}, project_id: {project_id}")
+    result = await run_kb_agent(description=QUERY, project_id=project_id, event_callback=event_callback)
+    print(f"Result type: {type(result).__name__}")
+    print(f"Events captured: {len(event_callback.events)}")
+    for et, data in event_callback.events:
+        if et == "tool_call":
+            print(f"  Tool call: {data.get('name')}")
+    assert isinstance(result, dict)
+    assert "summary" in result
+    assert len(result["summary"]) > 0
+    print(f"Summary length: {len(result['summary'])} chars")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test KB Sub-Agent")
-    parser.add_argument("-q", "--query", type=str, help="Event description")
-    parser.add_argument("-p", "--project-id", type=str, default="", help="Project UUID (empty = discover mode)")
-    args = parser.parse_args()
+@pytest.mark.asyncio
+async def test_kb_agent_discover_mode(event_callback):
+    """KB Agent 发现模式（空 project_id）"""
+    from src.ops_agent.sub_agents.kb_agent import run_kb_agent
 
-    query = args.query or input("Enter event description: ").strip()
-    if not query:
-        print("Query is required.")
-        sys.exit(1)
-
-    run_async(main(query, args.project_id))
+    result = await run_kb_agent(description=QUERY, project_id="", event_callback=event_callback)
+    assert isinstance(result, dict)
+    assert "project_id" in result
