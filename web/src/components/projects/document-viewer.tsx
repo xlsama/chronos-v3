@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 interface DocumentViewerProps {
   documentId: string | null;
   onClose: () => void;
+  readOnly?: boolean;
 }
 
 const EDITABLE_TYPES = new Set([
@@ -37,7 +38,7 @@ const EDITABLE_TYPES = new Set([
   "html",
 ]);
 
-export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
+export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewerProps) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -134,7 +135,7 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
             {doc?.filename ?? "文档预览"}
           </DialogTitle>
           <div className="mr-6 flex items-center gap-2">
-            {isEditable && !editing && (
+            {isEditable && !editing && !readOnly && (
               <Button variant="outline" size="sm" onClick={startEditing}>
                 <Pencil className="mr-1.5 h-3.5 w-3.5" />
                 编辑

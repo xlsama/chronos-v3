@@ -281,6 +281,7 @@ export function SubAgentCard({
         <DocumentViewer
           documentId={previewSource.id}
           onClose={() => setPreviewSource(null)}
+          readOnly
         />
       )}
     </div>
