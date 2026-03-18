@@ -1,0 +1,275 @@
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  EllipsisVertical,
+  Pencil,
+  Trash2,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
+import { deleteService, getServices, testService } from "@/api/services";
+import { cn } from "@/lib/utils";
+import type { Service } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ServiceForm } from "./service-form";
+
+const statusBadgeColors: Record<string, string> = {
+  online: "bg-green-100 text-green-800 border-transparent",
+  offline: "bg-red-100 text-red-800 border-transparent",
+  unknown: "bg-gray-100 text-gray-800 border-transparent",
+};
+
+const statusLabel: Record<string, string> = {
+  online: "在线",
+  offline: "离线",
+  unknown: "未知",
+};
+
+const statusConfig: Record<string, { color: string; icon: typeof Wifi }> = {
+  online: { color: "text-green-500", icon: Wifi },
+  offline: { color: "text-red-500", icon: WifiOff },
+  unknown: { color: "text-gray-400", icon: WifiOff },
+};
+
+const typeLabels: Record<string, string> = {
+  mysql: "MySQL",
+  postgresql: "PostgreSQL",
+  redis: "Redis",
+  prometheus: "Prometheus",
+  mongodb: "MongoDB",
+  elasticsearch: "Elasticsearch",
+};
+
+export function ServiceItem({ service }: { service: Service }) {
+  const queryClient = useQueryClient();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+
+  const testMutation = useMutation({
+    mutationFn: testService,
+    onSuccess: (data) => {
+      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteService,
+    onSuccess: () => {
+      toast.success("服务已删除");
+      setShowDeleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+    },
+  });
+
+  const status = statusConfig[service.status] ?? statusConfig.unknown;
+  const StatusIcon = status.icon;
+
+  return (
+    <>
+      <div className="border-b last:border-b-0">
+        <div className="flex items-center gap-3 p-4">
+          <Database className="h-5 w-5 text-muted-foreground" />
+          <StatusIcon className={cn("h-4 w-4", status.color)} />
+          <div className="flex-1 space-y-0.5">
+            <p className="font-medium">{service.name}</p>
+            <p className="text-sm text-muted-foreground">
+              {service.host}:{service.port}
+            </p>
+            {service.description && (
+              <p className="text-xs text-muted-foreground">
+                {service.description}
+              </p>
+            )}
+          </div>
+          <Badge variant="outline" className="text-xs">
+            {typeLabels[service.service_type] ?? service.service_type}
+          </Badge>
+          <Badge
+            className={
+              statusBadgeColors[service.status] ?? statusBadgeColors.unknown
+            }
+          >
+            {statusLabel[service.status] ?? "未知"}
+          </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => testMutation.mutate(service.id)}
+            disabled={testMutation.isPending}
+          >
+            {testMutation.isPending ? "测试中..." : "测试"}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="icon-sm" />}
+            >
+              <EllipsisVertical className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                编辑
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                删除
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除服务</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除 <strong>{service.name}</strong> 吗？该操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => deleteMutation.mutate(service.id)}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "删除中..." : "删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>编辑服务</DialogTitle>
+          </DialogHeader>
+          <ServiceForm
+            mode="edit"
+            service={service}
+            onSuccess={() => setShowEditDialog(false)}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+export function ServiceList() {
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["services", page],
+    queryFn: () => getServices({ page, page_size: pageSize }),
+  });
+
+  const services = data?.items;
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / pageSize);
+
+  if (isLoading) {
+    return (
+      <div className="divide-y">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 p-4">
+            <Skeleton className="h-4 w-4 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-8 w-8" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!services?.length) {
+    return (
+      <Empty className="pb-[20%]">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Database />
+          </EmptyMedia>
+          <EmptyTitle>暂无服务</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
+  return (
+    <div>
+      {services.map((service) => (
+        <ServiceItem key={service.id} service={service} />
+      ))}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <span className="text-sm text-muted-foreground">共 {total} 个</span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="px-2 text-sm">
+              {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

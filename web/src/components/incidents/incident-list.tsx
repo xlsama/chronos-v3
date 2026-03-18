@@ -75,13 +75,13 @@ export function IncidentList() {
 
   if (!incidents?.length) {
     return (
-      <Empty className="py-12">
+      <Empty className="pb-[20%]">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <AlertCircle />
           </EmptyMedia>
           <EmptyTitle>暂无事件</EmptyTitle>
-          <EmptyDescription>创建一个以开始使用。</EmptyDescription>
+          <EmptyDescription>快让你的 Agent 帮你排查问题吧。</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, Brain, FileText, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle } from "lucide-react";
+import { Search, Brain, FileText, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle, AlertCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { getServers } from "@/api/servers";
@@ -122,6 +122,38 @@ function LiveThinkingSection() {
   );
 }
 
+function LiveAskHumanSection() {
+  const askHumanStreamContent = useIncidentStreamStore((s) => s.askHumanStreamContent);
+  return (
+    <AnimatePresence>
+      {askHumanStreamContent && (
+        <motion.div
+          key="live-ask-human"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2 }}
+        >
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+            <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">
+                Agent 需要更多信息
+              </p>
+              <Markdown
+                content={askHumanStreamContent}
+                streaming
+                variant="compact"
+                className="mt-1 card-markdown card-markdown--amber"
+              />
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function LiveAnswerSection() {
   const answerContent = useIncidentStreamStore((s) => s.answerContent);
   return (
@@ -138,6 +170,39 @@ function LiveAnswerSection() {
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+function KbConfirmSection() {
+  const kbConfirmData = useIncidentStreamStore((s) => s.kbConfirmData);
+
+  if (!kbConfirmData) return null;
+
+  const isIncomplete = kbConfirmData.type === "kb_context_incomplete";
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-2">
+      <div className="flex items-start gap-3">
+        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-amber-800">
+            {kbConfirmData.message}
+          </p>
+          {kbConfirmData.summary && (
+            <Markdown
+              content={kbConfirmData.summary}
+              variant="compact"
+              className="card-markdown card-markdown--amber"
+            />
+          )}
+          <p className="text-xs text-muted-foreground">
+            {isIncomplete
+              ? "请在下方输入补充信息，或输入「确认」跳过"
+              : "请在下方输入「确认」继续，或输入补充信息"}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -191,6 +256,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
   const phaseState = useIncidentStreamStore((s) => s.phaseState);
   const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
   const hasAnswerStream = useIncidentStreamStore((s) => !!s.answerContent);
+  const hasAskHumanStream = useIncidentStreamStore((s) => !!s.askHumanStreamContent);
 
   // Servers for resolving server_id → name
   const { data: serversData } = useQuery({
@@ -209,6 +275,8 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
     return map;
   }, [serversData]);
 
+  const kbConfirmData = useIncidentStreamStore((s) => s.kbConfirmData);
+
   const hasHistory =
     historyAgentState.events.length > 0 ||
     !!historyAgentState.thinkingContent ||
@@ -217,11 +285,11 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
     kbAgentState.events.length > 0 ||
     !!kbAgentState.thinkingContent ||
     kbAgentState.status !== "idle";
-  const hasGatherContext = hasHistory || hasKB;
+  const hasGatherContext = hasHistory || hasKB || !!kbConfirmData;
 
   const mainEvents = events.filter((e) => e.event_type !== "summary");
   const summaryEvent = events.find((e) => e.event_type === "summary");
-  const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream;
+  const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
   const hasReport = !!summaryEvent || !!summaryMarkdown;
 
   // Build paired timeline items
@@ -283,6 +351,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                 forceExpanded={phaseState.contextGathering === "active"}
               />
             )}
+            <KbConfirmSection />
           </div>
         </PhaseSection>
       )}
@@ -344,9 +413,11 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                             <p className="text-sm font-medium text-amber-800">
                               Agent 需要更多信息
                             </p>
-                            <p className="mt-1 text-sm text-amber-700">
-                              {item.event.data.question as string}
-                            </p>
+                            <Markdown
+                              content={item.event.data.question as string}
+                              variant="compact"
+                              className="mt-1 card-markdown card-markdown--amber"
+                            />
                           </div>
                         </div>
                       </motion.div>
@@ -366,8 +437,12 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                   case "error":
                     return (
                       <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
-                        <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
-                          Error: {item.event.data.message as string}
+                        <div className="rounded-md border border-destructive bg-destructive/10 p-3">
+                          <Markdown
+                            content={item.event.data.message as string}
+                            variant="compact"
+                            className="card-markdown card-markdown--destructive"
+                          />
                         </div>
                       </motion.div>
                     );
@@ -393,7 +468,7 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
                               {skillName}
                             </HoverCardTrigger>
                             <HoverCardContent className="w-96 max-h-80 overflow-y-auto">
-                              <Markdown content={skillContent} variant="compact" />
+                              <Markdown content={skillContent} variant="compact" className="card-markdown card-markdown--indigo" />
                             </HoverCardContent>
                           </HoverCard>
                         </div>
@@ -415,6 +490,9 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
             {/* Live thinking stream — isolated component to avoid re-rendering timeline */}
             <LiveThinkingSection />
 
+            {/* Live ask_human stream — shows question as it streams in */}
+            <LiveAskHumanSection />
+
             {/* Live answer stream — shows answer as it streams in */}
             <LiveAnswerSection />
           </div>
@@ -422,6 +500,19 @@ export function EventTimeline({ summaryMarkdown }: EventTimelineProps) {
       )}
 
       {/* Phase 3: Report */}
+      {/* Empty state: nothing rendered yet */}
+      {!hasGatherContext &&
+        phaseState.contextGathering === "pending" &&
+        !hasInvestigation &&
+        phaseState.investigation === "pending" &&
+        !hasReport &&
+        phaseState.report === "pending" && (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin mb-3" />
+          <p className="text-sm">正在连接，等待 Agent 开始处理...</p>
+        </div>
+      )}
+
       {(hasReport || phaseState.report !== "pending") && (
         <PhaseSection
           title="归档总结"

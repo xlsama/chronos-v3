@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, FolderOpen } from "lucide-react";
+import { toast } from "sonner";
+import { ChevronLeft, ChevronRight, Copy, EllipsisVertical, FolderOpen, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
-import { getProjects } from "@/api/projects";
+import { deleteProject, getProjects } from "@/api/projects";
+import type { Project } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -20,6 +22,23 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const GRADIENTS = [
   "from-violet-500 to-purple-600",
@@ -45,6 +64,108 @@ function getGradient(name: string) {
 
 function getInitial(name: string) {
   return name.charAt(0).toUpperCase();
+}
+
+function ProjectCard({ project }: { project: Project }) {
+  const queryClient = useQueryClient();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteProject(project.id),
+    onSuccess: () => {
+      toast.success("知识库已删除");
+      setShowDeleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+
+  return (
+    <>
+      <Link
+        to="/projects/$projectId"
+        params={{ projectId: project.id }}
+        className="no-underline"
+      >
+        <Card className="group pt-0 overflow-hidden transition-colors hover:bg-accent/50">
+          <div
+            className={`relative flex h-24 items-center justify-center bg-gradient-to-br ${getGradient(project.name)}`}
+          >
+            <span className="text-3xl font-bold text-white">
+              {getInitial(project.name)}
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button variant="ghost" size="icon-sm" className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-white hover:bg-white/20 hover:text-white" />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+              >
+                <EllipsisVertical className="h-4 w-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    navigator.clipboard.writeText(project.id);
+                    toast.success("已复制项目 ID");
+                  }}
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  复制项目 ID
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setShowDeleteDialog(true);
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <CardHeader>
+            <CardTitle className="line-clamp-1">{project.name}</CardTitle>
+            <CardDescription className="line-clamp-2">
+              {project.description || project.slug}
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <span className="text-xs text-muted-foreground">
+              {dayjs(project.created_at).fromNow()}
+            </span>
+          </CardFooter>
+        </Card>
+      </Link>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除知识库</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除 <strong>{project.name}</strong> 吗？该操作将删除所有文档和向量数据，且无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "删除中..." : "删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }
 
 export function ProjectList() {
@@ -97,33 +218,7 @@ export function ProjectList() {
     <>
       <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {projects.map((project) => (
-          <Link
-            key={project.id}
-            to="/projects/$projectId"
-            params={{ projectId: project.id }}
-            className="no-underline"
-          >
-            <Card className="pt-0 overflow-hidden transition-colors hover:bg-accent/50">
-              <div
-                className={`flex h-24 items-center justify-center bg-gradient-to-br ${getGradient(project.name)}`}
-              >
-                <span className="text-3xl font-bold text-white">
-                  {getInitial(project.name)}
-                </span>
-              </div>
-              <CardHeader>
-                <CardTitle className="line-clamp-1">{project.name}</CardTitle>
-                <CardDescription className="line-clamp-2">
-                  {project.description || project.slug}
-                </CardDescription>
-              </CardHeader>
-              <CardFooter>
-                <span className="text-xs text-muted-foreground">
-                  {dayjs(project.created_at).fromNow()}
-                </span>
-              </CardFooter>
-            </Card>
-          </Link>
+          <ProjectCard key={project.id} project={project} />
         ))}
       </div>
       {/* Pagination */}

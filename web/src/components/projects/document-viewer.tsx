@@ -15,7 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FilePreview, type FileType } from "@/components/ui/file-preview";
+import { Markdown } from "@/components/ui/markdown";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -26,7 +28,7 @@ interface DocumentViewerProps {
 
 const EDITABLE_TYPES = new Set([
   "markdown",
-  "service_map",
+  "agents_config",
   "text",
   "log",
   "json",
@@ -56,8 +58,9 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
     },
   });
 
+  const isMarkdown =
+    doc?.doc_type === "markdown" || doc?.doc_type === "agents_config";
   const isEditable = doc ? EDITABLE_TYPES.has(doc.doc_type) : false;
-  const isMarkdown = doc?.doc_type === "markdown" || doc?.doc_type === "service_map";
 
   function startEditing() {
     if (doc) {
@@ -84,13 +87,13 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
     if (editing) {
       if (isMarkdown) {
         return (
-          <div className="h-full p-4">
-            <MarkdownEditor
-              value={draft}
-              onChange={setDraft}
-              className="h-full border-0"
-            />
-          </div>
+          <MarkdownEditor
+            value={draft}
+            onChange={setDraft}
+            className="h-full"
+            autoFocus
+            variant="default"
+          />
         );
       }
       return (
@@ -102,7 +105,17 @@ export function DocumentViewer({ documentId, onClose }: DocumentViewerProps) {
       );
     }
 
-    // 只读模式 — 委托给通用 FilePreview
+    // 只读模式
+    if (isMarkdown) {
+      return (
+        <ScrollArea className="h-full">
+          <div className="p-4">
+            <Markdown content={doc.content} />
+          </div>
+        </ScrollArea>
+      );
+    }
+
     return (
       <FilePreview
         content={doc.content}

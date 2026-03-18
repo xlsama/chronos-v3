@@ -23,14 +23,18 @@ interface IncidentStreamState {
   isConnected: boolean;
   thinkingContent: string;
   answerContent: string;
+  askHumanStreamContent: string;
   reportStreamContent: string;
   askHumanQuestion: string | null;
+  kbConfirmData: { type: string; summary: string; message: string } | null;
   decidedApprovals: Record<string, string>;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
   appendAnswer: (content: string) => void;
   clearAnswer: () => void;
+  appendAskHuman: (content: string) => void;
+  clearAskHumanStream: () => void;
   appendReportStream: (content: string) => void;
   clearReportStream: () => void;
   appendSubAgentThinking: (agent: string, content: string) => void;
@@ -39,6 +43,7 @@ interface IncidentStreamState {
   setSubAgentStatus: (agent: string, status: "idle" | "started" | "completed" | "failed") => void;
   updatePhase: (phase: string) => void;
   setAskHumanQuestion: (question: string | null) => void;
+  setKbConfirmData: (data: { type: string; summary: string; message: string } | null) => void;
   setApprovalDecided: (approvalId: string, decision: string) => void;
   setConnected: (connected: boolean) => void;
   loadHistory: (events: SSEEvent[]) => void;
@@ -65,8 +70,10 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   isConnected: false,
   thinkingContent: "",
   answerContent: "",
+  askHumanStreamContent: "",
   reportStreamContent: "",
   askHumanQuestion: null,
+  kbConfirmData: null,
   decidedApprovals: {},
 
   addEvent: (event) => {
@@ -82,6 +89,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     set((state) => ({ answerContent: state.answerContent + content })),
 
   clearAnswer: () => set({ answerContent: "" }),
+
+  appendAskHuman: (content) =>
+    set((state) => ({ askHumanStreamContent: state.askHumanStreamContent + content })),
+
+  clearAskHumanStream: () => set({ askHumanStreamContent: "" }),
 
   appendReportStream: (content) =>
     set((state) => ({
@@ -169,6 +181,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   setAskHumanQuestion: (question) => set({ askHumanQuestion: question }),
 
+  setKbConfirmData: (data) => set({ kbConfirmData: data }),
+
   setApprovalDecided: (approvalId, decision) =>
     set((state) => ({
       decidedApprovals: { ...state.decidedApprovals, [approvalId]: decision },
@@ -206,8 +220,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // thinking_done / answer_done → DB boundary markers, skip in UI
-      if (event.event_type === "thinking_done" || event.event_type === "answer_done") {
+      // thinking_done / answer_done / ask_human_done → DB boundary markers, skip in UI
+      if (event.event_type === "thinking_done" || event.event_type === "answer_done" || event.event_type === "ask_human_done") {
         continue;
       }
 
@@ -276,8 +290,10 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       isConnected: false,
       thinkingContent: "",
       answerContent: "",
+      askHumanStreamContent: "",
       reportStreamContent: "",
       askHumanQuestion: null,
+      kbConfirmData: null,
       decidedApprovals: {},
     }),
 }));

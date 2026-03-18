@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Empty,
-  EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
@@ -55,7 +54,7 @@ const statusBadgeColors: Record<string, string> = {
   unknown: "bg-gray-100 text-gray-800 border-transparent",
 };
 
-function ServerItem({ server }: { server: ServerType }) {
+export function ServerItem({ server }: { server: ServerType }) {
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -98,6 +97,9 @@ function ServerItem({ server }: { server: ServerType }) {
               <p className="text-xs text-muted-foreground">{server.description}</p>
             )}
           </div>
+          <Badge variant="outline" className="text-xs">
+            SSH
+          </Badge>
           {server.has_bastion && (
             <Badge variant="outline" className="text-xs">
               通过跳板机
@@ -204,13 +206,12 @@ export function ServerList() {
 
   if (!servers?.length) {
     return (
-      <Empty className="py-12">
+      <Empty className="pb-[20%]">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <Server />
           </EmptyMedia>
           <EmptyTitle>暂无服务器</EmptyTitle>
-          <EmptyDescription>添加一台服务器以开始使用。</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );

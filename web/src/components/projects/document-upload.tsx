@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { FilePlus, Upload } from "lucide-react";
 import { uploadDocument, uploadDocumentFile } from "@/api/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import {
   Dialog,
@@ -71,29 +71,34 @@ export function UploadDocumentButton({ projectId }: DocumentUploadProps) {
 export function CreateDocumentButton({ projectId }: DocumentUploadProps) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const createMutation = useMutation({
-    mutationFn: (data: { filename: string; content: string }) =>
+    mutationFn: (data: { filename: string }) =>
       uploadDocument(projectId, {
         filename: data.filename,
-        content: data.content,
+        content: "",
         doc_type: "markdown",
       }),
-    onSuccess: () => {
-      toast.success("文档已创建，正在索引中...");
+    onSuccess: (doc) => {
+      toast.success("文档已创建");
       queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
       setOpen(false);
       form.reset();
+      navigate({
+        to: "/projects/$projectId/documents/$documentId",
+        params: { projectId, documentId: doc.id },
+      });
     },
   });
 
   const form = useForm({
-    defaultValues: { filename: "", content: "" },
+    defaultValues: { filename: "" },
     onSubmit: ({ value }) => {
       const filename = value.filename.endsWith(".md")
         ? value.filename
         : `${value.filename}.md`;
-      createMutation.mutate({ filename, content: value.content });
+      createMutation.mutate({ filename });
     },
   });
 
@@ -104,7 +109,7 @@ export function CreateDocumentButton({ projectId }: DocumentUploadProps) {
         新建文档
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>新建文档</DialogTitle>
           </DialogHeader>
@@ -134,35 +139,6 @@ export function CreateDocumentButton({ projectId }: DocumentUploadProps) {
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
-                  />
-                  <FieldError
-                    errors={field.state.meta.errors.map((e) => ({
-                      message: String(e),
-                    }))}
-                  />
-                </Field>
-              )}
-            </form.Field>
-            <form.Field
-              name="content"
-              validators={{
-                onSubmit: ({ value }) =>
-                  !value ? "内容不能为空" : undefined,
-              }}
-            >
-              {(field) => (
-                <Field
-                  data-invalid={
-                    field.state.meta.errors.length > 0 || undefined
-                  }
-                >
-                  <FieldLabel>内容</FieldLabel>
-                  <MarkdownEditor
-                    value={field.state.value}
-                    onChange={field.handleChange}
-                    onBlur={field.handleBlur}
-                    minHeight={200}
-                    placeholder="输入 Markdown 内容..."
                   />
                   <FieldError
                     errors={field.state.meta.errors.map((e) => ({

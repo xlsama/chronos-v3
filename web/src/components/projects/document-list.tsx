@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { FileText, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
@@ -30,7 +31,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DocumentViewer } from "./document-viewer";
 
 interface DocumentListProps {
   projectId: string;
@@ -40,19 +40,19 @@ const statusColors: Record<string, string> = {
   indexed: "bg-green-100 text-green-800 border-transparent",
   indexing: "bg-blue-100 text-blue-800 border-transparent",
   pending: "bg-yellow-100 text-yellow-800 border-transparent",
-  error: "bg-red-100 text-red-800 border-transparent",
+  index_failed: "bg-red-100 text-red-800 border-transparent",
 };
 
 const statusLabels: Record<string, string> = {
   indexed: "已索引",
   indexing: "索引中",
   pending: "等待索引",
-  error: "失败",
+  index_failed: "索引失败",
 };
 
 export function DocumentList({ projectId }: DocumentListProps) {
   const queryClient = useQueryClient();
-  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     filename: string;
@@ -99,7 +99,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
 
   if (!documents?.length) {
     return (
-      <Empty className="rounded-lg border py-12">
+      <Empty className="pb-[20%]">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <FileText />
@@ -118,8 +118,8 @@ export function DocumentList({ projectId }: DocumentListProps) {
   }
 
   const sortedDocuments = [...documents].sort((a, b) => {
-    if (a.doc_type === "service_map" && b.doc_type !== "service_map") return -1;
-    if (a.doc_type !== "service_map" && b.doc_type === "service_map") return 1;
+    if (a.doc_type === "agents_config" && b.doc_type !== "agents_config") return -1;
+    if (a.doc_type !== "agents_config" && b.doc_type === "agents_config") return 1;
     return 0;
   });
 
@@ -130,7 +130,12 @@ export function DocumentList({ projectId }: DocumentListProps) {
           <div
             key={doc.id}
             className="flex cursor-pointer items-center gap-3 p-3 hover:bg-muted/50"
-            onClick={() => setSelectedDocId(doc.id)}
+            onClick={() =>
+              navigate({
+                to: "/projects/$projectId/documents/$documentId",
+                params: { projectId, documentId: doc.id },
+              })
+            }
           >
             <FileText className="h-4 w-4 text-muted-foreground" />
             <div className="flex-1">
@@ -140,41 +145,44 @@ export function DocumentList({ projectId }: DocumentListProps) {
                 {dayjs(doc.created_at).fromNow()}
               </p>
             </div>
-            {doc.doc_type === "service_map" && (
-              <Badge className="bg-blue-100 text-blue-800 border-transparent">
-                内置
+            {doc.doc_type === "agents_config" && (
+              <Badge className="bg-gray-100 text-gray-800 border-transparent">
+                概要
               </Badge>
             )}
-            {doc.status === "error" && doc.error_message ? (
-              <Tooltip>
-                <TooltipTrigger render={<Badge className={statusColors.error} />}>
-                    {statusLabels.error}
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-xs">
-                  {doc.error_message}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <Badge
-                className={
-                  statusColors[doc.status] ??
-                  "bg-gray-100 text-gray-800 border-transparent"
-                }
+            {doc.doc_type !== "agents_config" &&
+              (doc.status === "index_failed" && doc.error_message ? (
+                <Tooltip>
+                  <TooltipTrigger render={<Badge className={statusColors.index_failed} />}>
+                      {statusLabels.index_failed}
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    {doc.error_message}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Badge
+                  className={
+                    statusColors[doc.status] ??
+                    "bg-gray-100 text-gray-800 border-transparent"
+                  }
+                >
+                  {statusLabels[doc.status] ?? doc.status}
+                </Badge>
+              ))}
+            {doc.doc_type !== "agents_config" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteTarget({ id: doc.id, filename: doc.filename });
+                }}
+                disabled={deleteMutation.isPending}
               >
-                {statusLabels[doc.status] ?? doc.status}
-              </Badge>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDeleteTarget({ id: doc.id, filename: doc.filename });
-              }}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
           </div>
         ))}
       </div>
@@ -205,10 +213,6 @@ export function DocumentList({ projectId }: DocumentListProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <DocumentViewer
-        documentId={selectedDocId}
-        onClose={() => setSelectedDocId(null)}
-      />
     </>
   );
 }

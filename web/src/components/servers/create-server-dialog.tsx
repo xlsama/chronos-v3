@@ -9,6 +9,7 @@ import type { Server } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogFooter,
@@ -55,7 +56,7 @@ type FormValues = {
   bastion_private_key: string;
 };
 
-function ServerForm({
+export function ServerForm({
   mode,
   server,
   onSuccess,
@@ -232,20 +233,24 @@ function ServerForm({
   const authMethod = useStore(form.store, (s) => s.values.auth_method);
   const useBastion = useStore(form.store, (s) => s.values.use_bastion);
   const bastionAuthMethod = useStore(form.store, (s) => s.values.bastion_auth_method);
+  const authMethodLabels: Record<string, string> = { password: "密码", private_key: "私钥" };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bastionFileInputRef = useRef<HTMLInputElement>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showBastionPassword, setShowBastionPassword] = useState(false);
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        form.handleSubmit();
-      }}
-    >
-      <div className="space-y-4">
-        <form.Field
+    <>
+      <DialogBody>
+        <form
+          id="server-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            form.handleSubmit();
+          }}
+          className="space-y-4"
+        >
+          <form.Field
           name="name"
           validators={{
             onSubmit: ({ value }) =>
@@ -360,7 +365,7 @@ function ServerForm({
                 }
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>{authMethodLabels[field.state.value]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="password">密码</SelectItem>
@@ -540,7 +545,7 @@ function ServerForm({
                     }
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue />
+                      <SelectValue>{authMethodLabels[field.state.value]}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="password">密码</SelectItem>
@@ -626,18 +631,19 @@ function ServerForm({
             )}
           </div>
         )}
-      </div>
-      <DialogFooter className="mt-4">
+        </form>
+      </DialogBody>
+      <DialogFooter>
         <DialogClose render={<Button variant="outline" />}>
           取消
         </DialogClose>
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" form="server-form" disabled={isPending}>
           {isPending
             ? isEdit ? "保存中..." : "添加中..."
             : isEdit ? "保存" : "添加"}
         </Button>
       </DialogFooter>
-    </form>
+    </>
   );
 }
 

@@ -14,13 +14,11 @@ import type { IncidentHistory } from "@/lib/types";
 interface IncidentHistoryDetailSheetProps {
   item: IncidentHistory | null;
   onOpenChange: (open: boolean) => void;
-  onDelete: (id: string) => void;
 }
 
 export function IncidentHistoryDetailSheet({
   item,
   onOpenChange,
-  onDelete,
 }: IncidentHistoryDetailSheetProps) {
   return (
     <Dialog open={!!item} onOpenChange={onOpenChange}>
@@ -46,7 +44,7 @@ export function IncidentHistoryDetailSheet({
               </DialogDescription>
             </DialogHeader>
             <ScrollArea className="min-h-0 flex-1">
-              <Markdown content={item.summary_md} variant="compact" />
+              <Markdown content={item.summary_md} />
             </ScrollArea>
           </>
         )}

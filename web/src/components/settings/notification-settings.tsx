@@ -24,7 +24,7 @@ import {
 
 const NOTIFICATION_SCENARIOS = [
   { title: "新事件创建", description: "当创建新的事件时，发送通知" },
-  { title: "状态变更", description: "事件状态变更时发送通知（开始排查、已解决、已停止、已升级）" },
+  { title: "状态变更", description: "事件状态变更时发送通知" },
   { title: "需要人工输入", description: "当 Agent 需要人工补充信息时发送通知" },
   { title: "需要审批", description: "当 Agent 执行高风险操作需要审批时发送通知" },
 ];
@@ -111,15 +111,15 @@ export function NotificationSettings() {
       <div>
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-medium">通知</h3>
-          <Tooltip>
+          <Tooltip delay={0}>
             <TooltipTrigger render={<CircleHelp className="text-muted-foreground size-4 cursor-help" />} />
-            <TooltipContent side="right" className="max-w-sm">
-              <p className="mb-2 font-medium">通知触发场景</p>
-              <ul className="space-y-1.5">
+            <TooltipContent side="right" className="block max-w-xs space-y-2 py-2">
+              <p className="font-medium">通知触发场景</p>
+              <ul className="space-y-2">
                 {NOTIFICATION_SCENARIOS.map((s) => (
-                  <li key={s.title} className="text-xs">
-                    <span className="font-medium">{s.title}</span>
-                    <span className="text-muted-foreground"> - {s.description}</span>
+                  <li key={s.title}>
+                    <p className="text-xs font-medium">{s.title}</p>
+                    <p className="text-[11px] opacity-70">{s.description}</p>
                   </li>
                 ))}
               </ul>
@@ -134,7 +134,7 @@ export function NotificationSettings() {
           <Label>集成平台</Label>
           <Select value={platform} onValueChange={(v) => v !== null && setPlatform(v)}>
             <SelectTrigger className="w-full">
-              <SelectValue />
+              <SelectValue>{platform === "feishu" ? "飞书" : platform}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="feishu">飞书</SelectItem>

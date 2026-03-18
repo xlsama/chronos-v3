@@ -50,7 +50,7 @@ export function IncidentHistoryPanel() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["incident-history", page, debouncedSearch],
-    queryFn: () => getIncidentHistoryList(page, PAGE_SIZE, undefined, debouncedSearch || undefined),
+    queryFn: () => getIncidentHistoryList(page, PAGE_SIZE, debouncedSearch || undefined),
   });
 
   const deleteMutation = useMutation({
@@ -64,14 +64,14 @@ export function IncidentHistoryPanel() {
 
   if (!isLoading && !data?.items.length && !debouncedSearch) {
     return (
-      <Empty className="py-12">
+      <Empty className="py-24">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <History />
           </EmptyMedia>
           <EmptyTitle>暂无历史事件</EmptyTitle>
           <EmptyDescription>
-            排查完成的事件会自动保存到这里。
+            事件归档以后会自动保存到这里。
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -173,7 +173,6 @@ export function IncidentHistoryPanel() {
       <IncidentHistoryDetailSheet
         item={detailItem}
         onOpenChange={(open) => !open && setDetailItem(null)}
-        onDelete={(id) => setDeleteTarget(id)}
       />
 
       <AlertDialog

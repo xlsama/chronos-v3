@@ -9,26 +9,14 @@ export function getSkill(slug: string) {
   return request<SkillDetail>(`/skills/${slug}`);
 }
 
-export function createSkill(data: {
-  slug: string;
-  name: string;
-  description: string;
-  content: string;
-}) {
+export function createSkill(data: { slug: string }) {
   return request<Skill>("/skills", {
     method: "POST",
     body: data,
   });
 }
 
-export function updateSkill(
-  slug: string,
-  data: {
-    name?: string;
-    description?: string;
-    content?: string;
-  },
-) {
+export function updateSkill(slug: string, data: { content: string }) {
   return request<Skill>(`/skills/${slug}`, {
     method: "PUT",
     body: data,

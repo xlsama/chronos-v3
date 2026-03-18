@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Terminal, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { Wrench, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ShellCodeBlock } from "@/components/ui/shell-code-block";
 
@@ -20,71 +20,65 @@ export function ToolCallCard({
   relativeTime,
   serverInfo,
 }: ToolCallCardProps) {
-  const [outputExpanded, setOutputExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(isExecuting ?? false);
 
   const isBash = name === "bash";
   const command = isBash ? (args?.command as string | undefined) : undefined;
+  const hasNonBashArgs = !isBash && args && Object.keys(args).length > 0;
 
   return (
     <div
-      className="rounded-lg border border-blue-200 bg-blue-50/50 p-3"
+      className="rounded-lg border border-blue-200 bg-blue-50/50"
       data-testid="tool-call-card"
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 text-sm">
-        <Terminal className="h-4 w-4 shrink-0 text-blue-700" />
+      {/* Header — always visible, clickable to toggle */}
+      <button
+        className="flex w-full items-center gap-2 p-3 text-left text-sm"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+        )}
+        <Wrench className="h-4 w-4 shrink-0 text-blue-700" />
         <span className="font-medium text-blue-900" data-testid="tool-name">{name}</span>
         {serverInfo && (
           <Badge variant="secondary" className="text-xs">
             {serverInfo}
           </Badge>
         )}
+        {isExecuting && (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+        )}
         {relativeTime && (
           <span className="ml-auto text-xs text-muted-foreground">{relativeTime}</span>
         )}
-      </div>
+      </button>
 
-      {/* Bash command — show inline */}
-      {command && (
-        <ShellCodeBlock
-          code={command}
-          showPrompt
-          className="mt-2 overflow-x-auto rounded bg-background p-2 text-xs"
-        />
-      )}
-
-      {/* Non-bash args — collapsible */}
-      {!isBash && args && Object.keys(args).length > 0 && (
-        <div className="mt-2">
-          <pre className="overflow-x-auto rounded bg-background p-2 text-xs">
-            {JSON.stringify(args, null, 2)}
-          </pre>
-        </div>
-      )}
-
-      {/* Executing state */}
-      {isExecuting && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          执行中...
-        </div>
-      )}
-
-      {/* Result — collapsible for long output */}
-      {output && (
-        <div className="mt-2">
-          {output.length > 500 && (
-            <button
-              className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setOutputExpanded(!outputExpanded)}
-            >
-              {outputExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              输出 ({output.length} 字符)
-            </button>
+      {/* Expanded content */}
+      {expanded && (
+        <div className="space-y-2 border-t border-blue-100 p-3 pt-2">
+          {/* Bash command */}
+          {command && (
+            <ShellCodeBlock
+              code={command}
+              showPrompt
+              className="overflow-x-auto rounded bg-background p-2 text-xs"
+            />
           )}
-          {(output.length <= 500 || outputExpanded) && (
+
+          {/* Non-bash args */}
+          {hasNonBashArgs && (
+            <pre className="overflow-x-auto rounded bg-background p-2 text-xs">
+              {JSON.stringify(args, null, 2)}
+            </pre>
+          )}
+
+          {/* Result */}
+          {output && (
             <pre
-              className="max-h-60 overflow-auto rounded border-l-2 border-green-400 bg-background p-2 text-xs"
+              className="max-h-60 overflow-auto whitespace-pre-wrap rounded border-l-2 border-green-400 bg-background p-2 text-xs"
               data-testid="tool-output"
             >
               {output}

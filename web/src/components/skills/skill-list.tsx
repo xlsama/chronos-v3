@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { EllipsisVertical, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { EllipsisVertical, Sparkles, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { deleteSkill, getSkills } from "@/api/skills";
 import type { Skill } from "@/lib/types";
@@ -30,12 +31,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { SkillDialog } from "./create-skill-dialog";
 
-function SkillItem({ skill }: { skill: Skill }) {
+interface SkillItemProps {
+  skill: Skill;
+  onSelect: () => void;
+}
+
+function SkillItem({ skill, onSelect }: SkillItemProps) {
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteSkill(skill.slug),
@@ -49,7 +53,10 @@ function SkillItem({ skill }: { skill: Skill }) {
   return (
     <>
       <div className="border-b last:border-b-0">
-        <div className="flex items-center gap-3 p-4">
+        <div
+          className="group flex cursor-pointer items-center gap-3 p-4 hover:bg-muted/50"
+          onClick={onSelect}
+        >
           <Sparkles className="h-5 w-5 shrink-0 text-indigo-500" />
           <div className="flex-1 min-w-0">
             <p className="font-medium">{skill.name}</p>
@@ -61,17 +68,19 @@ function SkillItem({ skill }: { skill: Skill }) {
             {dayjs(skill.updated_at).fromNow()}
           </span>
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="icon-sm" className="opacity-0 group-hover:opacity-100 transition-opacity" />}
+              onClick={(e) => e.stopPropagation()}
+            >
                 <EllipsisVertical className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                编辑
-              </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
-                onClick={() => setShowDeleteDialog(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDeleteDialog(true);
+                }}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 删除
@@ -102,16 +111,12 @@ function SkillItem({ skill }: { skill: Skill }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <SkillDialog
-        skill={skill}
-        open={showEditDialog}
-        onOpenChange={setShowEditDialog}
-      />
     </>
   );
 }
 
 export function SkillList() {
+  const navigate = useNavigate();
   const { data: skills, isLoading } = useQuery({
     queryKey: ["skills"],
     queryFn: getSkills,
@@ -137,7 +142,7 @@ export function SkillList() {
 
   if (!skills?.length) {
     return (
-      <Empty className="py-12">
+      <Empty className="pb-[20%]">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <Sparkles />
@@ -154,7 +159,11 @@ export function SkillList() {
   return (
     <div>
       {skills.map((skill) => (
-        <SkillItem key={skill.slug} skill={skill} />
+        <SkillItem
+          key={skill.slug}
+          skill={skill}
+          onSelect={() => navigate({ to: "/skills/$slug", params: { slug: skill.slug } })}
+        />
       ))}
     </div>
   );

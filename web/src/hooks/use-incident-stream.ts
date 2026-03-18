@@ -26,6 +26,7 @@ export function useIncidentStream(
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const loadedForRef = useRef("");
   const loadedEventsRef = useRef<SSEEvent[] | null>(null);
+  const statusRef = useRef(status);
 
   const {
     addEvent,
@@ -33,6 +34,8 @@ export function useIncidentStream(
     clearThinking,
     appendAnswer,
     clearAnswer,
+    appendAskHuman,
+    clearAskHumanStream,
     appendReportStream,
     appendSubAgentThinking,
     flushSubAgentThinking,
@@ -40,11 +43,28 @@ export function useIncidentStream(
     setSubAgentStatus,
     updatePhase,
     setAskHumanQuestion,
+    setKbConfirmData,
     setApprovalDecided,
     setConnected,
     reset,
     loadHistory,
   } = useIncidentStreamStore();
+
+  // Keep statusRef in sync
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Close SSE when incident reaches terminal state
+  useEffect(() => {
+    if (status === "resolved" || status === "closed" || status === "stopped") {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      clearTimeout(retryTimerRef.current);
+      clearTimeout(heartbeatTimerRef.current);
+      setConnected(false);
+    }
+  }, [status]);
 
   // Fetch persisted history events
   const { data: historyEvents } = useQuery({
@@ -94,11 +114,20 @@ export function useIncidentStream(
       historyEvents &&
       loadedForRef.current === incidentId &&
       loadedEventsRef.current !== historyEvents &&
-      (status === "resolved" || status === "closed" || status === "stopped")
+      (
+        statusRef.current === "resolved" || statusRef.current === "closed" || statusRef.current === "stopped" ||
+        (historyEvents.length > 0 && (!loadedEventsRef.current || loadedEventsRef.current.length === 0))
+      )
     ) {
-      // Terminal incidents: reload when React Query refetches newer data
+      // Reload history when:
+      // - Terminal incidents: React Query refetches newer data
+      // - Active incidents: initial load was empty but refetch returned actual data
       loadHistory(historyEvents);
       loadedEventsRef.current = historyEvents;
+      // Repopulate seenEventIds
+      for (const e of historyEvents) {
+        if (e.event_id) seenEventIdsRef.current.add(e.event_id);
+      }
       if (historyEvents.length > 0) {
         lastTimestampRef.current =
           historyEvents[historyEvents.length - 1].timestamp;
@@ -108,7 +137,7 @@ export function useIncidentStream(
     // Gate SSE on history being loaded
     if (loadedForRef.current !== incidentId) return;
     // No SSE for terminal incidents
-    if (status === "resolved" || status === "closed" || status === "stopped") return;
+    if (statusRef.current === "resolved" || statusRef.current === "closed" || statusRef.current === "stopped") return;
 
     retriesRef.current = 0;
 
@@ -180,8 +209,10 @@ export function useIncidentStream(
                 event.data.approval_id as string,
                 event.data.decision as string,
               );
-            } else if (event.event_type === "thinking_done" || event.event_type === "answer_done") {
+            } else if (event.event_type === "thinking_done" || event.event_type === "answer_done" || event.event_type === "ask_human_done") {
               // DB boundary marker, skip
+            } else if (event.event_type === "kb_confirm_required") {
+              // Replay: kb confirm was already handled, skip
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
                 setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
@@ -249,10 +280,38 @@ export function useIncidentStream(
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
+          } else if (event.event_type === "kb_confirm_required") {
+            updatePhase("gather_context");
+            setKbConfirmData({
+              type: event.data.type as string,
+              summary: event.data.summary as string,
+              message: event.data.message as string,
+            });
           } else if (event.event_type === "ask_human") {
             updatePhase("main");
-            setAskHumanQuestion(event.data.question as string);
-            addEvent(event);
+            // Flush residual thinking
+            const { thinkingContent: thk } = useIncidentStreamStore.getState();
+            if (thk) {
+              addEvent({
+                event_type: "thinking",
+                data: { content: thk },
+                timestamp: event.timestamp,
+              });
+              clearThinking();
+            }
+            // Accumulate incremental question
+            appendAskHuman(event.data.question as string);
+          } else if (event.event_type === "ask_human_done") {
+            const { askHumanStreamContent } = useIncidentStreamStore.getState();
+            if (askHumanStreamContent) {
+              addEvent({
+                event_type: "ask_human",
+                data: { question: askHumanStreamContent },
+                timestamp: event.timestamp,
+              });
+              setAskHumanQuestion(askHumanStreamContent);
+              clearAskHumanStream();
+            }
           } else if (event.event_type === "thinking") {
             updatePhase("main");
             appendThinking(event.data.content as string);
@@ -334,5 +393,5 @@ export function useIncidentStream(
       clearTimeout(heartbeatTimerRef.current);
       setConnected(false);
     };
-  }, [incidentId, historyEvents, status]);
+  }, [incidentId, historyEvents]);
 }

@@ -24,7 +24,6 @@ export function updateProject(
   data: {
     name?: string;
     description?: string;
-    linked_server_ids?: string[];
   },
 ) {
   return request<Project>(`/projects/${id}`, { method: "PATCH", body: data });

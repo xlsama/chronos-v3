@@ -6,7 +6,6 @@ import { getIncident, stopIncident } from "@/api/incidents";
 import { useIncidentStream } from "@/hooks/use-incident-stream";
 import { EventTimeline } from "@/components/incidents/incident-detail/event-timeline";
 import { UserInputBar } from "@/components/incidents/incident-detail/user-input-bar";
-import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,10 +29,6 @@ export const Route = createFileRoute("/incidents/$incidentId")({
 function IncidentDetailPage() {
   const { incidentId } = Route.useParams();
   const queryClient = useQueryClient();
-  const events = useIncidentStreamStore((s) => s.events);
-  const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
-  const phaseState = useIncidentStreamStore((s) => s.phaseState);
-
   const { data: incident, isLoading, isError } = useQuery({
     queryKey: ["incident", incidentId],
     queryFn: () => getIncident(incidentId),
@@ -69,15 +64,26 @@ function IncidentDetailPage() {
   }, []);
 
   const scrollToBottom = useCallback(() => {
+    shouldAutoScroll.current = true;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   useEffect(() => {
-    if (phaseState.contextGathering === "active") return;
-    if (shouldAutoScroll.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+
+    const observer = new ResizeObserver(() => {
+      if (shouldAutoScroll.current) {
+        scrollEl.scrollTop = scrollEl.scrollHeight;
+      }
+    });
+
+    for (const child of scrollEl.children) {
+      observer.observe(child);
     }
-  }, [events.length, hasThinking, phaseState.contextGathering]);
+
+    return () => observer.disconnect();
+  }, []);
 
   if (isLoading) {
     return (
@@ -177,7 +183,7 @@ function IncidentDetailPage() {
 
         {!isAtBottom && (
           <button
-            className="sticky bottom-4 left-full -translate-x-8 rounded-full border bg-background p-2 shadow-md transition-opacity hover:bg-accent"
+            className="sticky bottom-4 left-1/2 -translate-x-1/2 rounded-full border bg-background p-2 shadow-md transition-opacity hover:bg-accent"
             onClick={scrollToBottom}
           >
             <ArrowDown className="h-4 w-4" />

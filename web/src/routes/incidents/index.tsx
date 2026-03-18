@@ -8,12 +8,14 @@ export const Route = createFileRoute("/incidents/")({
 
 function IncidentsPage() {
   return (
-    <div className="h-full">
+    <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-6 py-4">
         <h1 className="text-base font-medium">事件</h1>
         <CreateIncidentDialog />
       </div>
-      <IncidentList />
+      <div className="flex flex-1 flex-col">
+        <IncidentList />
+      </div>
     </div>
   );
 }

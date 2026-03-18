@@ -79,6 +79,27 @@ export const serverSchema = z
 
 export type ServerFormData = z.infer<typeof serverSchema>;
 
+// ── Service ──
+
+export const serviceSchema = z.object({
+  name: z.string().min(1, "名称不能为空"),
+  description: z.string().optional(),
+  service_type: z.enum([
+    "mysql",
+    "postgresql",
+    "redis",
+    "prometheus",
+    "mongodb",
+    "elasticsearch",
+  ]),
+  host: z.string().min(1, "主机地址不能为空"),
+  port: z.coerce.number().int().min(1).max(65535),
+  password: z.string().optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type ServiceFormData = z.infer<typeof serviceSchema>;
+
 // ── Document Paste ──
 
 export const documentPasteSchema = z.object({
@@ -194,6 +215,22 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
   z.object({
     event_type: z.literal("agent_status"),
     data: z.object({ status: z.string() }).passthrough(),
+    ...baseSSEFields,
+  }),
+  z.object({
+    event_type: z.literal("ask_human_done"),
+    data: z.object({}).passthrough(),
+    ...baseSSEFields,
+  }),
+  z.object({
+    event_type: z.literal("kb_confirm_required"),
+    data: z
+      .object({
+        type: z.string(),
+        summary: z.string(),
+        message: z.string(),
+      })
+      .passthrough(),
     ...baseSSEFields,
   }),
 ]);

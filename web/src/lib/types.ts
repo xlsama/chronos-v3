@@ -28,7 +28,6 @@ export interface Incident {
   description: string;
   status: string;
   severity: string;
-  project_id: string | null;
   summary_md: string | null;
   summary_title: string | null;
   thread_id: string | null;
@@ -69,12 +68,25 @@ export interface SSEEvent {
   replay?: boolean;
 }
 
+export interface Service {
+  id: string;
+  name: string;
+  description: string | null;
+  service_type: string;
+  host: string;
+  port: number;
+  config: Record<string, unknown>;
+  has_password: boolean;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Project {
   id: string;
   name: string;
   slug: string;
   description: string | null;
-  linked_server_ids: string[];
   created_at: string;
   updated_at: string;
 }
@@ -95,7 +107,6 @@ export interface ProjectDocumentDetail extends ProjectDocument {
 
 export interface IncidentHistory {
   id: string;
-  project_id: string | null;
   title: string;
   summary_md: string;
   occurrence_count: number;

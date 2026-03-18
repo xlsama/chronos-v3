@@ -1,9 +1,5 @@
-import { useEffect } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { Markdown } from "@tiptap/markdown";
-import Placeholder from "@tiptap/extension-placeholder";
-import Link from "@tiptap/extension-link";
+import { useRef, useEffect, useCallback } from "react";
+import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
 
 interface MarkdownEditorProps {
@@ -16,6 +12,8 @@ interface MarkdownEditorProps {
   className?: string;
   disabled?: boolean;
   autoFocus?: boolean;
+  previewTransform?: (value: string) => string;
+  variant?: "default" | "compact";
 }
 
 export function MarkdownEditor({
@@ -28,67 +26,74 @@ export function MarkdownEditor({
   className,
   disabled,
   autoFocus,
+  previewTransform,
+  variant = "default",
 }: MarkdownEditorProps) {
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Markdown,
-      Placeholder.configure({ placeholder }),
-      Link.configure({ autolink: true, openOnClick: false }),
-    ],
-    content: value,
-    contentType: "markdown",
-    immediatelyRender: false,
-    autofocus: autoFocus ?? false,
-    editable: !disabled,
-    onUpdate: ({ editor }) => {
-      onChange(editor.getMarkdown());
-    },
-    onBlur: () => onBlur?.(),
-  });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const isSyncing = useRef(false);
 
-  // Sync external value changes (e.g. form reset)
   useEffect(() => {
-    if (!editor) return;
-    const current = editor.getMarkdown();
-    if (value !== current) {
-      editor.commands.setContent(value, {
-        emitUpdate: false,
-        contentType: "markdown",
-      });
+    if (autoFocus && textareaRef.current) {
+      textareaRef.current.focus();
     }
-  }, [value, editor]);
+  }, [autoFocus]);
 
-  // Sync disabled state
-  useEffect(() => {
-    if (!editor) return;
-    editor.setEditable(!disabled);
-  }, [disabled, editor]);
+  const syncScroll = useCallback(
+    (source: HTMLElement, target: HTMLElement) => {
+      if (isSyncing.current) {
+        isSyncing.current = false;
+        return;
+      }
+      const maxScroll = source.scrollHeight - source.clientHeight;
+      const ratio = maxScroll > 0 ? source.scrollTop / maxScroll : 0;
+      isSyncing.current = true;
+      target.scrollTop = ratio * (target.scrollHeight - target.clientHeight);
+    },
+    [],
+  );
 
   return (
     <div
       data-slot="markdown-editor"
       className={cn(
-        "rounded-lg border border-input bg-transparent transition-colors",
-        "has-[.tiptap.ProseMirror-focused]:border-ring has-[.tiptap.ProseMirror-focused]:ring-3 has-[.tiptap.ProseMirror-focused]:ring-ring/50",
-        "dark:bg-input/30",
+        "grid grid-cols-2 overflow-hidden rounded-lg border border-input",
         disabled && "cursor-not-allowed opacity-50",
         className,
       )}
+      style={{ minHeight, maxHeight }}
     >
-      <EditorContent
-        editor={editor}
-        className={cn(
-          "prose prose-sm max-w-none dark:prose-invert px-3 py-2",
-          "[&_.tiptap.ProseMirror]:outline-none",
-          "[&_.tiptap.ProseMirror_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.tiptap.ProseMirror_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.tiptap.ProseMirror_p.is-editor-empty:first-child::before]:float-left [&_.tiptap.ProseMirror_p.is-editor-empty:first-child::before]:pointer-events-none [&_.tiptap.ProseMirror_p.is-editor-empty:first-child::before]:h-0",
-        )}
-        style={{
-          minHeight,
-          maxHeight,
-          overflowY: maxHeight ? "auto" : undefined,
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="resize-none border-r border-input bg-transparent p-3 font-mono text-sm outline-none placeholder:text-muted-foreground dark:bg-input/30"
+        style={{ minHeight, maxHeight }}
+        onScroll={() => {
+          if (textareaRef.current && previewRef.current) {
+            syncScroll(textareaRef.current, previewRef.current);
+          }
         }}
       />
+      <div
+        ref={previewRef}
+        className="overflow-y-auto p-3"
+        style={{ minHeight, maxHeight }}
+        onScroll={() => {
+          if (previewRef.current && textareaRef.current) {
+            syncScroll(previewRef.current, textareaRef.current);
+          }
+        }}
+      >
+        {value ? (
+          <Markdown content={previewTransform ? previewTransform(value) : value} variant={variant} />
+        ) : (
+          <p className="text-sm text-muted-foreground">预览</p>
+        )}
+      </div>
     </div>
   );
 }

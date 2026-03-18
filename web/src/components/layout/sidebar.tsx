@@ -3,9 +3,9 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
   BookOpen,
+  Cable,
   ChevronsUpDown,
   LogOut,
-  Server,
   Settings,
   Sparkles,
 } from "lucide-react";
@@ -46,7 +46,7 @@ const mainItems = [
 ] as const;
 
 const contextItems = [
-  { to: "/servers", label: "服务器", icon: Server },
+  { to: "/connections", label: "连接", icon: Cable },
   { to: "/projects", label: "知识库", icon: BookOpen },
 ] as const;
 
@@ -154,9 +154,6 @@ export function AppSidebar() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>确认退出登录</AlertDialogTitle>
-            <AlertDialogDescription>
-              退出后需要重新登录才能继续使用。
-            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>

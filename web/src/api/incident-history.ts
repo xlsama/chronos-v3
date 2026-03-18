@@ -11,14 +11,12 @@ interface IncidentHistoryListResponse {
 export function getIncidentHistoryList(
   page: number = 1,
   pageSize: number = 20,
-  projectId?: string,
   query?: string,
 ) {
   const params = new URLSearchParams({
     page: String(page),
     page_size: String(pageSize),
   });
-  if (projectId) params.set("project_id", projectId);
   if (query) params.set("query", query);
   return request<IncidentHistoryListResponse>(
     `/incident-history?${params.toString()}`,
