@@ -36,7 +36,7 @@ async def reranker():
     return Reranker()
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(loop_scope="session")
 async def db_session():
     from src.db.connection import get_session_factory
 

@@ -349,8 +349,10 @@ async def stop_incident(
         severity=incident.severity or "",
     )
 
-    # Refresh with attachments for response
-    await session.refresh(incident, ["attachments"])
-    return incident
+    # Re-fetch with all columns and attachments to avoid lazy-load MissingGreenlet
+    result = await session.execute(
+        select(Incident).options(selectinload(Incident.attachments)).where(Incident.id == incident_id)
+    )
+    return result.scalar_one()
 
 
