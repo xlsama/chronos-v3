@@ -137,7 +137,7 @@ export function SubAgentCard({
   const expanded = forceExpanded || localExpanded;
 
   const { scrollRef: scrollContainerRef } = useAutoScroll({
-    enabled: forceExpanded && status === "started",
+    enabled: forceExpanded,
     threshold: 50,
   });
 
@@ -192,7 +192,10 @@ export function SubAgentCard({
 
   return (
     <div
-      className={cn("flex flex-col rounded-lg border border-blue-200 bg-blue-50/50 p-3", className)}
+      className={cn(
+        "flex min-h-0 flex-col rounded-lg border border-blue-200 bg-blue-50/50 p-3",
+        className,
+      )}
       data-testid="sub-agent-card"
     >
       <button

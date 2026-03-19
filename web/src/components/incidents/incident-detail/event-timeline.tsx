@@ -282,6 +282,9 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
     !!kbAgentState.thinkingContent ||
     kbAgentState.status !== "idle";
   const hasGatherContext = hasHistory || hasKB;
+  const hasBothContextCards = hasHistory && hasKB;
+  const shouldUseFixedContextLayout =
+    phaseState.contextGathering === "active" && hasGatherContext;
 
   const mainEvents = events.filter((e) => e.event_type !== "done");
   const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
@@ -325,11 +328,29 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
           subtitle={contextSubtitle}
           status={phaseState.contextGathering}
           icon={Search}
+          contentClassName={cn(
+            shouldUseFixedContextLayout &&
+              // Fixed panel height keeps the sub-agent area stable within the detail view
+              // while accounting for the page header, timeline padding and input bar.
+              "h-[calc(100dvh-20rem)] min-h-[18rem] overflow-hidden md:h-[calc(100dvh-18rem)]",
+          )}
         >
-          <div className="flex flex-col gap-3 max-h-[calc(100dvh-15rem)]">
+          <div
+            className={cn(
+              "min-h-0",
+              shouldUseFixedContextLayout
+                ? hasBothContextCards
+                  ? "grid h-full grid-rows-2 gap-3"
+                  : "flex h-full flex-col"
+                : "space-y-3",
+            )}
+            data-testid="context-subagent-layout"
+          >
             {hasHistory && (
               <SubAgentCard
-                className="flex-1 min-h-0"
+                className={cn(
+                  shouldUseFixedContextLayout && "h-full min-h-0 overflow-hidden",
+                )}
                 agentName="history"
                 events={historyAgentState.events}
                 status={historyAgentState.status}
@@ -339,7 +360,9 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
             )}
             {hasKB && (
               <SubAgentCard
-                className="flex-1 min-h-0"
+                className={cn(
+                  shouldUseFixedContextLayout && "h-full min-h-0 overflow-hidden",
+                )}
                 agentName="kb"
                 events={kbAgentState.events}
                 status={kbAgentState.status}

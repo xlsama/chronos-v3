@@ -266,6 +266,21 @@ def test_full_skill_pipeline(page: Page, tmp_path: Path):
     expect(page.get_by_text("知识库检索")).to_be_visible(timeout=10000)
     expect(page.get_by_text("历史事件检索")).to_be_visible(timeout=10000)
 
+    sub_agent_cards = page.get_by_test_id("sub-agent-card")
+    expect(sub_agent_cards).to_have_count(2, timeout=10000)
+    page.wait_for_timeout(500)
+
+    first_box = sub_agent_cards.nth(0).bounding_box()
+    second_box = sub_agent_cards.nth(1).bounding_box()
+    assert first_box is not None
+    assert second_box is not None
+
+    height_delta = abs(first_box["height"] - second_box["height"])
+    assert height_delta <= 4, (
+        f"expected equal-height sub-agent cards during context gathering, "
+        f"got {first_box['height']} vs {second_box['height']}"
+    )
+
     # ── Step 6: 等待并验证 skill_read 事件 ───────────────────────
 
     # 当前流程已改为自动收集上下文，skill_read 会直接进入时间线

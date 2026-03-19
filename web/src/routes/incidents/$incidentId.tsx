@@ -90,7 +90,7 @@ function IncidentDetailPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
       <div className="border-b px-6 py-4">
         <div className="flex items-center justify-between">
@@ -144,7 +144,7 @@ function IncidentDetailPage() {
       {/* Timeline */}
       <div
         ref={scrollRef}
-        className="relative flex-1 overflow-auto"
+        className="relative flex-1 min-h-0 overflow-auto"
       >
         <EventTimeline incidentId={incidentId} />
         <div ref={bottomRef} />

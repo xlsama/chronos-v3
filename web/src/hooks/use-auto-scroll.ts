@@ -28,6 +28,7 @@ export function useAutoScroll(
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollRafId = useRef(0);
   const mutationRafId = useRef(0);
+  const resizeRafId = useRef(0);
 
   // scroll 事件：rAF 节流，检测用户是否在底部
   useEffect(() => {
@@ -81,6 +82,30 @@ export function useAutoScroll(
     return () => {
       observer.disconnect();
       if (mutationRafId.current) cancelAnimationFrame(mutationRafId.current);
+    };
+  }, [scrollEl, enabled]);
+
+  // ResizeObserver：当容器自身高度变化时，也保持底部对齐。
+  // 这能覆盖 header/sources 行插入后，可视区缩小但子树内容本身未变的情况。
+  useEffect(() => {
+    if (!scrollEl || !enabled) return;
+
+    const observer = new ResizeObserver(() => {
+      if (!shouldAutoScroll.current) return;
+      if (resizeRafId.current) return;
+      resizeRafId.current = requestAnimationFrame(() => {
+        resizeRafId.current = 0;
+        if (shouldAutoScroll.current) {
+          scrollEl.scrollTop = scrollEl.scrollHeight;
+        }
+      });
+    });
+
+    observer.observe(scrollEl);
+
+    return () => {
+      observer.disconnect();
+      if (resizeRafId.current) cancelAnimationFrame(resizeRafId.current);
     };
   }, [scrollEl, enabled]);
 

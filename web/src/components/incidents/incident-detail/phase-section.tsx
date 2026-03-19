@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown, ChevronRight, Check, type LucideIcon } from "lucide-react";
 import type { PhaseStatus } from "@/stores/incident-stream";
+import { cn } from "@/lib/utils";
 
 interface PhaseSectionProps {
   title: string;
@@ -10,6 +11,7 @@ interface PhaseSectionProps {
   icon: LucideIcon;
   children: React.ReactNode;
   defaultExpanded?: boolean;
+  contentClassName?: string;
 }
 
 function StatusIndicator({ status }: { status: PhaseStatus }) {
@@ -38,6 +40,7 @@ export function PhaseSection({
   icon: Icon,
   children,
   defaultExpanded,
+  contentClassName,
 }: PhaseSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? status === "active");
 
@@ -77,7 +80,7 @@ export function PhaseSection({
             transition={{ duration: 0.2 }}
             style={{ overflow: "hidden" }}
           >
-            <div className="border-t px-4 py-3">{children}</div>
+            <div className={cn("border-t px-4 py-3", contentClassName)}>{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
