@@ -1,8 +1,10 @@
 import asyncio
 import uuid
 
+from sqlalchemy import select
+
 from src.db.connection import get_session_factory
-from src.db.models import Incident, Message
+from src.db.models import Incident, Message, Server
 from src.lib.logger import logger
 from src.services.post_incident.base import format_db_messages, get_mini_llm
 from src.services.post_incident.agents_md_task import auto_update_agents_md
@@ -39,7 +41,37 @@ SUMMARIZE_SYSTEM_PROMPT = """你是一个运维报告生成器。根据完整的
 """
 
 
-async def run_post_incident_tasks(incident_id: str) -> None:
+def _is_valid_uuid(s: str) -> bool:
+    try:
+        uuid.UUID(s)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
+async def _build_server_map(messages: list[Message], session) -> dict[str, str]:
+    """从 bash tool_call 中提取 server_id，批量查询 Server 表返回 {id: "name (host)"}。"""
+    server_ids: set[str] = set()
+    for msg in messages:
+        if msg.event_type == "tool_call" and msg.content == "bash":
+            args = (msg.metadata_json or {}).get("args", {})
+            sid = args.get("server_id", "")
+            if sid:
+                server_ids.add(sid)
+    if not server_ids:
+        return {}
+
+    uuids = [uuid.UUID(s) for s in server_ids if _is_valid_uuid(s)]
+    if not uuids:
+        return {}
+
+    result = await session.execute(
+        select(Server.id, Server.name, Server.host).where(Server.id.in_(uuids))
+    )
+    return {str(r.id): f"{r.name} ({r.host})" for r in result.all()}
+
+
+async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = None) -> None:
     """后台执行所有事件后任务。从 AgentRunner._post_run() 通过 asyncio.create_task 调用。"""
     sid = incident_id[:8]
     logger.info(f"[{sid}] [post_incident] Starting post-incident tasks")
@@ -54,16 +86,17 @@ async def run_post_incident_tasks(incident_id: str) -> None:
             description = incident.description
             severity = incident.severity
 
-            from sqlalchemy import select
             result = await session.execute(
                 select(Message)
                 .where(Message.incident_id == uuid.UUID(incident_id))
                 .order_by(Message.created_at)
             )
             db_messages = list(result.scalars().all())
+            server_map = await _build_server_map(db_messages, session)
 
         # ② 生成 summary_md（内部变量，不存 Incident 表）
         conversation_text = format_db_messages(db_messages, description)
+        conversation_text_topo = format_db_messages(db_messages, description, server_map=server_map)
         summary_md = await _generate_summary(conversation_text, severity, sid)
 
         # ③ 生成 title + severity → 写入 DB
@@ -100,7 +133,8 @@ async def run_post_incident_tasks(incident_id: str) -> None:
             _safe_run(auto_update_agents_md(
                 incident_id=incident_id,
                 summary_md=summary_md,
-                conversation_text=conversation_text,
+                conversation_text=conversation_text_topo,
+                kb_project_id=kb_project_id,
             ), "agents_md", sid),
             _safe_run(auto_evolve_skills(
                 incident_id=incident_id,

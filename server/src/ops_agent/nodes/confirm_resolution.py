@@ -7,6 +7,7 @@ from src.ops_agent.state import OpsState
 async def confirm_resolution_node(state: OpsState) -> dict:
     user_response = interrupt({"type": "confirm_resolution"})
 
+    # 注意：前端 event-timeline.tsx 中也硬编码发送此值，修改时需同步前端
     if user_response == "confirmed":
         return {"is_complete": True}
 

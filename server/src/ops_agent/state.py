@@ -11,4 +11,5 @@ class OpsState(MessagesState):
     approval_decision: str | None
     incident_history_summary: str | None
     kb_summary: str | None
+    kb_project_id: str | None
     ask_human_count: int

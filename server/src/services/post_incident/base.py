@@ -4,7 +4,11 @@ from src.config import get_settings
 from src.db.models import Message
 
 
-def format_db_messages(messages: list[Message], description: str) -> str:
+def format_db_messages(
+    messages: list[Message],
+    description: str,
+    server_map: dict[str, str] | None = None,
+) -> str:
     """将 DB Message 记录转为可读文本，供 LLM 生成 summary / 提取知识。"""
     lines = [f"事件描述: {description}", ""]
     for msg in messages:
@@ -16,12 +20,22 @@ def format_db_messages(messages: list[Message], description: str) -> str:
             lines.append(f"[用户] {content}")
         elif role == "assistant":
             if event_type == "tool_call":
-                # content 是工具名称，metadata_json 包含参数
-                args = msg.metadata_json or {}
-                args_str = str(args)
-                if len(args_str) > 500:
-                    args_str = args_str[:500] + "..."
-                lines.append(f"[Agent 调用工具] {content}({args_str})")
+                metadata = msg.metadata_json or {}
+                tool_name = content  # msg.content 即工具名
+
+                if server_map and tool_name == "bash":
+                    args = metadata.get("args", {})
+                    server_id = args.get("server_id", "")
+                    command = args.get("command", "")
+                    server_label = server_map.get(server_id, server_id)
+                    if len(command) > 400:
+                        command = command[:400] + "..."
+                    lines.append(f"[Agent 在 {server_label} 上执行] {command}")
+                else:
+                    args_str = str(metadata)
+                    if len(args_str) > 500:
+                        args_str = args_str[:500] + "..."
+                    lines.append(f"[Agent 调用工具] {tool_name}({args_str})")
             elif event_type == "tool_result":
                 if len(content) > 2000:
                     content = content[:2000] + "...(truncated)"

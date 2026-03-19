@@ -71,6 +71,7 @@ class AgentRunner:
             "ask_human_count": 0,
             "incident_history_summary": None,
             "kb_summary": None,
+            "kb_project_id": None,
         }
 
         logger.info(f"\n[{sid}] [main] ===== Agent lifecycle started =====")
@@ -248,7 +249,10 @@ class AgentRunner:
             await self.publisher.publish(channel, "done", {})
 
             # ③ Background: all post-incident work (summary, title, history, knowledge extraction)
-            asyncio.create_task(run_post_incident_tasks(incident_id))
+            asyncio.create_task(run_post_incident_tasks(
+                incident_id,
+                kb_project_id=vals.get("kb_project_id"),
+            ))
 
     @staticmethod
     def _extract_pending_tool_call(vals: dict) -> dict | None:

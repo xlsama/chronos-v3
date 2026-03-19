@@ -80,7 +80,10 @@ async def gather_context_node(state: OpsState) -> dict:
 
     # Extract KB result
     kb_summary = None
+    kb_project_id = None
     if isinstance(kb_result, KBAgentOutput):
+        if kb_result.project_id:
+            kb_project_id = kb_result.project_id
         parts = []
         if kb_result.project_name:
             parts.append(f"匹配项目: {kb_result.project_name} (ID: {kb_result.project_id})")
@@ -104,4 +107,5 @@ async def gather_context_node(state: OpsState) -> dict:
     return {
         "incident_history_summary": history_result if isinstance(history_result, str) else None,
         "kb_summary": kb_summary,
+        "kb_project_id": kb_project_id,
     }

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.connection import get_session_factory
-from src.db.models import DocumentChunk, ProjectDocument
+from src.db.models import DocumentChunk, ProjectDocument, Server, Service
 from src.lib.embedder import Embedder
 from src.lib.logger import logger
 from src.services.post_incident.base import get_mini_llm
@@ -36,6 +36,7 @@ EXTRACT_KNOWLEDGE_PROMPT = """\
 - 只提取事实性的、可复用的知识
 - 不要一次性信息（如具体的时间戳、临时文件名）
 - Server/Service 名称要与系统中已配置的名称保持一致（如果对话中提到了）
+{entity_anchors}
 - 无可提取知识则只输出 "NO_KNOWLEDGE"
 """
 
@@ -117,17 +118,63 @@ flowchart LR
 如果无需更新只输出 "NO_UPDATE"，否则输出更新后的完整 AGENTS.md 内容（纯 Markdown，不要用代码块包裹）。"""
 
 
+async def _fetch_entity_anchors(session: AsyncSession) -> str:
+    """查询所有已配置的 Server 和 Service，格式化为实体参照表。"""
+    servers = (await session.execute(
+        select(Server.name, Server.host).order_by(Server.name)
+    )).all()
+    services = (await session.execute(
+        select(Service.name, Service.service_type, Service.host, Service.port)
+        .order_by(Service.name)
+    )).all()
+
+    logger.info(
+        f"[agents_md] Fetched entity anchors: {len(servers)} servers, {len(services)} services"
+    )
+
+    if not servers and not services:
+        logger.info("[agents_md] No entity anchors found, will use empty anchors")
+        return ""
+
+    lines = ["\n## 系统已配置的实体（提取时优先匹配这些名称，通过 IP/Host 关联）"]
+    if servers:
+        lines.append("\n### Servers")
+        for s in servers:
+            lines.append(f"- {s.name} ({s.host})")
+    if services:
+        lines.append("\n### Services")
+        for s in services:
+            lines.append(f"- {s.name} [{s.service_type}] @ {s.host}:{s.port}")
+
+    result = "\n".join(lines)
+    logger.debug(f"[agents_md] Entity anchors content:\n{result}")
+    return result
+
+
 async def auto_update_agents_md(
     incident_id: str,
     summary_md: str,
     conversation_text: str,
+    kb_project_id: str | None = None,
 ) -> dict:
-    """主入口。纯向量搜索匹配项目，不依赖 incident 的 project_id。"""
+    """主入口。向量搜索匹配项目，KB Agent 已匹配的项目作为必选候选。"""
     sid = incident_id[:8]
     logger.info(f"[{sid}] [agents_md] Starting AGENTS.md auto-update")
 
+    # Step 0: Fetch entity anchors for knowledge extraction
+    logger.info(f"[{sid}] [agents_md] Fetching entity anchors from DB")
+    async with get_session_factory()() as session:
+        entity_anchors = await _fetch_entity_anchors(session)
+    logger.info(
+        f"[{sid}] [agents_md] Entity anchors ready, length={len(entity_anchors)} chars"
+    )
+
     # Step 1: Extract operational knowledge
-    knowledge_text = await _extract_knowledge(conversation_text, summary_md)
+    logger.info(
+        f"[{sid}] [agents_md] Extracting knowledge from conversation "
+        f"(conv={len(conversation_text)} chars, summary={len(summary_md)} chars)"
+    )
+    knowledge_text = await _extract_knowledge(conversation_text, summary_md, entity_anchors)
     if not knowledge_text:
         logger.info(f"[{sid}] [agents_md] No knowledge extracted, skipping")
         return {"action": "no_knowledge"}
@@ -136,6 +183,14 @@ async def auto_update_agents_md(
 
     # Step 2: Find candidate projects via vector search
     candidates = await _find_candidate_projects(knowledge_text)
+
+    # 确保 KB Agent 匹配的项目在候选列表中
+    if kb_project_id:
+        pid = uuid.UUID(kb_project_id)
+        existing_pids = {c[0] for c in candidates}
+        if pid not in existing_pids:
+            candidates.insert(0, (pid, 0.0))
+
     if not candidates:
         logger.info(f"[{sid}] [agents_md] No candidate projects found")
         return {"action": "no_candidates"}
@@ -153,18 +208,29 @@ async def auto_update_agents_md(
     return {"action": "completed", "results": results}
 
 
-async def _extract_knowledge(conversation_text: str, summary_md: str) -> str | None:
+async def _extract_knowledge(
+    conversation_text: str, summary_md: str, entity_anchors: str = ""
+) -> str | None:
     """LLM 提取运维知识。返回 None 表示无可提取知识。"""
     input_text = f"## 排查过程\n{conversation_text[:6000]}\n\n## 排查结论\n{summary_md[:3000]}"
 
+    system_prompt = EXTRACT_KNOWLEDGE_PROMPT.format(entity_anchors=entity_anchors)
+    logger.debug(f"[agents_md] Extract knowledge system prompt:\n{system_prompt}")
+    logger.info(
+        f"[agents_md] Calling LLM to extract knowledge "
+        f"(input={len(input_text)} chars, prompt={len(system_prompt)} chars)"
+    )
     llm = get_mini_llm()
     resp = await llm.ainvoke([
-        SystemMessage(content=EXTRACT_KNOWLEDGE_PROMPT),
+        SystemMessage(content=system_prompt),
         HumanMessage(content=input_text),
     ])
     result = resp.content.strip()
     if result == "NO_KNOWLEDGE" or len(result) < 20:
+        logger.info(f"[agents_md] LLM returned no extractable knowledge: {result[:100]!r}")
         return None
+    logger.info(f"[agents_md] LLM extracted knowledge ({len(result)} chars)")
+    logger.debug(f"[agents_md] Extracted knowledge:\n{result}")
     return result
 
 
