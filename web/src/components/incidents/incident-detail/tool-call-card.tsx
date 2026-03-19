@@ -65,13 +65,13 @@ export function ToolCallCard({
             <ShellCodeBlock
               code={command}
               showPrompt
-              className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 text-xs"
+              className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 pl-3 text-xs shadow-sm"
             />
           )}
 
           {/* Non-bash args */}
           {hasNonBashArgs && (
-            <pre className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 text-xs">
+            <pre className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 pl-3 text-xs shadow-sm">
               {JSON.stringify(args, null, 2)}
             </pre>
           )}
@@ -79,7 +79,7 @@ export function ToolCallCard({
           {/* Result */}
           {output && (
             <div
-              className="max-h-60 overflow-auto rounded border-l-2 border-green-400 bg-background p-2 text-xs"
+              className="max-h-60 overflow-auto rounded border-l-2 border-green-400 bg-background p-2 pl-3 text-xs shadow-sm"
               data-testid="tool-output"
             >
               <Markdown content={output} variant="compact" />

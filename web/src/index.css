@@ -292,10 +292,15 @@
   --card-code-bg: rgb(239 68 68 / 0.1);
 }
 
-/* mermaid 图表自适应 */
+/* mermaid 图表自适应：移除 max-width 限制，让 SVG 填满容器宽度 */
 [data-streamdown="mermaid"] svg {
-  width: 100%;
+  max-width: 100% !important;
   height: auto;
+}
+
+/* mermaid PanZoom 容器最小高度：覆盖库默认的 min-h-28 (112px) */
+[data-streamdown="mermaid"] {
+  min-height: 15.5rem;
 }
 
 /* streamdown 表格字体大小覆盖 */

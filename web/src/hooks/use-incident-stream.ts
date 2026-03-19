@@ -27,6 +27,7 @@ export function useIncidentStream(
   const loadedForRef = useRef("");
   const loadedEventsRef = useRef<SSEEvent[] | null>(null);
   const statusRef = useRef(status);
+  const hasInvalidatedIncidentRef = useRef(false);
 
   const {
     addEvent,
@@ -82,6 +83,7 @@ export function useIncidentStream(
       loadedEventsRef.current = null;
       lastTimestampRef.current = "";
       seenEventIdsRef.current = new Set();
+      hasInvalidatedIncidentRef.current = false;
     };
   }, [incidentId]);
 
@@ -95,6 +97,7 @@ export function useIncidentStream(
       seenEventIdsRef.current = new Set();
       loadedForRef.current = "";
       loadedEventsRef.current = null;
+      hasInvalidatedIncidentRef.current = false;
     }
 
     // Load history once per incident
@@ -239,6 +242,13 @@ export function useIncidentStream(
               updatePhase("investigation");
             }
             return;
+          }
+
+          // Invalidate incident query once on first real-time event
+          // so the status badge updates (e.g. open → investigating)
+          if (!hasInvalidatedIncidentRef.current) {
+            hasInvalidatedIncidentRef.current = true;
+            queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
           }
 
           // Real-time events

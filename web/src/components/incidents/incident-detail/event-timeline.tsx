@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, Brain, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle, ChevronRight } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
@@ -197,10 +197,15 @@ function ResolutionConfirmCard({ incidentId }: { incidentId: string }) {
   const resolutionConfirmResolved = useIncidentStreamStore((s) => s.resolutionConfirmResolved);
   const setResolutionConfirmResolved = useIncidentStreamStore((s) => s.setResolutionConfirmResolved);
 
+  const queryClient = useQueryClient();
   const confirmMutation = useMutation({
     mutationFn: () => confirmResolution(incidentId),
     onMutate: () => {
       setResolutionConfirmResolved(true);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
     },
   });
 
