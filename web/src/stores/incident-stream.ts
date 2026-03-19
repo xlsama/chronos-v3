@@ -260,16 +260,16 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     }
 
     // Also mark resolution as resolved if summary event exists (backend completed)
-    const hasComplete = mainEvents.some((e) => e.event_type === "complete");
-    if (hasComplete && resolutionRequired) resolutionResolved = true;
+    const hasDone = mainEvents.some((e) => e.event_type === "done");
+    if (hasDone && resolutionRequired) resolutionResolved = true;
 
     // Derive phase state from loaded events
     const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
-    const hasMain = mainEvents.some((e) => e.event_type !== "complete" && e.event_type !== "ask_human" && e.event_type !== "answer");
+    const hasMain = mainEvents.some((e) => e.event_type !== "done" && e.event_type !== "ask_human" && e.event_type !== "answer");
 
     const derivedPhase: PhaseState = {
-      contextGathering: hasContext ? (hasMain || hasComplete ? "completed" : "active") : "pending",
-      investigation: hasMain ? (hasComplete ? "completed" : "active") : "pending",
+      contextGathering: hasContext ? (hasMain || hasDone ? "completed" : "active") : "pending",
+      investigation: hasMain ? (hasDone ? "completed" : "active") : "pending",
     };
 
     set({

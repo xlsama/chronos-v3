@@ -273,7 +273,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
     kbAgentState.status !== "idle";
   const hasGatherContext = hasHistory || hasKB;
 
-  const mainEvents = events.filter((e) => e.event_type !== "complete");
+  const mainEvents = events.filter((e) => e.event_type !== "done");
   const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
 
   // Build paired timeline items

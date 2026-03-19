@@ -230,7 +230,7 @@ export function useIncidentStream(
             // Update phase state
             if (phase === "gather_context") {
               updatePhase("gather_context");
-            } else if (event.event_type === "complete") {
+            } else if (event.event_type === "done") {
               updatePhase("summary_complete");
             } else if (phase) {
               updatePhase(phase);
@@ -263,7 +263,7 @@ export function useIncidentStream(
               event.data.approval_id as string,
               event.data.decision as string,
             );
-          } else if (event.event_type === "complete") {
+          } else if (event.event_type === "done") {
             // Agent completed; invalidate queries + close SSE
             updatePhase("summary_complete");
             setResolutionConfirmResolved(true);

@@ -156,7 +156,7 @@ def _message_to_event(m: Message) -> dict:
         data = metadata
     elif m.event_type == "ask_human":
         data = {"question": m.content}
-    elif m.event_type == "complete":
+    elif m.event_type == "done":
         data = {}
     elif m.event_type == "error":
         data = {"message": m.content}
