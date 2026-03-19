@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
@@ -19,6 +20,8 @@ def build_tools():
     @tool
     async def bash(server_id: str, command: str, explanation: str = "") -> dict:
         """在目标服务器执行 Shell 命令。
+        命令通过 SSH 在 server_id 对应的远程主机上运行，不是在 agent 自身容器中运行。
+        `localhost`、`127.0.0.1`、文件路径、监听端口都必须按目标服务器视角解释。
         系统自动判断命令权限：只读命令直接执行，写操作需人工审批。
         网络请求用 curl，文件操作用 cat/sed/tee 等标准命令。
         - server_id: 必须是 list_servers() 返回的有效 UUID
@@ -75,12 +78,45 @@ def build_tools():
 
 _COMPACT_THRESHOLD = 10   # >10 个 skill 使用 compact 格式
 _TRUNCATE_THRESHOLD = 30  # >30 个 skill 进行截断
+_DISCOVERY_INTENT_TERMS = (
+    "服务发现",
+    "服务器画像",
+    "摸清环境",
+    "跑了什么服务",
+    "跑了哪些服务",
+    "这台机器跑了什么",
+    "这台服务器跑了什么",
+    "有哪些端口",
+    "有哪些容器",
+    "数据库在哪",
+    "数据库在哪台",
+    "数据库地址",
+    "数据库服务器",
+    "几张表",
+    "表数量",
+    "多少数据",
+    "多少条数据",
+    "row count",
+    "table count",
+    "schema",
+)
+_EXPLICIT_LOCATION_PATTERNS = (
+    r"\b(?:postgres|postgresql|mysql|mariadb|redis)://",
+    r"\b(?:db_)?host\s*[:=]\s*[a-z0-9_.:-]+",
+    r"\b(?:db_)?port\s*[:=]\s*\d+",
+    r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b",
+    r"\blocalhost:\d+\b",
+    r"\b127\.0\.0\.1(?::\d+)?\b",
+    r"\b(?:postgres|postgresql|mysql|mariadb|redis)\s+server\b",
+    r"\bserver_id\b",
+)
 
 
 def _build_skills_context(
     skill_service: SkillService,
     kb_summary: str | None = None,
     history_summary: str | None = None,
+    incident_description: str | None = None,
 ) -> str:
     """构建 skills 上下文，包含推荐和 XML 目录。
 
@@ -94,7 +130,7 @@ def _build_skills_context(
     lines: list[str] = []
 
     # Skill 推荐
-    recommended = _recommend_skills(available, kb_summary, history_summary)
+    recommended = _recommend_skills(available, kb_summary, history_summary, incident_description)
     recommended_slugs = {s["slug"] for s in recommended}
     if recommended:
         lines.append("\n## 推荐技能")
@@ -155,32 +191,69 @@ def _build_skills_context(
     return "\n".join(lines)
 
 
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(term in lowered for term in terms)
+
+
+def _has_explicit_target_location(*contexts: str | None) -> bool:
+    for context in contexts:
+        if not context:
+            continue
+        lowered = context.lower()
+        if any(re.search(pattern, lowered) for pattern in _EXPLICIT_LOCATION_PATTERNS):
+            return True
+    return False
+
+
+def _tokenize_skill_keywords(skill: dict) -> set[str]:
+    keywords: set[str] = set()
+    for field in (skill["slug"], skill.get("name", ""), skill.get("description", "")):
+        lowered = field.lower()
+        keywords.update(
+            token
+            for token in re.split(r"[^a-z0-9]+", lowered)
+            if len(token) > 2
+        )
+    return keywords
+
+
 def _recommend_skills(
     available: list[dict],
     kb_summary: str | None,
     history_summary: str | None,
+    incident_description: str | None = None,
 ) -> list[dict]:
-    """基于 kb_summary + history_summary 关键词匹配推荐技能。"""
+    """基于 incident/kb/history 上下文关键词匹配推荐技能。"""
     if not available:
         return []
 
-    context = ""
-    if kb_summary:
-        context += kb_summary.lower()
-    if history_summary:
-        context += " " + history_summary.lower()
+    contexts = [incident_description, kb_summary, history_summary]
+    context = " ".join(part.lower() for part in contexts if part)
 
     if not context.strip():
         return []
 
-    recommended: list[dict] = []
-    for skill in available:
-        # 用 slug 中的关键词（按 - 分割）匹配上下文
-        keywords = skill["slug"].split("-")
-        if any(kw in context for kw in keywords if len(kw) > 2):
-            recommended.append(skill)
+    recommended_scored: list[tuple[int, dict]] = []
+    has_explicit_location = _has_explicit_target_location(kb_summary, history_summary)
+    has_discovery_intent = _contains_any(context, _DISCOVERY_INTENT_TERMS)
 
-    return recommended[:3]  # 最多推荐 3 个
+    for skill in available:
+        score = 0
+
+        # 服务发现对“先确认服务/数据库部署位置”的问题做定向推荐。
+        if skill["slug"] == "service-discovery":
+            if has_discovery_intent and not has_explicit_location:
+                score += 3
+
+        keywords = _tokenize_skill_keywords(skill)
+        score += sum(1 for kw in keywords if kw in context)
+
+        if score > 0:
+            recommended_scored.append((score, skill))
+
+    recommended_scored.sort(key=lambda item: item[0], reverse=True)
+    return [skill for _, skill in recommended_scored[:3]]
 
 
 def get_llm():
@@ -228,7 +301,12 @@ async def main_agent_node(state: OpsState) -> dict:
 
     # Build skills context
     skill_service = SkillService()
-    skills_context = _build_skills_context(skill_service, kb_summary, history_summary)
+    skills_context = _build_skills_context(
+        skill_service,
+        kb_summary,
+        history_summary,
+        state["description"],
+    )
 
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         description=state["description"],
