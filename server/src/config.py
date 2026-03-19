@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     dashscope_ws_url: str = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
 
     # Agent
-    agent_recursion_limit: int = 50
+    agent_recursion_limit: int = 200
 
     # Upload
     upload_dir: str = "uploads"

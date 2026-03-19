@@ -1,5 +1,4 @@
 import asyncio
-import re
 
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
@@ -76,40 +75,7 @@ def build_tools():
     return [bash, list_servers, read_skill, ask_human, complete]
 
 
-_COMPACT_THRESHOLD = 10   # >10 个 skill 使用 compact 格式
-_TRUNCATE_THRESHOLD = 30  # >30 个 skill 进行截断
-_DISCOVERY_INTENT_TERMS = (
-    "服务发现",
-    "服务器画像",
-    "摸清环境",
-    "跑了什么服务",
-    "跑了哪些服务",
-    "这台机器跑了什么",
-    "这台服务器跑了什么",
-    "有哪些端口",
-    "有哪些容器",
-    "数据库在哪",
-    "数据库在哪台",
-    "数据库地址",
-    "数据库服务器",
-    "几张表",
-    "表数量",
-    "多少数据",
-    "多少条数据",
-    "row count",
-    "table count",
-    "schema",
-)
-_EXPLICIT_LOCATION_PATTERNS = (
-    r"\b(?:postgres|postgresql|mysql|mariadb|redis)://",
-    r"\b(?:db_)?host\s*[:=]\s*[a-z0-9_.:-]+",
-    r"\b(?:db_)?port\s*[:=]\s*\d+",
-    r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b",
-    r"\blocalhost:\d+\b",
-    r"\b127\.0\.0\.1(?::\d+)?\b",
-    r"\b(?:postgres|postgresql|mysql|mariadb|redis)\s+server\b",
-    r"\bserver_id\b",
-)
+_COMPACT_THRESHOLD = 10  # >10 个 skill 使用 compact 格式
 
 
 def _build_skills_context(
@@ -118,142 +84,34 @@ def _build_skills_context(
     history_summary: str | None = None,
     incident_description: str | None = None,
 ) -> str:
-    """构建 skills 上下文，包含推荐和 XML 目录。
+    """构建 skills 上下文，仅包含全量 XML 目录。
 
-    三层截断策略:
+    两层格式策略:
     - Full format (≤10): <skill><name>...</name><description>...</description></skill>
-    - Compact format (10-30): <skill name="slug">description</skill> 单行
-    - Truncate (>30): 只注入推荐的 + 最近使用的，其余折叠
+    - Compact format (>10): <skill name="slug">description</skill> 单行
     """
     available = skill_service.get_available_skills()
 
-    lines: list[str] = []
-
-    # Skill 推荐
-    recommended = _recommend_skills(available, kb_summary, history_summary, incident_description)
-    recommended_slugs = {s["slug"] for s in recommended}
-    if recommended:
-        lines.append("\n## 推荐技能")
-        lines.append("基于上下文匹配，建议优先用 read_skill 读取:")
-        for s in recommended:
-            lines.append(f"- {s['slug']}: {s['description']}")
-
-    # XML 目录
-    if available:
-        total = len(available)
-
-        if total > _TRUNCATE_THRESHOLD:
-            # 截断模式: 只显示推荐的，其余折叠
-            shown = [s for s in available if s["slug"] in recommended_slugs]
-            hidden_count = total - len(shown)
-            xml_lines = [
-                "\n<available_skills>",
-                "扫描技能描述。匹配则用 read_skill 读取，按指示操作。不匹配则跳过。",
-            ]
-            for s in shown:
-                xml_lines.append(
-                    f'  <skill name="{s["slug"]}">{s["description"]}</skill>'
-                )
-            if hidden_count > 0:
-                xml_lines.append(
-                    f'  <!-- 还有 {hidden_count} 个技能，用 read_skill("?") 查看完整列表 -->'
-                )
-            xml_lines.append("</available_skills>")
-            lines.extend(xml_lines)
-
-        elif total > _COMPACT_THRESHOLD:
-            # Compact 模式: 单行格式
-            xml_lines = [
-                "\n<available_skills>",
-                "扫描技能描述。匹配则用 read_skill 读取，按指示操作。不匹配则跳过。",
-            ]
-            for s in available:
-                xml_lines.append(
-                    f'  <skill name="{s["slug"]}">{s["description"]}</skill>'
-                )
-            xml_lines.append("</available_skills>")
-            lines.extend(xml_lines)
-
-        else:
-            # Full 模式
-            xml_lines = [
-                "\n<available_skills>",
-                "扫描技能描述。匹配则用 read_skill 读取，按指示操作。不匹配则跳过。",
-            ]
-            for s in available:
-                xml_lines.append(
-                    f'  <skill><name>{s["slug"]}</name>'
-                    f'<description>{s["description"]}</description></skill>'
-                )
-            xml_lines.append("</available_skills>")
-            lines.extend(xml_lines)
-
-    return "\n".join(lines)
-
-
-def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
-    lowered = text.lower()
-    return any(term in lowered for term in terms)
-
-
-def _has_explicit_target_location(*contexts: str | None) -> bool:
-    for context in contexts:
-        if not context:
-            continue
-        lowered = context.lower()
-        if any(re.search(pattern, lowered) for pattern in _EXPLICIT_LOCATION_PATTERNS):
-            return True
-    return False
-
-
-def _tokenize_skill_keywords(skill: dict) -> set[str]:
-    keywords: set[str] = set()
-    for field in (skill["slug"], skill.get("name", ""), skill.get("description", "")):
-        lowered = field.lower()
-        keywords.update(
-            token
-            for token in re.split(r"[^a-z0-9]+", lowered)
-            if len(token) > 2
-        )
-    return keywords
-
-
-def _recommend_skills(
-    available: list[dict],
-    kb_summary: str | None,
-    history_summary: str | None,
-    incident_description: str | None = None,
-) -> list[dict]:
-    """基于 incident/kb/history 上下文关键词匹配推荐技能。"""
     if not available:
-        return []
+        return ""
 
-    contexts = [incident_description, kb_summary, history_summary]
-    context = " ".join(part.lower() for part in contexts if part)
+    xml_lines = [
+        "\n<available_skills>",
+        "扫描所有技能的 name 和 description，自行判断是否 read_skill 读取完整内容；不匹配则跳过。",
+    ]
 
-    if not context.strip():
-        return []
+    if len(available) > _COMPACT_THRESHOLD:
+        for s in available:
+            xml_lines.append(f'  <skill name="{s["slug"]}">{s["description"]}</skill>')
+    else:
+        for s in available:
+            xml_lines.append(
+                f"  <skill><name>{s['slug']}</name>"
+                f"<description>{s['description']}</description></skill>"
+            )
 
-    recommended_scored: list[tuple[int, dict]] = []
-    has_explicit_location = _has_explicit_target_location(kb_summary, history_summary)
-    has_discovery_intent = _contains_any(context, _DISCOVERY_INTENT_TERMS)
-
-    for skill in available:
-        score = 0
-
-        # 服务发现对“先确认服务/数据库部署位置”的问题做定向推荐。
-        if skill["slug"] == "service-discovery":
-            if has_discovery_intent and not has_explicit_location:
-                score += 3
-
-        keywords = _tokenize_skill_keywords(skill)
-        score += sum(1 for kw in keywords if kw in context)
-
-        if score > 0:
-            recommended_scored.append((score, skill))
-
-    recommended_scored.sort(key=lambda item: item[0], reverse=True)
-    return [skill for _, skill in recommended_scored[:3]]
+    xml_lines.append("</available_skills>")
+    return "\n".join(xml_lines)
 
 
 def get_llm():
@@ -286,7 +144,9 @@ async def main_agent_node(state: OpsState) -> dict:
 
     history_summary = state.get("incident_history_summary")
     if history_summary:
-        history_context = f"## 历史事件参考\n以下是与当前事件相似的历史事件供参考：\n\n{history_summary}"
+        history_context = (
+            f"## 历史事件参考\n以下是与当前事件相似的历史事件供参考：\n\n{history_summary}"
+        )
     else:
         history_context = ""
 
@@ -295,7 +155,9 @@ async def main_agent_node(state: OpsState) -> dict:
         clean_summary = kb_summary.replace("\n\n[需要补充]", "").replace("[需要补充]", "")
         kb_context = f"## 项目知识库上下文\n{clean_summary}"
         if "[需要补充]" in kb_summary:
-            kb_context += "\n\n注意: 知识库信息不完整，排查时注意验证，必要时用 ask_human 获取具体信息"
+            kb_context += (
+                "\n\n注意: 知识库信息不完整，排查时注意验证，必要时用 ask_human 获取具体信息"
+            )
     else:
         kb_context = ""
 
@@ -307,7 +169,6 @@ async def main_agent_node(state: OpsState) -> dict:
         history_summary,
         state["description"],
     )
-
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         description=state["description"],
         severity=state["severity"],
@@ -318,13 +179,17 @@ async def main_agent_node(state: OpsState) -> dict:
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
 
-    logger.info(f"[{sid}] [main] main_agent_node invoked, history={'yes' if history_summary else 'no'}, kb={'yes' if kb_summary else 'no'}")
+    logger.info(
+        f"[{sid}] [main] main_agent_node invoked, history={'yes' if history_summary else 'no'}, kb={'yes' if kb_summary else 'no'}"
+    )
 
     response = await _invoke_llm_with_retry(llm, messages)
 
     content_text = response.content if hasattr(response, "content") else ""
     tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
-    logger.info(f"\n[{sid}] [main] LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}")
+    logger.info(
+        f"\n[{sid}] [main] LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}"
+    )
     if content_text:
         logger.info(f"\n[{sid}] [main] LLM content:\n{content_text}\n")
     for tc in tool_calls:
@@ -360,7 +225,9 @@ def route_decision(state: OpsState) -> str:
         if name == "bash":
             cmd_type = CommandSafety.classify(tool_call["args"].get("command", ""))
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
-                logger.info(f"[{sid}] [main] route_decision: need_approval (cmd_type={cmd_type.name})")
+                logger.info(
+                    f"[{sid}] [main] route_decision: need_approval (cmd_type={cmd_type.name})"
+                )
                 return "need_approval"
 
     logger.info(f"[{sid}] [main] route_decision: -> continue")

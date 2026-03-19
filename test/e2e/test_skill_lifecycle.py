@@ -37,6 +37,7 @@ def cleanup():
     """测试结束后清理 skill"""
     yield
     from src.services.skill_service import SkillService
+
     svc = SkillService()
     try:
         svc.delete_skill(SLUG)
@@ -155,6 +156,7 @@ class TestSkillLifecycle:
         assert "<available_skills>" in context
         assert SLUG in context
         assert "</available_skills>" in context
+        assert "推荐技能" not in context
 
     def test_10_draft_not_in_available(self):
         """draft skill 不在 available 中"""
@@ -168,20 +170,6 @@ class TestSkillLifecycle:
         available = svc.get_available_skills()
         slugs = [s["slug"] for s in available]
         assert SLUG not in slugs
-
-    def test_12_recommend_skills(self):
-        """推荐机制根据上下文关键词匹配"""
-        from src.services.skill_service import SkillService
-        from src.ops_agent.nodes.main_agent import _recommend_skills
-
-        svc = SkillService()
-        available = [
-            {"slug": "mysql-oom", "name": "MySQL OOM", "description": "MySQL 内存溢出排查", "has_scripts": False, "has_references": False},
-            {"slug": "redis-latency", "name": "Redis Latency", "description": "Redis 高延迟排查", "has_scripts": False, "has_references": False},
-        ]
-        recommended = _recommend_skills(available, "MySQL 数据库 OOM 告警", None)
-        slugs = [s["slug"] for s in recommended]
-        assert "mysql-oom" in slugs
 
     def test_13_read_skill_tool(self):
         """read_skill tool 返回正确内容"""
@@ -227,21 +215,26 @@ class TestSkillLifecycle:
 
 # ── Skill 上线检查 ─────────────────────────────────────────────
 
+
 class TestSkillReadiness:
     """技能必须同时具备 name、description 和 body 才算可用。"""
 
     def test_incomplete_no_name_not_available(self):
         """无 name -> 不可用"""
         from src.services.skill_service import SkillService
+
         svc = SkillService()
         svc.create_skill(SLUG)
-        svc.update_skill(SLUG, "---\nname:\ndescription: some desc\n---\n\nBody content.\n")
+        svc.update_skill(
+            SLUG, "---\nname:\ndescription: some desc\n---\n\nBody content.\n"
+        )
         available = svc.get_available_skills()
         assert SLUG not in [s["slug"] for s in available]
 
     def test_incomplete_no_description_not_available(self):
         """无 description -> 不可用"""
         from src.services.skill_service import SkillService
+
         svc = SkillService()
         svc.create_skill(SLUG)
         svc.update_skill(SLUG, "---\nname: Test\ndescription:\n---\n\nBody content.\n")
@@ -251,6 +244,7 @@ class TestSkillReadiness:
     def test_incomplete_empty_body_not_available(self):
         """空 body -> 不可用"""
         from src.services.skill_service import SkillService
+
         svc = SkillService()
         svc.create_skill(SLUG)
         svc.update_skill(SLUG, "---\nname: Test\ndescription: some desc\n---\n")
@@ -260,6 +254,7 @@ class TestSkillReadiness:
     def test_complete_skill_becomes_available(self):
         """补齐后 -> 可用"""
         from src.services.skill_service import SkillService
+
         svc = SkillService()
         svc.create_skill(SLUG)
         # 先不完整
@@ -272,6 +267,7 @@ class TestSkillReadiness:
     def test_draft_blocks_availability(self):
         """draft=true -> 不可用"""
         from src.services.skill_service import SkillService
+
         svc = SkillService()
         svc.create_skill(SLUG)
         draft_content = SKILL_CONTENT.replace("---\n", "---\ndraft: true\n", 1)
@@ -279,94 +275,101 @@ class TestSkillReadiness:
         assert SLUG not in [s["slug"] for s in svc.get_available_skills()]
 
 
-# ── Agent 模糊匹配测试 ───────────────────────────────────────
+# ── Agent Skill 目录上下文测试 ───────────────────────────────
 
-class TestAgentSkillMatching:
-    """测试 _recommend_skills 的关键词匹配逻辑。"""
+
+class TestAgentSkillCatalogContext:
+    """测试 skills_context 仅保留全量目录层。"""
 
     def _make_available(self, skills: list[dict]) -> list[dict]:
         """构造 available skills 列表。"""
         base = {"has_scripts": False, "has_references": False, "has_assets": False}
         return [{**base, **s} for s in skills]
 
-    def test_exact_keyword_match(self):
-        """slug="mysql-oom", context 含 "mysql" -> 匹配"""
-        from src.ops_agent.nodes.main_agent import _recommend_skills
-        available = self._make_available([
-            {"slug": "mysql-oom", "name": "MySQL OOM", "description": "MySQL 内存溢出排查"},
-        ])
-        result = _recommend_skills(available, "MySQL 数据库告警", None)
-        assert "mysql-oom" in [s["slug"] for s in result]
-
-    def test_vague_context_partial_match(self):
-        """slug="redis-latency", context="Redis 缓存响应慢" -> 匹配 ("redis" in context)"""
-        from src.ops_agent.nodes.main_agent import _recommend_skills
-        available = self._make_available([
-            {"slug": "redis-latency", "name": "Redis Latency", "description": "Redis 高延迟排查"},
-        ])
-        result = _recommend_skills(available, "Redis 缓存响应慢", None)
-        assert "redis-latency" in [s["slug"] for s in result]
-
-    def test_no_match_irrelevant_context(self):
-        """slug="mysql-oom", context="Nginx 502" -> 不匹配"""
-        from src.ops_agent.nodes.main_agent import _recommend_skills
-        available = self._make_available([
-            {"slug": "mysql-oom", "name": "MySQL OOM", "description": "MySQL 内存溢出排查"},
-        ])
-        result = _recommend_skills(available, "Nginx 502 错误", None)
-        assert "mysql-oom" not in [s["slug"] for s in result]
-
-    def test_short_keywords_skipped(self):
-        """slug="db-oom", "db" len=2 被跳过，"oom" len=3 可匹配"""
-        from src.ops_agent.nodes.main_agent import _recommend_skills
-        available = self._make_available([
-            {"slug": "db-oom", "name": "DB OOM", "description": "数据库内存溢出"},
-        ])
-        # "db" 太短被跳过，但 "oom" 可匹配
-        result = _recommend_skills(available, "服务器 OOM 告警", None)
-        assert "db-oom" in [s["slug"] for s in result]
-        # 只含 "db" 则不匹配
-        result = _recommend_skills(available, "数据库连接异常", None)
-        assert "db-oom" not in [s["slug"] for s in result]
-
-    def test_history_summary_contributes(self):
-        """kb=None, history 含关键词 -> 匹配"""
-        from src.ops_agent.nodes.main_agent import _recommend_skills
-        available = self._make_available([
-            {"slug": "mysql-oom", "name": "MySQL OOM", "description": "MySQL 内存溢出排查"},
-        ])
-        result = _recommend_skills(available, None, "历史：MySQL 服务器 OOM killed")
-        assert "mysql-oom" in [s["slug"] for s in result]
-
-    def test_max_3_recommended(self):
-        """创建 5 个匹配 skill -> 只推荐 3 个"""
-        from src.ops_agent.nodes.main_agent import _recommend_skills
-        available = self._make_available([
-            {"slug": f"mysql-check{i}", "name": f"MySQL Check {i}", "description": f"MySQL 检查 {i}"}
-            for i in range(5)
-        ])
-        result = _recommend_skills(available, "mysql 数据库问题", None)
-        assert len(result) <= 3
-
-    def test_build_context_includes_matched(self):
-        """_build_skills_context 包含推荐 skill"""
-        from src.services.skill_service import SkillService
+    def test_build_context_includes_all_skills_without_recommendation_heading(self):
+        """skills_context 只保留目录层，不包含推荐标题"""
         from src.ops_agent.nodes.main_agent import _build_skills_context
+        from src.services.skill_service import SkillService
+
         svc = SkillService()
         svc.create_skill(SLUG)
         svc.update_skill(SLUG, SKILL_CONTENT)
-        context = _build_skills_context(svc)
+
+        context = _build_skills_context(
+            svc,
+            kb_summary="mysql 告警",
+            history_summary="历史上查过 redis",
+            incident_description="数据库连接异常",
+        )
         assert "<available_skills>" in context
         assert SLUG in context
+        assert "推荐技能" not in context
+
+    def test_build_context_uses_compact_format_above_threshold(self):
+        """当 skill 数量超过阈值时，目录层使用 compact 格式但保留全量"""
+        from src.ops_agent.nodes.main_agent import _build_skills_context
+
+        available = self._make_available(
+            [
+                {
+                    "slug": f"skill-{i:02d}",
+                    "name": f"Skill {i:02d}",
+                    "description": f"Description {i:02d}",
+                }
+                for i in range(11)
+            ]
+        )
+
+        class StubSkillService:
+            def get_available_skills(self):
+                return available
+
+        context = _build_skills_context(StubSkillService())
+        assert '<skill name="skill-00">Description 00</skill>' in context
+        assert '<skill name="skill-10">Description 10</skill>' in context
+        assert "<name>skill-00</name>" not in context
+
+    def test_build_context_keeps_all_skills_above_30(self):
+        """超过 30 个 skill 时不再裁剪，仍保留全量目录"""
+        from src.ops_agent.nodes.main_agent import _build_skills_context
+
+        available = self._make_available(
+            [
+                {
+                    "slug": f"skill-{i:02d}",
+                    "name": f"Skill {i:02d}",
+                    "description": f"Description {i:02d}",
+                }
+                for i in range(31)
+            ]
+        )
+
+        class StubSkillService:
+            def get_available_skills(self):
+                return available
+
+        context = _build_skills_context(StubSkillService())
+        assert '<skill name="skill-00">Description 00</skill>' in context
+        assert '<skill name="skill-30">Description 30</skill>' in context
+        assert "还有" not in context
 
 
 # ── read_skill 工具集成测试 ────────────────────────────────────
 
+
 class TestReadSkillToolIntegration:
     """测试 read_skill tool 的各种调用方式。"""
 
-    def test_recommend_then_read(self):
-        """推荐 -> read_skill 读取 -> 返回内容"""
+    def test_build_tools_do_not_include_inventory_tools(self):
+        """主 agent 不新增 list_services / inspect_server 这类 inventory tool"""
+        from src.ops_agent.nodes.main_agent import build_tools
+
+        names = [t.name for t in build_tools()]
+        assert "list_services" not in names
+        assert "inspect_server" not in names
+
+    def test_catalog_then_read(self):
+        """目录展示后可继续 read_skill 读取内容"""
         from src.services.skill_service import SkillService
         from src.ops_agent.nodes.main_agent import build_tools
 
