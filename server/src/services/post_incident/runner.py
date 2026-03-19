@@ -78,6 +78,7 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
 
     try:
         # ① 从 DB 读 Incident + Messages
+        logger.info(f"[{sid}] [post_incident] Step① Loading incident and messages from DB")
         async with get_session_factory()() as session:
             incident = await session.get(Incident, uuid.UUID(incident_id))
             if not incident:
@@ -94,20 +95,42 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
             db_messages = list(result.scalars().all())
             server_map = await _build_server_map(db_messages, session)
 
+        logger.info(
+            f"[{sid}] [post_incident] Step① Loaded: "
+            f"messages={len(db_messages)}, description_len={len(description)}, "
+            f"severity={severity}, server_map_size={len(server_map)}"
+        )
+
         # ② 生成 summary_md（内部变量，不存 Incident 表）
         conversation_text = format_db_messages(db_messages, description)
         conversation_text_topo = format_db_messages(db_messages, description, server_map=server_map)
+        logger.info(
+            f"[{sid}] [post_incident] Step② Generating summary, "
+            f"conversation_text_len={len(conversation_text)}"
+        )
         summary_md = await _generate_summary(conversation_text, severity, sid)
+        logger.info(
+            f"[{sid}] [post_incident] Step② Summary result: "
+            f"len={len(summary_md)}, preview={summary_md[:100]!r}"
+        )
 
         # ③ 生成 title + severity → 写入 DB
+        logger.info(f"[{sid}] [post_incident] Step③ Generating title and severity")
         summary_title = None
         new_severity = None
         if summary_md:
             try:
                 from src.services.incident_history_service import _generate_title_and_severity
                 summary_title, new_severity = await _generate_title_and_severity(summary_md)
+                logger.info(
+                    f"[{sid}] [post_incident] Step③ Generated: "
+                    f"title={summary_title!r}, severity={new_severity}"
+                )
             except Exception as e:
-                logger.warning(f"[{sid}] [post_incident] Title/severity generation failed: {e}")
+                logger.warning(
+                    f"[{sid}] [post_incident] Step③ Title/severity generation failed: {e}",
+                    exc_info=True,
+                )
 
         if summary_title or new_severity:
             async with get_session_factory()() as session:
@@ -118,16 +141,22 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
                     if new_severity:
                         incident.severity = new_severity
                     await session.commit()
-                    logger.info(f"[{sid}] [post_incident] DB updated: title='{summary_title}', severity={new_severity}")
+                    logger.info(f"[{sid}] [post_incident] Step③ DB updated: title='{summary_title}', severity={new_severity}")
 
         # ④ 通知
+        logger.info(
+            f"[{sid}] [post_incident] Step④ Sending notification: "
+            f"title={summary_title or description[:80]!r}, severity={severity}"
+        )
         from src.services.notification_service import notify_fire_and_forget
         notify_fire_and_forget(
             "resolved", incident_id, summary_title or description[:80],
             severity=severity,
         )
+        logger.info(f"[{sid}] [post_incident] Step④ Notification sent")
 
         # ⑤ 三个子任务并行: history / agents_md / skill_evolution
+        logger.info(f"[{sid}] [post_incident] Step⑤ Starting parallel sub-tasks")
         await asyncio.gather(
             _safe_run(auto_save_history(incident_id, summary_md), "history", sid),
             _safe_run(auto_update_agents_md(
@@ -143,6 +172,7 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
             ), "skill_evolution", sid),
         )
 
+        logger.info(f"[{sid}] [post_incident] Step⑤ All parallel sub-tasks completed")
         logger.info(f"[{sid}] [post_incident] All post-incident tasks completed")
     except Exception as e:
         logger.error(f"[{sid}] [post_incident] Post-incident tasks failed: {e}", exc_info=True)
@@ -153,14 +183,26 @@ async def _generate_summary(conversation_text: str, severity: str, sid: str) -> 
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
         llm = get_mini_llm()
+        human_content = (
+            f"请根据以下完整对话历史生成排查报告：\n\n"
+            f"严重程度: {severity}\n\n"
+            f"{conversation_text}"
+        )
+        logger.info(
+            f"[{sid}] [post_incident] _generate_summary: calling LLM, "
+            f"system_prompt_len={len(SUMMARIZE_SYSTEM_PROMPT)}, "
+            f"human_content_len={len(human_content)}"
+        )
         resp = await llm.ainvoke([
             SystemMessage(content=SUMMARIZE_SYSTEM_PROMPT),
-            HumanMessage(
-                content=f"请根据以下完整对话历史生成排查报告：\n\n"
-                f"严重程度: {severity}\n\n"
-                f"{conversation_text}"
-            ),
+            HumanMessage(content=human_content),
         ])
+        logger.info(
+            f"[{sid}] [post_incident] _generate_summary: LLM responded, "
+            f"resp.content type={type(resp.content).__name__}, "
+            f"len={len(resp.content) if resp.content else 0}, "
+            f"preview={repr(resp.content[:200]) if resp.content else 'None'}"
+        )
         summary = resp.content.strip()
         logger.info(f"[{sid}] [post_incident] Summary generated ({len(summary)} chars)")
         return summary or "报告生成失败"
@@ -176,4 +218,4 @@ async def _safe_run(coro, task_name: str, sid: str) -> None:
         if result is not None:
             logger.info(f"[{sid}] [post_incident] {task_name} result: {result}")
     except Exception as e:
-        logger.error(f"[{sid}] [post_incident] {task_name} failed: {e}")
+        logger.error(f"[{sid}] [post_incident] {task_name} failed: {e}", exc_info=True)

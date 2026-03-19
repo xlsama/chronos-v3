@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useState } from "react";
 import { ArrowDown, ArrowLeft, Square } from "lucide-react";
 import { getIncident, stopIncident } from "@/api/incidents";
 import { useIncidentStream } from "@/hooks/use-incident-stream";
+import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import { EventTimeline } from "@/components/incidents/incident-detail/event-timeline";
 import { UserInputBar } from "@/components/incidents/incident-detail/user-input-bar";
 import { Button } from "@/components/ui/button";
@@ -36,13 +37,15 @@ function IncidentDetailPage() {
 
   useIncidentStream(incidentId, incident?.status);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScroll = useRef(true);
-  const [isAtBottom, setIsAtBottom] = useState(true);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
 
   const isActive = incident?.status === "open" || incident?.status === "investigating";
+
+  const { scrollRef, bottomRef, isAtBottom, scrollToBottom } = useAutoScroll({
+    enabled: isActive,
+    threshold: 100,
+    smooth: true,
+  });
 
   const stopMutation = useMutation({
     mutationFn: () => stopIncident(incidentId),
@@ -52,38 +55,6 @@ function IncidentDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["incidents"] });
     },
   });
-
-  const checkIsAtBottom = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const threshold = 100;
-    const atBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
-    shouldAutoScroll.current = atBottom;
-    setIsAtBottom(atBottom);
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    shouldAutoScroll.current = true;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    const scrollEl = scrollRef.current;
-    if (!scrollEl) return;
-
-    const observer = new ResizeObserver(() => {
-      if (shouldAutoScroll.current) {
-        scrollEl.scrollTop = scrollEl.scrollHeight;
-      }
-    });
-
-    for (const child of scrollEl.children) {
-      observer.observe(child);
-    }
-
-    return () => observer.disconnect();
-  }, []);
 
   if (isLoading) {
     return (
@@ -174,7 +145,6 @@ function IncidentDetailPage() {
       <div
         ref={scrollRef}
         className="relative flex-1 overflow-auto"
-        onScroll={checkIsAtBottom}
       >
         <EventTimeline incidentId={incidentId} />
         <div ref={bottomRef} />

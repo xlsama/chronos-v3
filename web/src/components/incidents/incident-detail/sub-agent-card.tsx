@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
-import { formatDuration } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
+import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import {
   Dialog,
   DialogContent,
@@ -121,6 +122,7 @@ interface SubAgentCardProps {
   status: "idle" | "started" | "completed" | "failed";
   streamingContent?: string;
   forceExpanded?: boolean;
+  className?: string;
 }
 
 export function SubAgentCard({
@@ -129,25 +131,18 @@ export function SubAgentCard({
   status,
   streamingContent,
   forceExpanded,
+  className,
 }: SubAgentCardProps) {
   const [localExpanded, setLocalExpanded] = useState(false);
   const expanded = forceExpanded || localExpanded;
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const { scrollRef: scrollContainerRef } = useAutoScroll({
+    enabled: forceExpanded && status === "started",
+    threshold: 50,
+  });
 
   // Preview state
   const [previewSource, setPreviewSource] = useState<Source | null>(null);
-
-  useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => {
-      el.scrollTop = el.scrollHeight;
-    });
-    for (const child of el.children) {
-      observer.observe(child);
-    }
-    return () => observer.disconnect();
-  }, []);
 
   const hasEvents = events.length > 0 || !!streamingContent;
   const config = AGENT_CONFIG[agentName] ?? {
@@ -197,7 +192,7 @@ export function SubAgentCard({
 
   return (
     <div
-      className="rounded-lg border border-blue-200 bg-blue-50/50 p-3"
+      className={cn("flex flex-col rounded-lg border border-blue-200 bg-blue-50/50 p-3", className)}
       data-testid="sub-agent-card"
     >
       <button
@@ -243,7 +238,7 @@ export function SubAgentCard({
       <AnimatePresence initial={false}>
         {expanded && hasEvents && (
         <motion.div
-          className="mt-2 max-h-[300px] overflow-y-auto space-y-2 pl-6 text-sm text-blue-900/80"
+          className="mt-2 flex-1 min-h-0 overflow-y-auto space-y-2 pl-6 text-sm text-blue-900/80"
           ref={scrollContainerRef}
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}

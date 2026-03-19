@@ -261,7 +261,7 @@ export function PromptComposer({
                     disabled={disabled || isLoading || (!text.trim() && files.length === 0)}
                     data-testid="submit-incident"
                   >
-                    <Send className="size-4" />
+                    <Send className="size-4 -translate-x-px translate-y-px" />
                   </Button>
                 </motion.div>
               )}

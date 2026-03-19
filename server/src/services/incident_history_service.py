@@ -17,12 +17,14 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
     import json
 
     from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_openai import ChatOpenAI
 
-    from src.config import get_settings
+    from src.services.post_incident.base import get_mini_llm
 
-    s = get_settings()
-    llm = ChatOpenAI(model=s.mini_model, base_url=s.llm_base_url, api_key=s.dashscope_api_key)
+    llm = get_mini_llm()
+    logger.info(
+        f"[history_service] _generate_title_and_severity: calling LLM, "
+        f"summary_md_len={len(summary_md)}, input_len={min(len(summary_md), 3000)}"
+    )
     resp = await llm.ainvoke([
         SystemMessage(content=(
             "你是一个事件分析器。根据以下事件排查报告，生成标题和严重等级。\n\n"
@@ -37,12 +39,21 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
         HumanMessage(content=summary_md[:3000]),
     ])
     raw = resp.content.strip()
+    logger.info(
+        f"[history_service] _generate_title_and_severity: LLM raw response: "
+        f"type={type(resp.content).__name__}, len={len(resp.content) if resp.content else 0}, "
+        f"raw={raw!r}"
+    )
     # 尝试解析 JSON
     try:
         data = json.loads(raw)
+        logger.info(f"[history_service] _generate_title_and_severity: JSON parsed: {data}")
         title = str(data.get("title", "")).strip().strip("\"'《》")
         severity = str(data.get("severity", "P3")).strip().upper()
-    except (json.JSONDecodeError, AttributeError):
+    except (json.JSONDecodeError, AttributeError) as e:
+        logger.warning(
+            f"[history_service] _generate_title_and_severity: JSON parse failed: {e}, raw={raw!r}"
+        )
         title = raw.strip().strip("\"'《》")
         severity = "P3"
 
@@ -51,17 +62,17 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
     if severity not in ("P0", "P1", "P2", "P3"):
         severity = "P3"
 
+    logger.info(f"[history_service] _generate_title_and_severity: result title={title!r}, severity={severity}")
     return title, severity
 
 
 async def _generate_filename(title: str) -> str:
     from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_openai import ChatOpenAI
 
-    from src.config import get_settings
+    from src.services.post_incident.base import get_mini_llm
 
-    s = get_settings()
-    llm = ChatOpenAI(model=s.mini_model, base_url=s.llm_base_url, api_key=s.dashscope_api_key)
+    llm = get_mini_llm()
+    logger.info(f"[history_service] _generate_filename: calling LLM, title={title!r}")
     resp = await llm.ainvoke([
         SystemMessage(content=(
             "将以下中文标题翻译为英文文件名，使用 kebab-case 格式，3-8 个单词，"
@@ -69,20 +80,25 @@ async def _generate_filename(title: str) -> str:
         )),
         HumanMessage(content=title),
     ])
+    logger.info(f"[history_service] _generate_filename: LLM raw response: {resp.content!r}")
     name = resp.content.strip().strip("\"'").lower()
     name = re.sub(r"[^a-z0-9-]", "-", name)
     name = re.sub(r"-+", "-", name).strip("-")
-    return name if name and len(name) <= 80 else "incident"
+    result = name if name and len(name) <= 80 else "incident"
+    logger.info(f"[history_service] _generate_filename: result={result!r}")
+    return result
 
 
 async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
     from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_openai import ChatOpenAI
 
-    from src.config import get_settings
+    from src.services.post_incident.base import get_mini_llm
 
-    s = get_settings()
-    llm = ChatOpenAI(model=s.mini_model, base_url=s.llm_base_url, api_key=s.dashscope_api_key)
+    llm = get_mini_llm()
+    logger.info(
+        f"[history_service] _merge_summaries: calling LLM, "
+        f"existing_len={len(existing_md)}, new_len={len(new_md)}"
+    )
     resp = await llm.ainvoke([
         SystemMessage(content=(
             "你是一个事件记录合并助手。你需要对比两份事件排查报告，将新报告中有价值的信息补充到已有报告中。\n\n"
@@ -97,8 +113,14 @@ async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
         HumanMessage(content=f"## 已有报告\n\n{existing_md}\n\n## 新报告\n\n{new_md}"),
     ])
     result = resp.content.strip()
+    logger.info(
+        f"[history_service] _merge_summaries: LLM responded, "
+        f"len={len(result)}, preview={result[:200]!r}"
+    )
     if result == "NO_CHANGE":
+        logger.info("[history_service] _merge_summaries: result=NO_CHANGE")
         return None
+    logger.info(f"[history_service] _merge_summaries: merged content len={len(result)}")
     return result
 
 

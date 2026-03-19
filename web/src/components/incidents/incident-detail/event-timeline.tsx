@@ -211,33 +211,38 @@ function ResolutionConfirmCard({ incidentId }: { incidentId: string }) {
 
   if (!resolutionConfirmRequired) return null;
 
-  if (resolutionConfirmResolved) {
-    return (
-      <div className="rounded-lg border border-green-200 bg-green-50/30 p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-green-800">
-          <CheckCircle className="h-5 w-5" />
-          已确认解决
-        </div>
-      </div>
-    );
-  }
+  const resolved = resolutionConfirmResolved;
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50/30 p-4 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+    <div
+      className={cn(
+        "rounded-lg border p-4 space-y-3",
+        resolved
+          ? "border-green-200 bg-green-50/30"
+          : "border-blue-200 bg-blue-50/30",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center gap-2 text-sm font-medium",
+          resolved ? "text-green-800" : "text-blue-800",
+        )}
+      >
         <CheckCircle className="h-5 w-5" />
-        问题是否已解决？
+        {resolved ? "已确认解决" : "问题是否已解决？"}
       </div>
       <p className="text-xs text-muted-foreground">
-        如未解决，请在下方输入栏继续提问
+        {resolved ? "问题已标记为解决" : "如未解决，请在下方输入栏继续提问"}
       </p>
-      <Button
-        size="sm"
-        onClick={() => confirmMutation.mutate()}
-        disabled={confirmMutation.isPending}
-      >
-        已解决
-      </Button>
+      {!resolved && (
+        <Button
+          size="sm"
+          onClick={() => confirmMutation.mutate()}
+          disabled={confirmMutation.isPending}
+        >
+          已解决
+        </Button>
+      )}
     </div>
   );
 }
@@ -321,9 +326,10 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
           status={phaseState.contextGathering}
           icon={Search}
         >
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3 max-h-[calc(100dvh-15rem)]">
             {hasHistory && (
               <SubAgentCard
+                className="flex-1 min-h-0"
                 agentName="history"
                 events={historyAgentState.events}
                 status={historyAgentState.status}
@@ -333,6 +339,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
             )}
             {hasKB && (
               <SubAgentCard
+                className="flex-1 min-h-0"
                 agentName="kb"
                 events={kbAgentState.events}
                 status={kbAgentState.status}
@@ -351,6 +358,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
           subtitle={phaseSubtitle}
           status={phaseState.investigation}
           icon={Brain}
+          defaultExpanded
         >
           <div className="space-y-3">
             <AnimatePresence initial={false}>

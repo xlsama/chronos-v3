@@ -24,6 +24,10 @@ def _has_root_cause(summary_md: str) -> bool:
 async def auto_save_history(incident_id: str, summary_md: str) -> None:
     """Auto-save incident history with similarity dedup."""
     sid = incident_id[:8]
+    logger.info(
+        f"[{sid}] [history] auto_save_history called: "
+        f"incident_id={incident_id}, summary_md_len={len(summary_md) if summary_md else 0}"
+    )
     if not summary_md:
         logger.info(f"[{sid}] [history] Check: summary_md is empty, skipping auto-save")
         return
@@ -56,5 +60,9 @@ async def auto_save_history(incident_id: str, summary_md: str) -> None:
             return
 
         service = IncidentHistoryService(session=session)
+        logger.info(f"[{sid}] [history] Calling service.auto_save()")
         result = await service.auto_save(incident, summary_md)
-        logger.info(f"[{sid}] [history] Auto-save result: {result.get('action')}")
+        if result is None:
+            logger.warning(f"[{sid}] [history] Auto-save returned None (unexpected)")
+            return
+        logger.info(f"[{sid}] [history] Auto-save result: {result}")
