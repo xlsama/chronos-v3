@@ -292,15 +292,31 @@
   --card-code-bg: rgb(239 68 68 / 0.1);
 }
 
-/* mermaid 图表自适应：移除 max-width 限制，让 SVG 填满容器宽度 */
-[data-streamdown="mermaid"] svg {
-  max-width: 100% !important;
-  height: auto;
+/* mermaid 图表嵌入态：按 SVG 内容撑开高度，避免被 PanZoom 默认视口裁切 */
+.streamdown-markdown [data-streamdown="mermaid"] {
+  width: 100%;
 }
 
-/* mermaid PanZoom 容器最小高度：覆盖库默认的 min-h-28 (112px) */
-[data-streamdown="mermaid"] {
+.streamdown-markdown [data-streamdown="mermaid"] > :first-child {
   min-height: 15.5rem;
+  height: auto !important;
+}
+
+.streamdown-markdown [data-streamdown="mermaid"] > :first-child > [role="application"] {
+  flex: 0 0 auto !important;
+  min-height: inherit;
+  height: auto !important;
+}
+
+.streamdown-markdown [data-streamdown="mermaid"] [aria-label="Mermaid chart"] {
+  width: max-content;
+  min-width: 100%;
+}
+
+.streamdown-markdown [data-streamdown="mermaid"] svg {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
 }
 
 /* streamdown 表格字体大小覆盖 */

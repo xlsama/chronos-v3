@@ -18,7 +18,11 @@ export function Markdown({
 }: MarkdownProps) {
   return (
     <Streamdown
-      className={cn(variant === "compact" ? "prose-compact" : "prose-default", className)}
+      className={cn(
+        "streamdown-markdown",
+        variant === "compact" ? "prose-compact" : "prose-default",
+        className,
+      )}
       mode={streaming ? "streaming" : "static"}
       plugins={{ code, mermaid }}
       shikiTheme={["github-light", "github-dark"]}
