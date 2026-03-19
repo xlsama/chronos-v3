@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import ContentVersion
@@ -58,6 +58,16 @@ class VersionService:
             .order_by(ContentVersion.version_number.desc())
         )
         return list(result.scalars().all())
+
+    async def delete_versions(self, entity_type: str, entity_id: str) -> int:
+        """删除指定实体的所有版本记录，返回删除数量"""
+        result = await self.session.execute(
+            delete(ContentVersion).where(
+                ContentVersion.entity_type == entity_type,
+                ContentVersion.entity_id == entity_id,
+            )
+        )
+        return result.rowcount
 
     async def get_version(self, version_id: uuid.UUID) -> ContentVersion | None:
         """获取单个版本"""

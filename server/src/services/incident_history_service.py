@@ -125,6 +125,14 @@ def _write_md_file(title: str, summary_md: str, record_id: uuid.UUID | None = No
         return None
 
 
+def _delete_md_file(record_id: uuid.UUID) -> None:
+    dir_path = Path("data/incident_history")
+    prefix = record_id.hex[:8]
+    for f in dir_path.glob(f"{prefix}_*.md"):
+        f.unlink()
+        logger.info(f"Deleted incident history file: {f}")
+
+
 def _rewrite_md_file(record_id: uuid.UUID, summary_md: str) -> None:
     dir_path = Path("data/incident_history")
     prefix = record_id.hex[:8]
@@ -285,6 +293,11 @@ class IncidentHistoryService:
         record = await self.session.get(IncidentHistory, history_id)
         if not record:
             return False
+        # 清理版本历史
+        vs = VersionService(self.session)
+        await vs.delete_versions("incident_history", str(history_id))
+        # 清理磁盘 markdown 文件
+        _delete_md_file(history_id)
         await self.session.delete(record)
         await self.session.commit()
         return True

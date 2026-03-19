@@ -98,12 +98,16 @@ async def update_skill(slug: str, body: SkillUpdate, session: AsyncSession = Dep
 
 
 @router.delete("/{slug}")
-async def delete_skill(slug: str):
+async def delete_skill(slug: str, session: AsyncSession = Depends(get_session)):
     service = _get_service()
     try:
         service.delete_skill(slug)
     except FileNotFoundError:
         raise NotFoundError(f"Skill '{slug}' not found")
+    # 清理版本历史
+    vs = VersionService(session)
+    await vs.delete_versions("skill", slug)
+    await session.commit()
     return {"ok": True}
 
 
