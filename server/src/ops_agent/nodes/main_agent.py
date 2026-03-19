@@ -22,7 +22,7 @@ def build_tools():
         命令通过 SSH 在 server_id 对应的远程主机上运行，不是在 agent 自身容器中运行。
         `localhost`、`127.0.0.1`、文件路径、监听端口都必须按目标服务器视角解释。
         系统自动判断命令权限：只读命令直接执行，写操作需人工审批。
-        网络请求用 curl，文件操作用 cat/sed/tee 等标准命令。
+        网络请求用 curl。查看日志/配置文件用 cat/tail/grep，但禁止通过 cat 源码或构建产物来获取数据库表结构、连接串等运行时信息——应使用 psql/mysql/redis-cli 等 CLI 直接查询。
         - server_id: 必须是 list_servers() 返回的有效 UUID
         - command: 要执行的 Shell 命令
         - explanation: 可选，写操作时提供操作说明（展示在审批卡片上）

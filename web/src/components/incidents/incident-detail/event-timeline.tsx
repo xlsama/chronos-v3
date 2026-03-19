@@ -273,18 +273,27 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
     return map;
   }, [serversData]);
 
-  const hasHistory =
+  const contextActive = phaseState.contextGathering === "active";
+
+  const hasHistory = contextActive ||
     historyAgentState.events.length > 0 ||
     !!historyAgentState.thinkingContent ||
     historyAgentState.status !== "idle";
-  const hasKB =
+  const hasKB = contextActive ||
     kbAgentState.events.length > 0 ||
     !!kbAgentState.thinkingContent ||
     kbAgentState.status !== "idle";
   const hasGatherContext = hasHistory || hasKB;
   const hasBothContextCards = hasHistory && hasKB;
+
+  const hasSubAgentContent =
+    historyAgentState.events.length > 0 ||
+    !!historyAgentState.thinkingContent ||
+    kbAgentState.events.length > 0 ||
+    !!kbAgentState.thinkingContent;
+
   const shouldUseFixedContextLayout =
-    phaseState.contextGathering === "active" && hasGatherContext;
+    contextActive && hasGatherContext && hasSubAgentContent;
 
   const mainEvents = events.filter((e) => e.event_type !== "done");
   const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;

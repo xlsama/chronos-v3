@@ -53,9 +53,11 @@ async def gather_context_node(state: OpsState) -> dict:
     history_cb, history_pub = _build_callback(channel, agent="history")
     kb_cb, kb_pub = _build_callback(channel, agent="kb")
 
-    # Publish agent_status started
-    await history_cb("agent_status", {"status": "started"})
-    await kb_cb("agent_status", {"status": "started"})
+    # Publish agent_status started (parallel to minimize UI flicker)
+    await asyncio.gather(
+        history_cb("agent_status", {"status": "started"}),
+        kb_cb("agent_status", {"status": "started"}),
+    )
 
     # Run both sub-agents in parallel
     logger.info(f"[{sid}] [gather_context] Starting parallel sub-agents: history + kb")
@@ -73,8 +75,10 @@ async def gather_context_node(state: OpsState) -> dict:
     # Publish agent_status completed/failed
     history_failed = isinstance(history_result, str) and history_result.startswith("[ERROR]")
     kb_failed = isinstance(kb_result, str) and kb_result.startswith("[ERROR]")
-    await history_cb("agent_status", {"status": "failed" if history_failed else "completed"})
-    await kb_cb("agent_status", {"status": "failed" if kb_failed else "completed"})
+    await asyncio.gather(
+        history_cb("agent_status", {"status": "failed" if history_failed else "completed"}),
+        kb_cb("agent_status", {"status": "failed" if kb_failed else "completed"}),
+    )
 
     logger.info(f"[{sid}] [gather_context] Sub-agents completed: history={'FAILED' if history_failed else 'OK'}, kb={'FAILED' if kb_failed else 'OK'}")
 

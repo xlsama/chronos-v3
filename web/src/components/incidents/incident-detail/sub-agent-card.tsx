@@ -179,11 +179,13 @@ export function SubAgentCard({
   const subAgentItems = useMemo(() => buildSubAgentItems(events), [events]);
 
   const statusText =
-    status === "started"
-      ? "检索中..."
-      : status === "failed"
-        ? "检索失败"
-        : [
+    status === "idle"
+      ? "等待中..."
+      : status === "started"
+        ? "检索中..."
+        : status === "failed"
+          ? "检索失败"
+          : [
             duration && duration !== "0s" ? duration : null,
             toolCallCount > 0 ? `${toolCallCount} 次调用` : null,
           ]
