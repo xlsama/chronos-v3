@@ -36,15 +36,14 @@ export function useIncidentStream(
     clearAnswer,
     appendAskHuman,
     clearAskHumanStream,
-    appendReportStream,
     appendSubAgentThinking,
     flushSubAgentThinking,
     addSubAgentEvent,
     setSubAgentStatus,
     updatePhase,
     setAskHumanQuestion,
-    setKbConfirmData,
-    setKbConfirmResolved,
+    setResolutionConfirmRequired,
+    setResolutionConfirmResolved,
     setApprovalDecided,
     setConnected,
     reset,
@@ -212,14 +211,10 @@ export function useIncidentStream(
               );
             } else if (event.event_type === "thinking_done" || event.event_type === "answer_done" || event.event_type === "ask_human_done") {
               // DB boundary marker, skip
-            } else if (event.event_type === "kb_confirm_required") {
-              // Replay: restore kb confirm state, mark as resolved (agent already continued)
-              setKbConfirmData({
-                type: event.data.type as string,
-                summary: event.data.summary as string,
-                message: event.data.message as string,
-              });
-              setKbConfirmResolved(true);
+            } else if (event.event_type === "confirm_resolution_required") {
+              // Replay: restore resolution confirm state, mark as resolved (already past)
+              setResolutionConfirmRequired(true);
+              setResolutionConfirmResolved(true);
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
                 setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
@@ -268,15 +263,15 @@ export function useIncidentStream(
               event.data.approval_id as string,
               event.data.decision as string,
             );
-          } else if (phase === "summarize" && event.event_type === "thinking") {
-            updatePhase("summarize");
-            appendReportStream(event.data.content as string);
           } else if (event.event_type === "summary") {
-            addEvent(event);
+            // Summary generated silently in backend; just invalidate queries + close SSE
             updatePhase("summary_complete");
+            setResolutionConfirmResolved(true);
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
+          } else if (event.event_type === "confirm_resolution_required") {
+            setResolutionConfirmRequired(true);
           } else if (event.event_type === "incident_stopped") {
             addEvent(event);
             // Close SSE and invalidate queries to refresh status
@@ -287,13 +282,6 @@ export function useIncidentStream(
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
-          } else if (event.event_type === "kb_confirm_required") {
-            updatePhase("gather_context");
-            setKbConfirmData({
-              type: event.data.type as string,
-              summary: event.data.summary as string,
-              message: event.data.message as string,
-            });
           } else if (event.event_type === "ask_human") {
             updatePhase("main");
             // Flush residual thinking

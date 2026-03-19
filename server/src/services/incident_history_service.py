@@ -10,6 +10,7 @@ from src.db.models import Incident, IncidentHistory
 from src.lib.embedder import Embedder
 from src.lib.logger import logger
 from src.lib.reranker import Reranker
+from src.services.version_service import VersionService
 
 
 async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
@@ -207,9 +208,16 @@ class IncidentHistoryService:
                 logger.info(f"[history_service] Decision: MERGE (distance={distance:.4f}, 0.08~0.15)")
                 merged = await _merge_summaries(best.summary_md, summary_md)
                 if merged:
+                    # Update first, then save new content as version
                     best.summary_md = merged
                     best.embedding = await self.embedder.embed_text(merged)
                     _rewrite_md_file(best.id, merged)
+
+                    vs = VersionService(self.session)
+                    await vs.save_version(
+                        entity_type="incident_history", entity_id=str(best.id),
+                        content=merged, change_source="auto",
+                    )
                     logger.info(f"[history_service] Merge result: content updated")
                 else:
                     logger.info(f"[history_service] Merge result: NO_CHANGE")
@@ -230,6 +238,13 @@ class IncidentHistoryService:
         )
         self.session.add(record)
         incident.saved_to_memory = True
+        await self.session.flush()
+        # Save initial version
+        vs = VersionService(self.session)
+        await vs.save_version(
+            entity_type="incident_history", entity_id=str(record.id),
+            content=summary_md, change_source="init",
+        )
         await self.session.commit()
         await self.session.refresh(record)
         try:

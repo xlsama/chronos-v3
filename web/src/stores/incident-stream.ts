@@ -6,7 +6,6 @@ export type PhaseStatus = "pending" | "active" | "completed";
 export interface PhaseState {
   contextGathering: PhaseStatus;
   investigation: PhaseStatus;
-  report: PhaseStatus;
 }
 
 interface SubAgentState {
@@ -24,10 +23,9 @@ interface IncidentStreamState {
   thinkingContent: string;
   answerContent: string;
   askHumanStreamContent: string;
-  reportStreamContent: string;
   askHumanQuestion: string | null;
-  kbConfirmData: { type: string; summary: string; message: string } | null;
-  kbConfirmResolved: boolean;
+  resolutionConfirmRequired: boolean;
+  resolutionConfirmResolved: boolean;
   decidedApprovals: Record<string, string>;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
@@ -36,16 +34,14 @@ interface IncidentStreamState {
   clearAnswer: () => void;
   appendAskHuman: (content: string) => void;
   clearAskHumanStream: () => void;
-  appendReportStream: (content: string) => void;
-  clearReportStream: () => void;
   appendSubAgentThinking: (agent: string, content: string) => void;
   flushSubAgentThinking: (agent: string, timestamp: string) => void;
   addSubAgentEvent: (agent: string, event: SSEEvent) => void;
   setSubAgentStatus: (agent: string, status: "idle" | "started" | "completed" | "failed") => void;
   updatePhase: (phase: string) => void;
   setAskHumanQuestion: (question: string | null) => void;
-  setKbConfirmData: (data: { type: string; summary: string; message: string } | null) => void;
-  setKbConfirmResolved: (resolved: boolean) => void;
+  setResolutionConfirmRequired: (required: boolean) => void;
+  setResolutionConfirmResolved: (resolved: boolean) => void;
   setApprovalDecided: (approvalId: string, decision: string) => void;
   setConnected: (connected: boolean) => void;
   loadHistory: (events: SSEEvent[]) => void;
@@ -61,7 +57,6 @@ const emptySubAgent = (): SubAgentState => ({
 const initialPhaseState = (): PhaseState => ({
   contextGathering: "pending",
   investigation: "pending",
-  report: "pending",
 });
 
 export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
@@ -73,10 +68,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   thinkingContent: "",
   answerContent: "",
   askHumanStreamContent: "",
-  reportStreamContent: "",
   askHumanQuestion: null,
-  kbConfirmData: null,
-  kbConfirmResolved: false,
+  resolutionConfirmRequired: false,
+  resolutionConfirmResolved: false,
   decidedApprovals: {},
 
   addEvent: (event) => {
@@ -97,13 +91,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     set((state) => ({ askHumanStreamContent: state.askHumanStreamContent + content })),
 
   clearAskHumanStream: () => set({ askHumanStreamContent: "" }),
-
-  appendReportStream: (content) =>
-    set((state) => ({
-      reportStreamContent: state.reportStreamContent + content,
-    })),
-
-  clearReportStream: () => set({ reportStreamContent: "" }),
 
   appendSubAgentThinking: (agent, content) =>
     set((state) => {
@@ -170,23 +157,18 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       } else if (phase === "main") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
         if (ps.investigation === "pending") ps.investigation = "active";
-      } else if (phase === "summarize") {
-        if (ps.contextGathering === "active") ps.contextGathering = "completed";
-        if (ps.investigation === "active") ps.investigation = "completed";
-        if (ps.report === "pending") ps.report = "active";
       } else if (phase === "summary_complete") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
         if (ps.investigation === "active") ps.investigation = "completed";
-        ps.report = "completed";
       }
       return { phaseState: ps };
     }),
 
   setAskHumanQuestion: (question) => set({ askHumanQuestion: question }),
 
-  setKbConfirmData: (data) => set({ kbConfirmData: data }),
+  setResolutionConfirmRequired: (required) => set({ resolutionConfirmRequired: required }),
 
-  setKbConfirmResolved: (resolved) => set({ kbConfirmResolved: resolved }),
+  setResolutionConfirmResolved: (resolved) => set({ resolutionConfirmResolved: resolved }),
 
   setApprovalDecided: (approvalId, decision) =>
     set((state) => ({
@@ -205,9 +187,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     let hasUserMessageAfterAsk = false;
     let historyStatus: "idle" | "started" | "completed" | "failed" = "idle";
     let kbStatus: "idle" | "started" | "completed" | "failed" = "idle";
-    let kbConfirm: { type: string; summary: string; message: string } | null = null;
-    let kbConfirmIsResolved = false;
-    let lastKbConfirmIndex = -1;
+    let resolutionRequired = false;
+    let resolutionResolved = false;
+    let lastResolutionConfirmIndex = -1;
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -233,21 +215,17 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // kb_confirm_required → extract data, check if followed by user_message
-      if (event.event_type === "kb_confirm_required") {
-        kbConfirm = {
-          type: event.data.type as string,
-          summary: event.data.summary as string,
-          message: event.data.message as string,
-        };
-        lastKbConfirmIndex = i;
-        kbConfirmIsResolved = false;
+      // confirm_resolution_required → track state
+      if (event.event_type === "confirm_resolution_required") {
+        resolutionRequired = true;
+        resolutionResolved = false;
+        lastResolutionConfirmIndex = i;
         continue;
       }
 
-      if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_used") {
+      if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_read") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
-        if (lastKbConfirmIndex >= 0 && event.event_type === "user_message") kbConfirmIsResolved = true;
+        if (lastResolutionConfirmIndex >= 0 && event.event_type === "user_message") resolutionResolved = true;
         mainEvents.push(event);
         continue;
       }
@@ -281,15 +259,17 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       askQuestion = (askEvent.data.question as string) || null;
     }
 
+    // Also mark resolution as resolved if summary event exists (backend completed)
+    const hasSummary = mainEvents.some((e) => e.event_type === "summary");
+    if (hasSummary && resolutionRequired) resolutionResolved = true;
+
     // Derive phase state from loaded events
     const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
     const hasMain = mainEvents.some((e) => e.event_type !== "summary" && e.event_type !== "ask_human" && e.event_type !== "answer");
-    const hasSummary = mainEvents.some((e) => e.event_type === "summary");
 
     const derivedPhase: PhaseState = {
       contextGathering: hasContext ? (hasMain || hasSummary ? "completed" : "active") : "pending",
       investigation: hasMain ? (hasSummary ? "completed" : "active") : "pending",
-      report: hasSummary ? "completed" : "pending",
     };
 
     set({
@@ -299,8 +279,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       phaseState: derivedPhase,
       decidedApprovals: decided,
       askHumanQuestion: askQuestion,
-      kbConfirmData: kbConfirm,
-      kbConfirmResolved: kbConfirmIsResolved,
+      resolutionConfirmRequired: resolutionRequired,
+      resolutionConfirmResolved: resolutionResolved,
     });
   },
 
@@ -314,10 +294,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       thinkingContent: "",
       answerContent: "",
       askHumanStreamContent: "",
-      reportStreamContent: "",
       askHumanQuestion: null,
-      kbConfirmData: null,
-      kbConfirmResolved: false,
+      resolutionConfirmRequired: false,
+      resolutionConfirmResolved: false,
       decidedApprovals: {},
     }),
 }));

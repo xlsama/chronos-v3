@@ -176,10 +176,7 @@ function IncidentDetailPage() {
         className="relative flex-1 overflow-auto"
         onScroll={checkIsAtBottom}
       >
-        <EventTimeline
-          incidentId={incidentId}
-          summaryMarkdown={incident.summary_md}
-        />
+        <EventTimeline incidentId={incidentId} />
         <div ref={bottomRef} />
 
         {!isAtBottom && (

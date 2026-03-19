@@ -61,7 +61,6 @@ class AgentRunner:
         initial_state = {
             "messages": [HumanMessage(content=f"事件描述: {description}")],
             "incident_id": incident_id,
-            "project_id": "",
             "description": description,
             "severity": severity,
             "is_complete": False,
@@ -72,7 +71,6 @@ class AgentRunner:
             "ask_human_count": 0,
             "incident_history_summary": None,
             "kb_summary": None,
-            "kb_context_confirmed": False,
         }
 
         logger.info(f"\n[{sid}] [main] ===== Agent lifecycle started =====")
@@ -108,10 +106,10 @@ class AgentRunner:
 
         sid = incident_id[:8]
 
-        # Resume from ask_human or confirm_context interrupt
+        # Resume from ask_human or confirm_resolution interrupt
         state = await self.graph.aget_state(config)
         next_nodes = state.next or ()
-        if "ask_human" not in next_nodes and "confirm_context" not in next_nodes:
+        if "ask_human" not in next_nodes and "confirm_resolution" not in next_nodes:
             return
 
         from langgraph.types import Command
@@ -179,18 +177,6 @@ class AgentRunner:
 
         logger.info(f"[{sid}] [post_run] Post-run: next_nodes={state.next}, is_complete={vals.get('is_complete')}")
 
-        # Interrupted before confirm_context → publish kb_confirm_required event
-        if "confirm_context" in (state.next or ()):
-            kb_summary = vals.get("kb_summary", "")
-            is_incomplete = not kb_summary or "[需要补充]" in kb_summary
-            clean_summary = kb_summary.replace("\n\n[需要补充]", "") if kb_summary else ""
-            logger.info(f"[{sid}] [post_run] confirm_context interrupt: incomplete={is_incomplete}")
-            await self.publisher.publish(channel, "kb_confirm_required", {
-                "type": "kb_context_incomplete" if is_incomplete else "kb_context_confirm",
-                "summary": clean_summary,
-                "message": "知识库检索信息不足，请补充相关上下文" if is_incomplete else "请确认以下知识库检索结果是否正确",
-            })
-
         # Interrupted before human_approval → create approval record + SSE
         if "human_approval" in (state.next or ()):
             pending = self._extract_pending_tool_call(vals)
@@ -220,7 +206,6 @@ class AgentRunner:
                     "need_approval", incident_id,
                     vals.get("description", "")[:80],
                     severity=vals.get("severity", ""),
-                    project_id=vals.get("project_id", ""),
                     command=command,
                     risk_level=risk_level,
                     explanation=args.get("explanation", ""),
@@ -241,15 +226,35 @@ class AgentRunner:
                     "ask_human", incident_id,
                     vals.get("description", "")[:80],
                     severity=vals.get("severity", ""),
-                    project_id=vals.get("project_id", ""),
                     question=question,
                 )
 
-        # Graph complete → update Incident status + publish summary (only if still investigating)
-        if vals.get("is_complete"):
-            summary_md = vals.get("summary_md", "")
+        # Interrupted before confirm_resolution → publish confirm event
+        if "confirm_resolution" in (state.next or ()):
+            logger.info(f"[{sid}] [post_run] confirm_resolution interrupt")
+            await self.publisher.publish(channel, "confirm_resolution_required", {})
 
-            # Step 1: Write summary_md + status=resolved to DB immediately
+        # Graph complete → silently generate summary, update DB, publish summary SSE
+        if vals.get("is_complete"):
+            # Step 1: Silently run summarize agent (no SSE events published)
+            summary_md = ""
+            try:
+                from src.ops_agent.sub_agents.summarize_agent import run_summarize_agent
+
+                async def noop_callback(event_type: str, data: dict) -> None:
+                    pass
+
+                summary_md = await run_summarize_agent(
+                    messages=vals.get("messages", []),
+                    description=vals.get("description", ""),
+                    severity=vals.get("severity", ""),
+                    event_callback=noop_callback,
+                )
+            except Exception as e:
+                logger.error(f"[{sid}] [post_run] Silent summarize failed: {e}", exc_info=True)
+                summary_md = f"报告生成失败: {e}"
+
+            # Step 2: Write summary_md + status=resolved to DB
             async with get_session_factory()() as session:
                 incident = await session.get(Incident, uuid.UUID(incident_id))
                 if incident and incident.status == "investigating":
@@ -258,12 +263,12 @@ class AgentRunner:
                     await session.commit()
                     logger.info(f"[{sid}] [post_run] status -> resolved")
 
-            # Step 2: Send SSE event immediately so frontend switches to completed state
+            # Step 3: Send summary SSE to trigger frontend invalidate + close SSE
             await self.publisher.publish(channel, "summary", {
                 "summary_md": summary_md,
             })
 
-            # Step 3: Generate title + severity (LLM call, may take tens of seconds)
+            # Step 4: Generate title + severity (LLM call, may take tens of seconds)
             summary_title = None
             severity = None
             if summary_md:
@@ -273,7 +278,7 @@ class AgentRunner:
                 except Exception as e:
                     logger.warning(f"Summary title/severity generation failed for {incident_id}: {e}")
 
-            # Step 4: Update DB with title + severity
+            # Step 5: Update DB with title + severity
             if summary_title or severity:
                 async with get_session_factory()() as session:
                     incident = await session.get(Incident, uuid.UUID(incident_id))
@@ -288,7 +293,6 @@ class AgentRunner:
             notify_fire_and_forget(
                 "resolved", incident_id, summary_title or vals.get("description", "")[:80],
                 severity=vals.get("severity", ""),
-                project_id=vals.get("project_id", ""),
             )
             try:
                 await run_post_incident_tasks(
@@ -296,7 +300,6 @@ class AgentRunner:
                     summary_md=summary_md,
                     messages=vals.get("messages", []),
                     description=vals.get("description", ""),
-                    project_id=vals.get("project_id", ""),
                 )
             except Exception as e:
                 logger.error(f"[{sid}] [post_run] Post-incident tasks failed: {e}")
@@ -376,8 +379,6 @@ class AgentRunner:
         node = metadata.get("langgraph_node", "")
         if node == "gather_context":
             return "gather_context", "history"
-        if node == "summarize":
-            return "summarize", ""
         return "main", ""
 
     async def _process_event(self, channel: str, event: dict) -> None:
@@ -390,8 +391,7 @@ class AgentRunner:
         sid = channel.split(":")[-1][:8] if ":" in channel else ""
 
         # 子 agent 通过自己的 callback 发布事件，跳过避免重复
-        # confirm_context uses interrupt, no streaming events to process
-        if node in ("gather_context", "summarize", "confirm_context"):
+        if node in ("gather_context", "confirm_resolution"):
             return
 
         phase, agent = self._get_phase_agent(event)
@@ -490,8 +490,8 @@ class AgentRunner:
 
         elif kind == "on_tool_start":
             name = event.get("name", "")
-            if name == "use_skill":
-                return  # Don't emit tool_call; wait for tool_end to emit skill_used
+            if name == "read_skill":
+                return  # Don't emit tool_call; wait for tool_end to emit skill_read
             logger.info(f"\n[{sid}] [main] Tool start: {name}")
             logger.debug(f"[{sid}] [main] Tool input: {event['data'].get('input', {})}")
             await self.publisher.publish(channel, "tool_call", {
@@ -503,16 +503,17 @@ class AgentRunner:
 
         elif kind == "on_tool_end":
             name = event.get("name", "")
-            if name == "use_skill":
+            if name == "read_skill":
                 args = event["data"].get("input", {})
                 output = str(event["data"].get("output", ""))
                 success = not output.startswith("未找到")
-                skill_slug = args.get("skill_slug", "")
-                skill_name = skill_slug
-                if success and output.startswith("## 技能: "):
-                    first_line = output.split("\n", 1)[0]
-                    skill_name = first_line.removeprefix("## 技能: ")
-                await self.publisher.publish(channel, "skill_used", {
+                path = args.get("path", "")
+                # Extract slug and determine display name
+                parts = path.split("/", 1)
+                skill_slug = parts[0]
+                file_path = parts[1] if len(parts) > 1 else None
+                skill_name = file_path or skill_slug
+                await self.publisher.publish(channel, "skill_read", {
                     "skill_slug": skill_slug,
                     "skill_name": skill_name,
                     "content": output,

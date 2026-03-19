@@ -1,6 +1,7 @@
 from src.lib.logger import logger
 from src.services.post_incident.agents_md_task import auto_update_agents_md
 from src.services.post_incident.history_task import auto_save_history
+from src.services.post_incident.skill_evolution_task import auto_evolve_skills
 
 
 async def run_post_incident_tasks(
@@ -8,7 +9,6 @@ async def run_post_incident_tasks(
     summary_md: str,
     messages: list,
     description: str,
-    project_id: str,
 ) -> None:
     """顺序执行所有事件后任务。从 AgentRunner._post_run() 调用。"""
     sid = incident_id[:8]
@@ -30,3 +30,15 @@ async def run_post_incident_tasks(
         logger.info(f"[{sid}] [post_incident] AGENTS.md update result: {result}")
     except Exception as e:
         logger.error(f"[{sid}] [post_incident] AGENTS.md update failed: {e}")
+
+    # Task 3: Auto-evolve skills
+    try:
+        result = await auto_evolve_skills(
+            incident_id=incident_id,
+            summary_md=summary_md,
+            messages=messages,
+            description=description,
+        )
+        logger.info(f"[{sid}] [post_incident] Skill evolution result: {result}")
+    except Exception as e:
+        logger.error(f"[{sid}] [post_incident] Skill evolution failed: {e}")

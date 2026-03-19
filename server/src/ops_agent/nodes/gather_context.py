@@ -6,7 +6,7 @@ from src.db.connection import get_session_factory
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.state import OpsState
 from src.ops_agent.sub_agents.history_agent import run_history_agent
-from src.ops_agent.sub_agents.kb_agent import run_kb_agent
+from src.ops_agent.sub_agents.kb_agent import KBAgentOutput, run_kb_agent
 from src.lib.logger import logger
 from src.lib.redis import get_redis
 
@@ -47,8 +47,6 @@ async def gather_context_node(state: OpsState) -> dict:
     sid = state["incident_id"][:8]
     channel = EventPublisher.channel_for_incident(state["incident_id"])
     description = state["description"]
-    project_id = state.get("project_id", "")
-    incident_id = state["incident_id"]
 
     logger.info(f"\n[{sid}] [gather_context] ===== Gathering context started =====")
 
@@ -59,11 +57,11 @@ async def gather_context_node(state: OpsState) -> dict:
     await history_cb("agent_status", {"status": "started"})
     await kb_cb("agent_status", {"status": "started"})
 
-    # Always run both sub-agents in parallel
+    # Run both sub-agents in parallel
     logger.info(f"[{sid}] [gather_context] Starting parallel sub-agents: history + kb")
     history_result, kb_result = await asyncio.gather(
         _safe_run(run_history_agent, description, history_cb),
-        _safe_run(run_kb_agent, description, project_id, kb_cb),
+        _safe_run(run_kb_agent, description, kb_cb),
     )
 
     # Flush sub-agent thinking buffers so all thinking events are persisted
@@ -80,24 +78,30 @@ async def gather_context_node(state: OpsState) -> dict:
 
     logger.info(f"[{sid}] [gather_context] Sub-agents completed: history={'FAILED' if history_failed else 'OK'}, kb={'FAILED' if kb_failed else 'OK'}")
 
-    # Extract project_id from KB agent result
+    # Extract KB result
     kb_summary = None
-    discovered_project_id = ""
-    if isinstance(kb_result, dict):
-        kb_summary = kb_result.get("summary")
-        discovered_project_id = kb_result.get("project_id", "")
-        # Mark if KB info is incomplete
-        if kb_result.get("needs_human_input") or kb_result.get("agents_md_empty"):
-            kb_summary = (kb_summary or "") + "\n\n[需要补充]"
+    if isinstance(kb_result, KBAgentOutput):
+        parts = []
+        if kb_result.project_name:
+            parts.append(f"匹配项目: {kb_result.project_name} (ID: {kb_result.project_id})")
+        if kb_result.agents_md_content:
+            parts.append(f"### AGENTS.md\n{kb_result.agents_md_content}")
+        elif kb_result.agents_md_empty:
+            parts.append("### AGENTS.md\n[空 - 未配置服务信息]")
+        if kb_result.business_context:
+            parts.append(f"### 业务背景\n{kb_result.business_context}")
+        if kb_result.no_match:
+            parts.append("未匹配到任何项目。")
+        if kb_result.agents_md_empty:
+            kb_summary = "\n\n".join(parts) + "\n\n[需要补充]"
+        else:
+            kb_summary = "\n\n".join(parts) if parts else None
     elif isinstance(kb_result, str):
-        kb_summary = kb_result
-
-    final_project_id = project_id or discovered_project_id
+        kb_summary = kb_result  # Error case
 
     logger.info(f"\n[{sid}] [gather_context] ===== Gathering context completed =====")
 
     return {
         "incident_history_summary": history_result if isinstance(history_result, str) else None,
         "kb_summary": kb_summary,
-        "project_id": final_project_id or project_id,
     }

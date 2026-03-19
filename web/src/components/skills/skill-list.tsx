@@ -6,6 +6,7 @@ import { EllipsisVertical, Sparkles, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { deleteSkill, getSkills } from "@/api/skills";
 import type { Skill } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -59,7 +60,10 @@ function SkillItem({ skill, onSelect }: SkillItemProps) {
         >
           <Sparkles className="h-5 w-5 shrink-0 text-indigo-500" />
           <div className="flex-1 min-w-0">
-            <p className="font-medium">{skill.name}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-medium">{skill.name}</p>
+              {skill.draft && <Badge variant="secondary">草稿</Badge>}
+            </div>
             <p className="text-sm text-muted-foreground truncate">
               {skill.description}
             </p>

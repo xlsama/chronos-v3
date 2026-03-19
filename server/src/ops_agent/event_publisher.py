@@ -15,7 +15,7 @@ _EVENT_ROLE = {
     "answer_done": "assistant",
     "tool_call": "assistant",
     "tool_result": "assistant",
-    "skill_used": "assistant",
+    "skill_read": "assistant",
     "ask_human": "assistant",
     "ask_human_done": "assistant",
     "summary": "assistant",
@@ -24,7 +24,7 @@ _EVENT_ROLE = {
     "approval_decided": "system",
     "error": "system",
     "incident_stopped": "system",
-    "kb_confirm_required": "system",
+    "confirm_resolution_required": "system",
 }
 
 
@@ -169,7 +169,7 @@ class EventPublisher:
             return data.get("name", "")
         if event_type == "tool_result":
             return data.get("output", "")
-        if event_type == "skill_used":
+        if event_type == "skill_read":
             return data.get("skill_slug", "")
         if event_type == "ask_human":
             return data.get("question", "")
@@ -181,8 +181,8 @@ class EventPublisher:
             return data.get("message", "")
         if event_type == "incident_stopped":
             return data.get("reason", "")
-        if event_type == "kb_confirm_required":
-            return data.get("message", "")
+        if event_type == "confirm_resolution_required":
+            return ""
         return ""
 
     @staticmethod
@@ -228,7 +228,7 @@ class EventPublisher:
             if data.get("sources"):
                 meta["sources"] = data["sources"]
             return meta
-        if event_type == "skill_used":
+        if event_type == "skill_read":
             return {
                 "skill_slug": data.get("skill_slug", ""),
                 "skill_name": data.get("skill_name", ""),
@@ -247,12 +247,8 @@ class EventPublisher:
                 "decision": data.get("decision", ""),
                 "decided_by": data.get("decided_by", ""),
             }
-        if event_type == "kb_confirm_required":
-            return {
-                "type": data.get("type", ""),
-                "summary": data.get("summary", ""),
-                "message": data.get("message", ""),
-            }
+        if event_type == "confirm_resolution_required":
+            return None
         return None
 
     @staticmethod

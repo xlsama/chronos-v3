@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Eye, Save, Loader2 } from "lucide-react";
+import { History, Pencil, Eye, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   getDocument,
@@ -135,6 +136,14 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
             {doc?.filename ?? "文档预览"}
           </DialogTitle>
           <div className="mr-6 flex items-center gap-2">
+            {doc?.doc_type === "agents_config" && (
+              <Link to="/projects/$projectId/documents/$documentId/history" params={{ projectId: doc.project_id, documentId: doc.id }} onClick={onClose}>
+                <Button variant="outline" size="sm">
+                  <History className="mr-1.5 h-3.5 w-3.5" />
+                  更新历史
+                </Button>
+              </Link>
+            )}
             {isEditable && !editing && !readOnly && (
               <Button variant="outline" size="sm" onClick={startEditing}>
                 <Pencil className="mr-1.5 h-3.5 w-3.5" />

@@ -214,6 +214,21 @@ class NotificationSetting(Base):
 
 
 
+class ContentVersion(Base):
+    __tablename__ = "content_versions"
+    __table_args__ = (
+        Index("ix_content_versions_entity", "entity_type", "entity_id", "version_number"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    entity_type: Mapped[str] = mapped_column(String(50))
+    entity_id: Mapped[str] = mapped_column(String(255))
+    content: Mapped[str] = mapped_column(Text)
+    version_number: Mapped[int] = mapped_column(Integer)
+    change_source: Mapped[str] = mapped_column(String(50), default="manual")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class IncidentHistory(Base):
     __tablename__ = "incident_history"
 

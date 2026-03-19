@@ -3,7 +3,6 @@ from langgraph.graph import MessagesState
 
 class OpsState(MessagesState):
     incident_id: str
-    project_id: str
     description: str
     severity: str
     is_complete: bool
@@ -14,4 +13,3 @@ class OpsState(MessagesState):
     incident_history_summary: str | None
     kb_summary: str | None
     ask_human_count: int
-    kb_context_confirmed: bool

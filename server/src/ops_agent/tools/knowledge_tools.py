@@ -1,6 +1,7 @@
 import uuid
 from contextlib import asynccontextmanager
 
+import orjson
 from sqlalchemy import select
 
 from src.db.connection import get_session_factory
@@ -50,23 +51,17 @@ def _format_source(filename: str, metadata: dict) -> str:
 
 
 async def list_projects_for_matching() -> str:
-    """List all projects with their descriptions and AGENTS.md summary for matching."""
+    """List all projects as JSON with descriptions and AGENTS.md preview for matching."""
     async with get_session_ctx() as session:
         result = await session.execute(
             select(Project).order_by(Project.created_at.desc())
         )
         projects = list(result.scalars().all())
-
         if not projects:
-            return "当前没有任何项目。"
+            return "[]"
 
-        sections = []
+        items = []
         for project in projects:
-            lines = [f"## 项目: {project.name} (ID: {project.id})"]
-            if project.description:
-                lines.append(f"描述: {project.description}")
-
-            # Get AGENTS.md summary
             agents_result = await session.execute(
                 select(ProjectDocument).where(
                     ProjectDocument.project_id == project.id,
@@ -74,14 +69,16 @@ async def list_projects_for_matching() -> str:
                 ).limit(1)
             )
             agents_doc = agents_result.scalar_one_or_none()
-            if agents_doc and agents_doc.content.strip():
-                lines.append(f"Agents配置: {agents_doc.content[:200]}...")
-            else:
-                lines.append("Agents配置: [未配置]")
+            has_agents_md = bool(agents_doc and agents_doc.content.strip())
 
-            sections.append("\n".join(lines))
-
-        return "\n---\n".join(sections)
+            items.append({
+                "project_id": str(project.id),
+                "project_name": project.name,
+                "description": project.description or "",
+                "has_agents_md": has_agents_md,
+                "agents_md_preview": (agents_doc.content[:300] + "...") if has_agents_md else "",
+            })
+        return orjson.dumps(items).decode()
 
 
 async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[dict]]:

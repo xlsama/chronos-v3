@@ -118,12 +118,19 @@ export interface Skill {
   slug: string;
   name: string;
   description: string;
+  has_scripts: boolean;
+  has_references: boolean;
+  has_assets: boolean;
+  draft: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface SkillDetail extends Skill {
   content: string;
+  script_files: string[];
+  reference_files: string[];
+  asset_files: string[];
 }
 
 export interface PaginatedResponse<T> {
@@ -131,6 +138,19 @@ export interface PaginatedResponse<T> {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface ContentVersion {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  version_number: number;
+  change_source: string;
+  created_at: string;
+}
+
+export interface ContentVersionDetail extends ContentVersion {
+  content: string;
 }
 
 export type SeverityLevel = "P0" | "P1" | "P2" | "P3";

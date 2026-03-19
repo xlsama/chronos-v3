@@ -1,5 +1,6 @@
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
+import { mermaid } from "@streamdown/mermaid";
 import { cn } from "@/lib/utils";
 
 interface MarkdownProps {
@@ -19,7 +20,7 @@ export function Markdown({
     <Streamdown
       className={cn(variant === "compact" ? "prose-compact" : "prose-default", className)}
       mode={streaming ? "streaming" : "static"}
-      plugins={{ code }}
+      plugins={{ code, mermaid }}
       shikiTheme={["github-light", "github-dark"]}
       controls={{ code: { copy: true, download: false } }}
     >

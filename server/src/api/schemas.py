@@ -290,6 +290,21 @@ class WebhookTestResponse(BaseModel):
     message: str
 
 
+class ContentVersionResponse(BaseModel):
+    id: uuid.UUID
+    entity_type: str
+    entity_id: str
+    version_number: int
+    change_source: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ContentVersionDetailResponse(ContentVersionResponse):
+    content: str
+
+
 class SkillCreate(BaseModel):
     slug: str
 
@@ -298,13 +313,24 @@ class SkillUpdate(BaseModel):
     content: str
 
 
+class SkillFileUpdate(BaseModel):
+    content: str
+
+
 class SkillResponse(BaseModel):
     slug: str
     name: str = ""
     description: str = ""
+    has_scripts: bool = False
+    has_references: bool = False
+    has_assets: bool = False
+    draft: bool = False
     created_at: str
     updated_at: str
 
 
 class SkillDetailResponse(SkillResponse):
     content: str
+    script_files: list[str] = Field(default_factory=list)
+    reference_files: list[str] = Field(default_factory=list)
+    asset_files: list[str] = Field(default_factory=list)

@@ -186,7 +186,7 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
     ...baseSSEFields,
   }),
   z.object({
-    event_type: z.literal("skill_used"),
+    event_type: z.literal("skill_read"),
     data: z
       .object({
         skill_name: z.string(),
@@ -220,17 +220,6 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
   z.object({
     event_type: z.literal("ask_human_done"),
     data: z.object({}).passthrough(),
-    ...baseSSEFields,
-  }),
-  z.object({
-    event_type: z.literal("kb_confirm_required"),
-    data: z
-      .object({
-        type: z.string(),
-        summary: z.string(),
-        message: z.string(),
-      })
-      .passthrough(),
     ...baseSSEFields,
   }),
 ]);

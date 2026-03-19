@@ -42,21 +42,145 @@ def build_tools():
         return question
 
     @tool
-    async def use_skill(skill_slug: str) -> str:
-        """调用预设技能获取详细排查步骤。传入技能 slug 标识符，返回完整排查指南。"""
+    def read_skill(path: str) -> str:
+        """读取技能文件。查看 <available_skills> 后，用此工具读取匹配技能。
+        - "?" → 列出所有可用技能
+        - "mysql-oom" → SKILL.md 内容 + 文件目录
+        - "mysql-oom/scripts/check.sh" → 脚本内容
+        """
         service = SkillService()
+        if path.strip() == "?":
+            available = service.get_available_skills()
+            if not available:
+                return "当前没有可用技能。"
+            lines = ["所有可用技能:"]
+            for s in available:
+                lines.append(f"- {s['slug']}: {s['description']}")
+            return "\n".join(lines)
+        parts = path.split("/", 1)
+        slug = parts[0]
+        rel_path = parts[1] if len(parts) > 1 else None
         try:
-            meta, content = service.get_skill(skill_slug)
-            return f"## 技能: {meta.name}\n\n{content}"
+            return service.read_file(slug, rel_path)
         except FileNotFoundError:
-            return f"未找到名为 '{skill_slug}' 的技能"
+            return f"未找到: {path}"
 
     @tool
     def complete(answer_md: str) -> str:
         """排查完成后调用。answer_md 是给用户看的正式回答，要直面问题、给出结论和建议。"""
         return answer_md
 
-    return [bash, list_servers, use_skill, ask_human, complete]
+    return [bash, list_servers, read_skill, ask_human, complete]
+
+
+_COMPACT_THRESHOLD = 10   # >10 个 skill 使用 compact 格式
+_TRUNCATE_THRESHOLD = 30  # >30 个 skill 进行截断
+
+
+def _build_skills_context(
+    skill_service: SkillService,
+    kb_summary: str | None = None,
+    history_summary: str | None = None,
+) -> str:
+    """构建 skills 上下文，包含推荐和 XML 目录。
+
+    三层截断策略:
+    - Full format (≤10): <skill><name>...</name><description>...</description></skill>
+    - Compact format (10-30): <skill name="slug">description</skill> 单行
+    - Truncate (>30): 只注入推荐的 + 最近使用的，其余折叠
+    """
+    available = skill_service.get_available_skills()
+
+    lines: list[str] = []
+
+    # Skill 推荐
+    recommended = _recommend_skills(available, kb_summary, history_summary)
+    recommended_slugs = {s["slug"] for s in recommended}
+    if recommended:
+        lines.append("\n## 推荐技能")
+        lines.append("基于上下文匹配，建议优先用 read_skill 读取:")
+        for s in recommended:
+            lines.append(f"- {s['slug']}: {s['description']}")
+
+    # XML 目录
+    if available:
+        total = len(available)
+
+        if total > _TRUNCATE_THRESHOLD:
+            # 截断模式: 只显示推荐的，其余折叠
+            shown = [s for s in available if s["slug"] in recommended_slugs]
+            hidden_count = total - len(shown)
+            xml_lines = [
+                "\n<available_skills>",
+                "扫描技能描述。匹配则用 read_skill 读取，按指示操作。不匹配则跳过。",
+            ]
+            for s in shown:
+                xml_lines.append(
+                    f'  <skill name="{s["slug"]}">{s["description"]}</skill>'
+                )
+            if hidden_count > 0:
+                xml_lines.append(
+                    f'  <!-- 还有 {hidden_count} 个技能，用 read_skill("?") 查看完整列表 -->'
+                )
+            xml_lines.append("</available_skills>")
+            lines.extend(xml_lines)
+
+        elif total > _COMPACT_THRESHOLD:
+            # Compact 模式: 单行格式
+            xml_lines = [
+                "\n<available_skills>",
+                "扫描技能描述。匹配则用 read_skill 读取，按指示操作。不匹配则跳过。",
+            ]
+            for s in available:
+                xml_lines.append(
+                    f'  <skill name="{s["slug"]}">{s["description"]}</skill>'
+                )
+            xml_lines.append("</available_skills>")
+            lines.extend(xml_lines)
+
+        else:
+            # Full 模式
+            xml_lines = [
+                "\n<available_skills>",
+                "扫描技能描述。匹配则用 read_skill 读取，按指示操作。不匹配则跳过。",
+            ]
+            for s in available:
+                xml_lines.append(
+                    f'  <skill><name>{s["slug"]}</name>'
+                    f'<description>{s["description"]}</description></skill>'
+                )
+            xml_lines.append("</available_skills>")
+            lines.extend(xml_lines)
+
+    return "\n".join(lines)
+
+
+def _recommend_skills(
+    available: list[dict],
+    kb_summary: str | None,
+    history_summary: str | None,
+) -> list[dict]:
+    """基于 kb_summary + history_summary 关键词匹配推荐技能。"""
+    if not available:
+        return []
+
+    context = ""
+    if kb_summary:
+        context += kb_summary.lower()
+    if history_summary:
+        context += " " + history_summary.lower()
+
+    if not context.strip():
+        return []
+
+    recommended: list[dict] = []
+    for skill in available:
+        # 用 slug 中的关键词（按 - 分割）匹配上下文
+        keywords = skill["slug"].split("-")
+        if any(kw in context for kw in keywords if len(kw) > 2):
+            recommended.append(skill)
+
+    return recommended[:3]  # 最多推荐 3 个
 
 
 def get_llm():
@@ -95,36 +219,20 @@ async def main_agent_node(state: OpsState) -> dict:
 
     kb_summary = state.get("kb_summary")
     if kb_summary:
-        kb_context = f"## 项目知识库上下文\n{kb_summary}"
+        clean_summary = kb_summary.replace("\n\n[需要补充]", "").replace("[需要补充]", "")
+        kb_context = f"## 项目知识库上下文\n{clean_summary}"
+        if "[需要补充]" in kb_summary:
+            kb_context += "\n\n注意: 知识库信息不完整，排查时注意验证，必要时用 ask_human 获取具体信息"
     else:
         kb_context = ""
 
     # Build skills context
     skill_service = SkillService()
-    auto_load_skills = skill_service.get_auto_load_skills()
-    all_summaries = skill_service.get_all_summaries()
-    auto_load_slugs = {meta.slug for meta, _ in auto_load_skills}
-
-    lines = []
-    if auto_load_skills:
-        lines.append("## 预加载技能（直接使用，无需调用 use_skill）")
-        for meta, content in auto_load_skills:
-            lines.append(f"\n### {meta.name}\n")
-            lines.append(content)
-
-    other_summaries = [s for s in all_summaries if s["slug"] not in auto_load_slugs]
-    if other_summaries:
-        lines.append("\n## 其他可用技能")
-        lines.append("你可以通过 use_skill 工具调用以下预设技能：\n")
-        for s in other_summaries:
-            lines.append(f"- `{s['slug']}` ({s['name']}): {s['description']}")
-
-    skills_context = "\n".join(lines)
+    skills_context = _build_skills_context(skill_service, kb_summary, history_summary)
 
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         description=state["description"],
         severity=state["severity"],
-        project_id=state.get("project_id", ""),
         incident_history_context=history_context,
         kb_context=kb_context,
         skills_context=skills_context,

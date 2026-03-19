@@ -55,6 +55,17 @@ async def upload_document(
             content=body.content,
             segments=None,
         )
+
+    # Save init version for agents_config documents
+    if doc.doc_type == "agents_config" and not is_empty:
+        from src.services.version_service import VersionService
+        vs = VersionService(session)
+        await vs.save_version(
+            entity_type="agents_md", entity_id=str(doc.id),
+            content=body.content, change_source="init",
+        )
+        await session.commit()
+
     return doc
 
 
@@ -231,12 +242,22 @@ async def update_document(
     if not doc:
         raise NotFoundError("Document not found")
 
+    # Update first, then save new content as version
     service = DocumentService(session=session, embedder=None)
     updated = await service.update(
         document_id=document_id,
         content=body.content,
         project_slug=doc.project.slug,
     )
+
+    if doc.doc_type == "agents_config":
+        from src.services.version_service import VersionService
+        vs = VersionService(session)
+        await vs.save_version(
+            entity_type="agents_md", entity_id=str(doc.id),
+            content=body.content, change_source="manual",
+        )
+        await session.commit()
 
     # Trigger background indexing for non-agents_config documents
     if doc.doc_type != "agents_config":

@@ -1,12 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, Brain, FileText, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle, AlertCircle } from "lucide-react";
+import { Search, Brain, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle, ChevronRight } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { sendIncidentMessage } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
-import { formatRelativeTime, formatDuration } from "@/lib/utils";
+import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 import { PhaseSection } from "./phase-section";
@@ -17,15 +17,10 @@ import { ApprovalCard } from "./approval-card";
 import { SubAgentCard } from "./sub-agent-card";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 
 interface EventTimelineProps {
   incidentId: string;
-  summaryMarkdown?: string | null;
 }
 
 type TimelineItem =
@@ -36,7 +31,7 @@ type TimelineItem =
   | { type: "error"; event: SSEEvent }
   | { type: "user_message"; event: SSEEvent }
   | { type: "incident_stopped"; event: SSEEvent }
-  | { type: "skill_used"; event: SSEEvent }
+  | { type: "skill_read"; event: SSEEvent }
   | { type: "answer"; event: SSEEvent };
 
 const itemVariants = {
@@ -88,9 +83,9 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
       case "incident_stopped":
         items.push({ type: "incident_stopped", event });
         break;
-      case "skill_used":
+      case "skill_read":
         if (event.data.success !== false) {
-          items.push({ type: "skill_used", event });
+          items.push({ type: "skill_read", event });
         }
         break;
       case "answer":
@@ -104,6 +99,27 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
     }
   }
   return items;
+}
+
+function SkillReadCard({ skillName, skillContent }: { skillName: string; skillContent: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="flex items-center gap-2 text-sm text-indigo-700">
+        <Sparkles className="h-4 w-4" />
+        <span>读取技能：</span>
+        <CollapsibleTrigger className="inline-flex items-center gap-1 cursor-pointer underline decoration-dotted hover:text-indigo-900">
+          <ChevronRight className={cn("h-3 w-3 transition-transform", open && "rotate-90")} />
+          {skillName}
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent>
+        <div className="mt-2 ml-6 rounded-md border border-indigo-100 bg-indigo-50/30 p-3 max-h-80 overflow-y-auto">
+          <Markdown content={skillContent} variant="compact" className="card-markdown card-markdown--indigo" />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 function LiveThinkingSection() {
@@ -176,116 +192,52 @@ function LiveAnswerSection() {
   );
 }
 
-function KbConfirmSection({ incidentId }: { incidentId: string }) {
-  const kbConfirmData = useIncidentStreamStore((s) => s.kbConfirmData);
-  const kbConfirmResolved = useIncidentStreamStore((s) => s.kbConfirmResolved);
-  const setKbConfirmResolved = useIncidentStreamStore((s) => s.setKbConfirmResolved);
-  const setAskHumanQuestion = useIncidentStreamStore((s) => s.setAskHumanQuestion);
-  const addEvent = useIncidentStreamStore((s) => s.addEvent);
+function ResolutionConfirmCard({ incidentId }: { incidentId: string }) {
+  const resolutionConfirmRequired = useIncidentStreamStore((s) => s.resolutionConfirmRequired);
+  const resolutionConfirmResolved = useIncidentStreamStore((s) => s.resolutionConfirmResolved);
+  const setResolutionConfirmResolved = useIncidentStreamStore((s) => s.setResolutionConfirmResolved);
 
   const confirmMutation = useMutation({
-    mutationFn: () => sendIncidentMessage(incidentId, "确认"),
+    mutationFn: () => sendIncidentMessage(incidentId, "confirmed"),
     onMutate: () => {
-      addEvent({
-        event_id: `optimistic-${Date.now()}`,
-        event_type: "user_message",
-        data: { content: "确认" },
-        timestamp: new Date().toISOString(),
-      });
-      setKbConfirmResolved(true);
-      setAskHumanQuestion(null);
+      setResolutionConfirmResolved(true);
     },
   });
 
-  if (!kbConfirmData) return null;
+  if (!resolutionConfirmRequired) return null;
 
-  const isIncomplete = kbConfirmData.type === "kb_context_incomplete";
-
-  return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-2">
-      <div className="flex items-start gap-3">
-        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-amber-800">
-            {kbConfirmData.message}
-          </p>
-          {kbConfirmData.summary && (
-            <Markdown
-              content={kbConfirmData.summary}
-              variant="compact"
-              className="card-markdown card-markdown--amber"
-            />
-          )}
-          {kbConfirmResolved ? (
-            <span className="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
-              已确认
-            </span>
-          ) : (
-            <>
-              <p className="text-xs text-muted-foreground">
-                {isIncomplete
-                  ? "请在下方输入补充信息，或点击确认跳过"
-                  : "请点击确认继续，或在下方输入补充信息"}
-              </p>
-              <Button
-                size="sm"
-                onClick={() => confirmMutation.mutate()}
-                disabled={confirmMutation.isPending}
-              >
-                确认
-              </Button>
-            </>
-          )}
+  if (resolutionConfirmResolved) {
+    return (
+      <div className="rounded-lg border border-green-200 bg-green-50/30 p-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-green-800">
+          <CheckCircle className="h-5 w-5" />
+          已确认解决
         </div>
       </div>
-    </div>
-  );
-}
-
-function ReportSection({ fallbackMarkdown }: { fallbackMarkdown?: string }) {
-  const reportStreamContent = useIncidentStreamStore((s) => s.reportStreamContent);
-  const reportStatus = useIncidentStreamStore((s) => s.phaseState.report);
-  const content = reportStreamContent || fallbackMarkdown;
-  const isActive = reportStatus === "active";
-
-  if (!content && !isActive) return null;
+    );
+  }
 
   return (
-    <div
-      className={
-        isActive
-          ? "rounded-lg border-l-2 border-primary bg-muted p-4"
-          : "rounded-lg border border-green-200 bg-green-50/30 p-4"
-      }
-      data-testid="summary-section"
-    >
-      <div
-        className={
-          isActive
-            ? "flex items-center gap-2 text-sm text-muted-foreground"
-            : "flex items-center gap-2 text-sm font-semibold text-green-800"
-        }
-      >
-        {isActive ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            正在生成排查报告...
-          </>
-        ) : (
-          <>
-            <CheckCircle className="h-5 w-5" />
-            排查完成
-          </>
-        )}
+    <div className="rounded-lg border border-blue-200 bg-blue-50/30 p-4 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+        <CheckCircle className="h-5 w-5" />
+        问题是否已解决？
       </div>
-      {content && (
-        <Markdown content={content} streaming={isActive} variant="compact" className="mt-3" />
-      )}
+      <p className="text-xs text-muted-foreground">
+        如未解决，请在下方输入栏继续提问
+      </p>
+      <Button
+        size="sm"
+        onClick={() => confirmMutation.mutate()}
+        disabled={confirmMutation.isPending}
+      >
+        已解决
+      </Button>
     </div>
   );
 }
 
-export function EventTimeline({ incidentId, summaryMarkdown }: EventTimelineProps) {
+export function EventTimeline({ incidentId }: EventTimelineProps) {
   const events = useIncidentStreamStore((s) => s.events);
   const historyAgentState = useIncidentStreamStore((s) => s.historyAgentState);
   const kbAgentState = useIncidentStreamStore((s) => s.kbAgentState);
@@ -311,8 +263,6 @@ export function EventTimeline({ incidentId, summaryMarkdown }: EventTimelineProp
     return map;
   }, [serversData]);
 
-  const kbConfirmData = useIncidentStreamStore((s) => s.kbConfirmData);
-
   const hasHistory =
     historyAgentState.events.length > 0 ||
     !!historyAgentState.thinkingContent ||
@@ -321,12 +271,10 @@ export function EventTimeline({ incidentId, summaryMarkdown }: EventTimelineProp
     kbAgentState.events.length > 0 ||
     !!kbAgentState.thinkingContent ||
     kbAgentState.status !== "idle";
-  const hasGatherContext = hasHistory || hasKB || !!kbConfirmData;
+  const hasGatherContext = hasHistory || hasKB;
 
   const mainEvents = events.filter((e) => e.event_type !== "summary");
-  const summaryEvent = events.find((e) => e.event_type === "summary");
   const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
-  const hasReport = !!summaryEvent || !!summaryMarkdown;
 
   // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(mainEvents), [mainEvents]);
@@ -387,7 +335,6 @@ export function EventTimeline({ incidentId, summaryMarkdown }: EventTimelineProp
                 forceExpanded={phaseState.contextGathering === "active"}
               />
             )}
-            <KbConfirmSection incidentId={incidentId} />
           </div>
         </PhaseSection>
       )}
@@ -491,23 +438,12 @@ export function EventTimeline({ incidentId, summaryMarkdown }: EventTimelineProp
                         </div>
                       </motion.div>
                     );
-                  case "skill_used": {
+                  case "skill_read": {
                     const skillName = (item.event.data.skill_name as string) || (item.event.data.skill_slug as string);
                     const skillContent = item.event.data.content as string;
                     return (
                       <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
-                        <div className="flex items-center gap-2 text-sm text-indigo-700">
-                          <Sparkles className="h-4 w-4" />
-                          <span>使用技能：</span>
-                          <HoverCard>
-                            <HoverCardTrigger className="cursor-pointer underline decoration-dotted">
-                              {skillName}
-                            </HoverCardTrigger>
-                            <HoverCardContent className="w-96 max-h-80 overflow-y-auto">
-                              <Markdown content={skillContent} variant="compact" className="card-markdown card-markdown--indigo" />
-                            </HoverCardContent>
-                          </HoverCard>
-                        </div>
+                        <SkillReadCard skillName={skillName} skillContent={skillContent} />
                       </motion.div>
                     );
                   }
@@ -531,35 +467,22 @@ export function EventTimeline({ incidentId, summaryMarkdown }: EventTimelineProp
 
             {/* Live answer stream — shows answer as it streams in */}
             <LiveAnswerSection />
+
+            {/* Resolution confirm card */}
+            <ResolutionConfirmCard incidentId={incidentId} />
           </div>
         </PhaseSection>
       )}
 
-      {/* Phase 3: Report */}
       {/* Empty state: nothing rendered yet */}
       {!hasGatherContext &&
         phaseState.contextGathering === "pending" &&
         !hasInvestigation &&
-        phaseState.investigation === "pending" &&
-        !hasReport &&
-        phaseState.report === "pending" && (
+        phaseState.investigation === "pending" && (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin mb-3" />
           <p className="text-sm">正在连接，等待 Agent 开始处理...</p>
         </div>
-      )}
-
-      {(hasReport || phaseState.report !== "pending") && (
-        <PhaseSection
-          title="归档总结"
-          status={phaseState.report}
-          icon={FileText}
-          defaultExpanded={phaseState.report !== "pending"}
-        >
-          <ReportSection
-            fallbackMarkdown={summaryEvent ? (summaryEvent.data.summary_md as string) : summaryMarkdown ?? undefined}
-          />
-        </PhaseSection>
       )}
     </div>
   );

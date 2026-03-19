@@ -14,32 +14,79 @@ from src.services.post_incident.base import format_messages_for_extraction, get_
 EXTRACT_KNOWLEDGE_PROMPT = """\
 你是一个运维知识提取器。从以下事件排查过程中提取可复用的运维知识。
 
-提取内容:
-- 服务配置（端口、路径、配置文件位置等）
+重点提取以下信息:
+
+### 1. Server 与 Service 拓扑
+从对话中识别出涉及的服务器(Server)和服务(Service)，提取它们的关系:
+- Server 信息: 名称、IP/Host、用途
+- Service 信息: 名称、类型(mysql/redis/nginx等)、端口、所在 Server
+- **Service → Server 归属**: 哪个 Service 运行在哪个 Server 上
+- **Service 间上下游关系**: 例如 "App 服务调用 MySQL"、"Nginx 代理到 App 服务"
+
+### 2. 服务配置
+- 端口、路径、配置文件位置
+- 关键配置参数
+
+### 3. 排查经验
 - 排查方法论（如何定位此类问题）
-- 服务间依赖关系
 - 关键发现/陷阱（容易踩坑的地方）
 - 修复方案
 
-只提取事实性的、可复用的知识，不要一次性信息（如具体的时间戳、临时文件名等）。
-无可提取知识则只输出 "NO_KNOWLEDGE"。"""
+规则:
+- 只提取事实性的、可复用的知识
+- 不要一次性信息（如具体的时间戳、临时文件名）
+- Server/Service 名称要与系统中已配置的名称保持一致（如果对话中提到了）
+- 无可提取知识则只输出 "NO_KNOWLEDGE"
+"""
 
 SHOULD_UPDATE_PROMPT = """\
 你是 AGENTS.md 文档维护助手。判断是否需要将新知识更新到 AGENTS.md。
 
-规则:
+## AGENTS.md 标准结构
+
+AGENTS.md 应包含以下章节（按需填充，没有信息的章节不要创建）:
+
+```markdown
+# 项目运维手册
+
+## 架构拓扑
+
+### Servers
+| Server 名称 | Host/IP | 用途 |
+|---|---|---|
+| prod-web-01 | 10.0.1.10 | Web 应用服务器 |
+
+### Services
+| Service 名称 | 类型 | 所在 Server | 端口 | 说明 |
+|---|---|---|---|---|
+| app-mysql | MySQL | prod-db-01 | 3306 | 主数据库 |
+
+### Service 依赖关系
+- nginx → app-backend (反向代理)
+- app-backend → app-mysql (数据存储)
+- app-backend → app-redis (缓存/会话)
+
+## 服务配置
+[各服务的关键配置信息: 配置文件路径、重要参数等]
+
+## 排查经验
+[历次排查积累的经验和注意事项]
+```
+
+## 更新规则
 1. 完全重复的内容 → 只输出 "NO_UPDATE"
 2. 有价值的补充 → 输出更新后的完整 AGENTS.md 内容
-3. 保持现有结构，增量补充新知识
-4. 不要删除现有内容
-5. 若当前 AGENTS.md 为空，创建合理的初始结构
+3. **保持现有内容不变**，只增量补充新信息
+4. 新发现的 Server/Service 关系要合并到对应表格中，不要重复添加
+5. 若当前 AGENTS.md 为空，按上述标准结构创建初始内容
+6. 不要编造信息，只写对话中实际出现的事实
 
-当前 AGENTS.md 内容:
+## 当前 AGENTS.md 内容
 ```
 {current_content}
 ```
 
-新提取的运维知识:
+## 新提取的运维知识
 ```
 {knowledge_text}
 ```
@@ -185,8 +232,15 @@ async def _update_project_agents_md(
             lines = lines[1:]
         result_text = "\n".join(lines)
 
-    # Update the document content
+    # Update first, then save new content as version
     doc.content = result_text
     doc.status = "indexed"
+
+    from src.services.version_service import VersionService
+    vs = VersionService(session)
+    await vs.save_version(
+        entity_type="agents_md", entity_id=str(doc.id),
+        content=result_text, change_source="auto",
+    )
     await session.commit()
     return "updated"

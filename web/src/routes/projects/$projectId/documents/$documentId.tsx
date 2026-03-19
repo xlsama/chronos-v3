@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Pencil, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, History, Loader2, Pencil, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   deleteDocument,
@@ -196,12 +196,25 @@ function DocumentDetailPage() {
               </Button>
             </>
           ) : (
-            isEditable && (
-              <Button size="sm" variant="outline" onClick={startEditing}>
-                <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                编辑
-              </Button>
-            )
+            <>
+              {isEditable && (
+                <Button size="sm" variant="outline" onClick={startEditing}>
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  编辑
+                </Button>
+              )}
+              {doc?.doc_type === "agents_config" && (
+                <Link
+                  to="/projects/$projectId/documents/$documentId/history"
+                  params={{ projectId, documentId }}
+                >
+                  <Button size="sm" variant="outline">
+                    <History className="mr-1.5 h-3.5 w-3.5" />
+                    更新历史
+                  </Button>
+                </Link>
+              )}
+            </>
           )}
           {canDelete && (
             <Button

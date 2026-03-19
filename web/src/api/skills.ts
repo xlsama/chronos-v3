@@ -26,3 +26,20 @@ export function updateSkill(slug: string, data: { content: string }) {
 export function deleteSkill(slug: string) {
   return request(`/skills/${slug}`, { method: "DELETE" });
 }
+
+// ── File Management ─────────────────────────────────────────
+
+export function getSkillFile(slug: string, path: string) {
+  return request<{ content: string }>(`/skills/${slug}/files/${path}`);
+}
+
+export function putSkillFile(slug: string, path: string, content: string) {
+  return request(`/skills/${slug}/files/${path}`, {
+    method: "PUT",
+    body: { content },
+  });
+}
+
+export function deleteSkillFile(slug: string, path: string) {
+  return request(`/skills/${slug}/files/${path}`, { method: "DELETE" });
+}

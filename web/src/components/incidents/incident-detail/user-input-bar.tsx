@@ -14,10 +14,10 @@ const TERMINAL_STATUSES = ["resolved", "closed", "stopped"];
 
 export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) {
   const queryClient = useQueryClient();
-  const { askHumanQuestion, setAskHumanQuestion, kbConfirmData, kbConfirmResolved, setKbConfirmResolved, addEvent } = useIncidentStreamStore();
+  const { askHumanQuestion, setAskHumanQuestion, resolutionConfirmRequired, resolutionConfirmResolved, setResolutionConfirmResolved, addEvent } = useIncidentStreamStore();
 
   const isTerminal = !!incidentStatus && TERMINAL_STATUSES.includes(incidentStatus);
-  const isWaitingForInput = !!askHumanQuestion || (!!kbConfirmData && !kbConfirmResolved);
+  const isWaitingForInput = !!askHumanQuestion || (resolutionConfirmRequired && !resolutionConfirmResolved);
   const isAgentWorking = incidentStatus === "investigating" && !isWaitingForInput;
   const isInputDisabled = isTerminal || isAgentWorking;
 
@@ -58,7 +58,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
         timestamp: new Date().toISOString(),
       });
       setAskHumanQuestion(null);
-      if (kbConfirmData) setKbConfirmResolved(true);
+      if (resolutionConfirmRequired) setResolutionConfirmResolved(true);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["incidents", incidentId] });
@@ -76,11 +76,11 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
     ? "事件已结束"
     : isAgentWorking
       ? "Agent 正在调查中..."
-      : kbConfirmData && !kbConfirmResolved
-        ? "输入补充信息或点击确认继续..."
+      : resolutionConfirmRequired && !resolutionConfirmResolved
+        ? "输入新问题继续排查，或点击「已解决」..."
         : askHumanQuestion
-          ? "回复 Agent 的问题..."
-          : "向 Agent 发送消息...";
+            ? "回复 Agent 的问题..."
+            : "向 Agent 发送消息...";
 
   return (
     <div className="border-t p-4">
