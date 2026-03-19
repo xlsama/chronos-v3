@@ -147,7 +147,7 @@ async def _fetch_entity_anchors(session: AsyncSession) -> str:
             lines.append(f"- {s.name} [{s.service_type}] @ {s.host}:{s.port}")
 
     result = "\n".join(lines)
-    logger.debug(f"[agents_md] Entity anchors content:\n{result}")
+    logger.debug("[agents_md] Entity anchors content:\n{}", result)
     return result
 
 
@@ -159,27 +159,27 @@ async def auto_update_agents_md(
 ) -> dict:
     """主入口。向量搜索匹配项目，KB Agent 已匹配的项目作为必选候选。"""
     sid = incident_id[:8]
-    logger.info(f"[{sid}] [agents_md] Starting AGENTS.md auto-update")
+    logger.info("[{}] [agents_md] Starting AGENTS.md auto-update", sid)
 
     # Step 0: Fetch entity anchors for knowledge extraction
-    logger.info(f"[{sid}] [agents_md] Fetching entity anchors from DB")
+    logger.info("[{}] [agents_md] Fetching entity anchors from DB", sid)
     async with get_session_factory()() as session:
         entity_anchors = await _fetch_entity_anchors(session)
-    logger.info(
-        f"[{sid}] [agents_md] Entity anchors ready, length={len(entity_anchors)} chars"
-    )
+    logger.info("[{}] [agents_md] Entity anchors ready, length={} chars", sid, len(entity_anchors))
 
     # Step 1: Extract operational knowledge
     logger.info(
-        f"[{sid}] [agents_md] Extracting knowledge from conversation "
-        f"(conv={len(conversation_text)} chars, summary={len(summary_md)} chars)"
+        "[{}] [agents_md] Extracting knowledge from conversation (conv={} chars, summary={} chars)",
+        sid,
+        len(conversation_text),
+        len(summary_md),
     )
     knowledge_text = await _extract_knowledge(conversation_text, summary_md, entity_anchors)
     if not knowledge_text:
-        logger.info(f"[{sid}] [agents_md] No knowledge extracted, skipping")
+        logger.info("[{}] [agents_md] No knowledge extracted, skipping", sid)
         return {"action": "no_knowledge"}
 
-    logger.info(f"[{sid}] [agents_md] Knowledge extracted ({len(knowledge_text)} chars)")
+    logger.info("[{}] [agents_md] Knowledge extracted ({} chars)", sid, len(knowledge_text))
 
     # Step 2: Find candidate projects via vector search
     candidates = await _find_candidate_projects(knowledge_text)
@@ -192,10 +192,10 @@ async def auto_update_agents_md(
             candidates.insert(0, (pid, 0.0))
 
     if not candidates:
-        logger.info(f"[{sid}] [agents_md] No candidate projects found")
+        logger.info("[{}] [agents_md] No candidate projects found", sid)
         return {"action": "no_candidates"}
 
-    logger.info(f"[{sid}] [agents_md] Found {len(candidates)} candidate project(s)")
+    logger.info("[{}] [agents_md] Found {} candidate project(s)", sid, len(candidates))
 
     # Step 3: Update each candidate project's AGENTS.md
     results = {}
@@ -203,7 +203,13 @@ async def auto_update_agents_md(
         async with get_session_factory()() as session:
             result = await _update_project_agents_md(session, project_id, knowledge_text)
             results[str(project_id)] = result
-            logger.info(f"[{sid}] [agents_md] Project {str(project_id)[:8]}: {result} (distance={distance:.4f})")
+            logger.info(
+                "[{}] [agents_md] Project {}: {} (distance={:.4f})",
+                sid,
+                str(project_id)[:8],
+                result,
+                distance,
+            )
 
     return {"action": "completed", "results": results}
 
@@ -215,41 +221,46 @@ async def _extract_knowledge(
     input_text = f"## 排查过程\n{conversation_text[:6000]}\n\n## 排查结论\n{summary_md[:3000]}"
 
     system_prompt = EXTRACT_KNOWLEDGE_PROMPT.format(entity_anchors=entity_anchors)
-    logger.debug(f"[agents_md] Extract knowledge system prompt:\n{system_prompt}")
+    logger.debug("[agents_md] Extract knowledge system prompt:\n{}", system_prompt)
     logger.info(
-        f"[agents_md] Calling LLM to extract knowledge "
-        f"(input={len(input_text)} chars, prompt={len(system_prompt)} chars)"
+        "[agents_md] Calling LLM to extract knowledge (input={} chars, prompt={} chars)",
+        len(input_text),
+        len(system_prompt),
     )
     llm = get_mini_llm()
-    logger.info(f"[agents_md] _extract_knowledge: calling LLM")
+    logger.info("[agents_md] _extract_knowledge: calling LLM")
     try:
         resp = await llm.ainvoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=input_text),
         ])
         logger.info(
-            f"[agents_md] _extract_knowledge: LLM responded, "
-            f"resp.content type={type(resp.content).__name__}, "
-            f"len={len(resp.content) if resp.content else 0}"
+            "[agents_md] _extract_knowledge: LLM responded, resp.content type={}, len={}",
+            type(resp.content).__name__,
+            len(resp.content) if resp.content else 0,
         )
     except Exception as e:
-        logger.error(f"[agents_md] _extract_knowledge: LLM call failed: {e}", exc_info=True)
+        logger.opt(exception=True).error(
+            "[agents_md] _extract_knowledge: LLM call failed: {}: {}",
+            type(e).__name__,
+            e,
+        )
         raise
     result = resp.content.strip()
     if result == "NO_KNOWLEDGE" or len(result) < 20:
-        logger.info(f"[agents_md] LLM returned no extractable knowledge: {result[:100]!r}")
+        logger.info("[agents_md] LLM returned no extractable knowledge: {!r}", result[:100])
         return None
-    logger.info(f"[agents_md] LLM extracted knowledge ({len(result)} chars)")
-    logger.debug(f"[agents_md] Extracted knowledge:\n{result}")
+    logger.info("[agents_md] LLM extracted knowledge ({} chars)", len(result))
+    logger.debug("[agents_md] Extracted knowledge:\n{}", result)
     return result
 
 
 async def _find_candidate_projects(knowledge_text: str) -> list[tuple[uuid.UUID, float]]:
     """向量搜索 DocumentChunk，按 project_id 分组取 top 项目。"""
-    logger.info(f"[agents_md] _find_candidate_projects: starting vector search, text_len={len(knowledge_text)}")
+    logger.info("[agents_md] _find_candidate_projects: starting vector search, text_len={}", len(knowledge_text))
     embedder = Embedder()
     embedding = await embedder.embed_text(knowledge_text)
-    logger.info(f"[agents_md] _find_candidate_projects: embedding computed, dim={len(embedding)}")
+    logger.info("[agents_md] _find_candidate_projects: embedding computed, dim={}", len(embedding))
 
     async with get_session_factory()() as session:
         # Search across all projects (no project_id filter)
@@ -265,7 +276,7 @@ async def _find_candidate_projects(knowledge_text: str) -> list[tuple[uuid.UUID,
         result = await session.execute(stmt)
         rows = result.all()
 
-    logger.info(f"[agents_md] _find_candidate_projects: vector search returned {len(rows)} rows")
+    logger.info("[agents_md] _find_candidate_projects: vector search returned {} rows", len(rows))
 
     if not rows:
         return []
@@ -285,8 +296,10 @@ async def _find_candidate_projects(knowledge_text: str) -> list[tuple[uuid.UUID,
     # Sort by distance ascending
     candidates.sort(key=lambda x: x[1])
     logger.info(
-        f"[agents_md] _find_candidate_projects: {len(candidates)} candidates after filtering "
-        f"(threshold=0.3, total_projects={len(best_by_project)})"
+        "[agents_md] _find_candidate_projects: {} candidates after filtering "
+        "(threshold=0.3, total_projects={})",
+        len(candidates),
+        len(best_by_project),
     )
     return candidates
 
@@ -300,7 +313,7 @@ async def _update_project_agents_md(
     返回 "updated" | "skipped" | "no_doc"
     """
     pid_short = str(project_id)[:8]
-    logger.info(f"[agents_md] _update_project_agents_md: project={pid_short}, knowledge_len={len(knowledge_text)}")
+    logger.info("[agents_md] _update_project_agents_md: project={}, knowledge_len={}", pid_short, len(knowledge_text))
 
     # Find the AGENTS.md document
     result = await session.execute(
@@ -311,11 +324,11 @@ async def _update_project_agents_md(
     )
     doc = result.scalar_one_or_none()
     if not doc:
-        logger.info(f"[agents_md] _update_project_agents_md: project={pid_short} has no agents_config doc")
+        logger.info("[agents_md] _update_project_agents_md: project={} has no agents_config doc", pid_short)
         return "no_doc"
 
     current_content = doc.content or ""
-    logger.info(f"[agents_md] _update_project_agents_md: project={pid_short} current_content_len={len(current_content)}")
+    logger.info("[agents_md] _update_project_agents_md: project={} current_content_len={}", pid_short, len(current_content))
 
     # Ask LLM whether to update
     llm = get_mini_llm()
@@ -323,7 +336,7 @@ async def _update_project_agents_md(
         current_content=current_content if current_content.strip() else "(空)",
         knowledge_text=knowledge_text,
     )
-    logger.info(f"[agents_md] _update_project_agents_md: calling LLM, prompt_len={len(prompt)}")
+    logger.info("[agents_md] _update_project_agents_md: calling LLM, prompt_len={}", len(prompt))
     try:
         resp = await llm.ainvoke([
             HumanMessage(content=prompt),
@@ -331,16 +344,21 @@ async def _update_project_agents_md(
         resp_len = len(resp.content) if resp.content else 0
         resp_preview = repr(resp.content[:200]) if resp.content else "None"
         logger.info(
-            f"[agents_md] _update_project_agents_md: LLM responded, "
-            f"len={resp_len}, preview={resp_preview}"
+            "[agents_md] _update_project_agents_md: LLM responded, len={}, preview={}",
+            resp_len,
+            resp_preview,
         )
     except Exception as e:
-        logger.error(f"[agents_md] _update_project_agents_md: LLM call failed: {e}", exc_info=True)
+        logger.opt(exception=True).error(
+            "[agents_md] _update_project_agents_md: LLM call failed: {}: {}",
+            type(e).__name__,
+            e,
+        )
         raise
     result_text = resp.content.strip()
 
     if result_text == "NO_UPDATE":
-        logger.info(f"[agents_md] _update_project_agents_md: project={pid_short} LLM says NO_UPDATE")
+        logger.info("[agents_md] _update_project_agents_md: project={} LLM says NO_UPDATE", pid_short)
         return "skipped"
 
     # Remove outermost markdown code block wrapper if present
