@@ -89,7 +89,6 @@ class Incident(Base):
     description: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="open")
     severity: Mapped[str] = mapped_column(String(20), default="P3")
-    summary_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     thread_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     saved_to_memory: Mapped[bool] = mapped_column(default=False)

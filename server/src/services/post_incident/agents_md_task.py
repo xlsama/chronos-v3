@@ -1,5 +1,5 @@
+import re
 import uuid
-from collections import defaultdict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import select
@@ -9,7 +9,7 @@ from src.db.connection import get_session_factory
 from src.db.models import DocumentChunk, ProjectDocument
 from src.lib.embedder import Embedder
 from src.lib.logger import logger
-from src.services.post_incident.base import format_messages_for_extraction, get_mini_llm
+from src.services.post_incident.base import get_mini_llm
 
 EXTRACT_KNOWLEDGE_PROMPT = """\
 你是一个运维知识提取器。从以下事件排查过程中提取可复用的运维知识。
@@ -120,15 +120,14 @@ flowchart LR
 async def auto_update_agents_md(
     incident_id: str,
     summary_md: str,
-    messages: list,
-    description: str,
+    conversation_text: str,
 ) -> dict:
     """主入口。纯向量搜索匹配项目，不依赖 incident 的 project_id。"""
     sid = incident_id[:8]
     logger.info(f"[{sid}] [agents_md] Starting AGENTS.md auto-update")
 
     # Step 1: Extract operational knowledge
-    knowledge_text = await _extract_knowledge(messages, summary_md, description)
+    knowledge_text = await _extract_knowledge(conversation_text, summary_md)
     if not knowledge_text:
         logger.info(f"[{sid}] [agents_md] No knowledge extracted, skipping")
         return {"action": "no_knowledge"}
@@ -154,10 +153,8 @@ async def auto_update_agents_md(
     return {"action": "completed", "results": results}
 
 
-async def _extract_knowledge(messages: list, summary_md: str, description: str) -> str | None:
+async def _extract_knowledge(conversation_text: str, summary_md: str) -> str | None:
     """LLM 提取运维知识。返回 None 表示无可提取知识。"""
-    conversation_text = format_messages_for_extraction(messages, description)
-    # Truncate to avoid token limits
     input_text = f"## 排查过程\n{conversation_text[:6000]}\n\n## 排查结论\n{summary_md[:3000]}"
 
     llm = get_mini_llm()
@@ -245,15 +242,10 @@ async def _update_project_agents_md(
     if result_text == "NO_UPDATE":
         return "skipped"
 
-    # Remove markdown code block wrapper if present
-    if result_text.startswith("```"):
-        lines = result_text.split("\n")
-        # Remove first and last lines (```markdown and ```)
-        if lines[-1].strip() == "```":
-            lines = lines[1:-1]
-        else:
-            lines = lines[1:]
-        result_text = "\n".join(lines)
+    # Remove outermost markdown code block wrapper if present
+    m = re.match(r'^```(?:markdown|md)?\s*\n(.*?)(?:\n```\s*)$', result_text, re.DOTALL)
+    if m:
+        result_text = m.group(1)
 
     # Update first, then save new content as version
     doc.content = result_text

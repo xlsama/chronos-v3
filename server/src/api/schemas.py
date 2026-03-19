@@ -163,7 +163,6 @@ class IncidentResponse(BaseModel):
     description: str
     status: str
     severity: str
-    summary_md: str | None
     summary_title: str | None
     thread_id: str | None
     saved_to_memory: bool

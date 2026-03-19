@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 
@@ -67,7 +68,6 @@ class AgentRunner:
             "needs_approval": False,
             "pending_tool_call": None,
             "approval_decision": None,
-            "summary_md": None,
             "ask_human_count": 0,
             "incident_history_summary": None,
             "kb_summary": None,
@@ -234,73 +234,21 @@ class AgentRunner:
             logger.info(f"[{sid}] [post_run] confirm_resolution interrupt")
             await self.publisher.publish(channel, "confirm_resolution_required", {})
 
-        # Graph complete → silently generate summary, update DB, publish summary SSE
+        # Graph complete → update DB, send done SSE, fire background tasks
         if vals.get("is_complete"):
-            # Step 1: Silently run summarize agent (no SSE events published)
-            summary_md = ""
-            try:
-                from src.ops_agent.sub_agents.summarize_agent import run_summarize_agent
-
-                async def noop_callback(event_type: str, data: dict) -> None:
-                    pass
-
-                summary_md = await run_summarize_agent(
-                    messages=vals.get("messages", []),
-                    description=vals.get("description", ""),
-                    severity=vals.get("severity", ""),
-                    event_callback=noop_callback,
-                )
-            except Exception as e:
-                logger.error(f"[{sid}] [post_run] Silent summarize failed: {e}", exc_info=True)
-                summary_md = f"报告生成失败: {e}"
-
-            # Step 2: Write summary_md + status=resolved to DB
+            # ① DB: status → resolved
             async with get_session_factory()() as session:
                 incident = await session.get(Incident, uuid.UUID(incident_id))
                 if incident and incident.status == "investigating":
-                    incident.summary_md = summary_md
                     incident.status = "resolved"
                     await session.commit()
                     logger.info(f"[{sid}] [post_run] status -> resolved")
 
-            # Step 3: Send summary SSE to trigger frontend invalidate + close SSE
+            # ② SSE: done (immediately, no waiting for LLM)
             await self.publisher.publish(channel, "done", {})
 
-            # Step 4: Generate title + severity (LLM call, may take tens of seconds)
-            summary_title = None
-            severity = None
-            if summary_md:
-                try:
-                    from src.services.incident_history_service import _generate_title_and_severity
-                    summary_title, severity = await _generate_title_and_severity(summary_md)
-                except Exception as e:
-                    logger.warning(f"Summary title/severity generation failed for {incident_id}: {e}")
-
-            # Step 5: Update DB with title + severity
-            if summary_title or severity:
-                async with get_session_factory()() as session:
-                    incident = await session.get(Incident, uuid.UUID(incident_id))
-                    if incident:
-                        if summary_title:
-                            incident.summary_title = summary_title
-                        if severity:
-                            incident.severity = severity
-                        await session.commit()
-                        logger.info(f"[{sid}] [post_run] DB updated: title='{summary_title}', severity={severity}")
-
-            notify_fire_and_forget(
-                "resolved", incident_id, summary_title or vals.get("description", "")[:80],
-                severity=vals.get("severity", ""),
-            )
-            try:
-                await run_post_incident_tasks(
-                    incident_id=incident_id,
-                    summary_md=summary_md,
-                    messages=vals.get("messages", []),
-                    description=vals.get("description", ""),
-                )
-            except Exception as e:
-                logger.error(f"[{sid}] [post_run] Post-incident tasks failed: {e}")
+            # ③ Background: all post-incident work (summary, title, history, knowledge extraction)
+            asyncio.create_task(run_post_incident_tasks(incident_id))
 
     @staticmethod
     def _extract_pending_tool_call(vals: dict) -> dict | None:

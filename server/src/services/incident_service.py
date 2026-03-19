@@ -40,12 +40,6 @@ class IncidentService:
         await self.session.commit()
         return incident
 
-    async def set_summary(self, incident: Incident, summary_md: str) -> Incident:
-        incident.summary_md = summary_md
-        incident.status = "resolved"
-        await self.session.commit()
-        return incident
-
     async def save_message(
         self,
         incident_id: uuid.UUID,

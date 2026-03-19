@@ -28,7 +28,6 @@ export interface Incident {
   description: string;
   status: string;
   severity: string;
-  summary_md: string | null;
   summary_title: string | null;
   thread_id: string | null;
   saved_to_memory: boolean;

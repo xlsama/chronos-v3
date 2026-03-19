@@ -1,44 +1,145 @@
+import asyncio
+import uuid
+
+from src.db.connection import get_session_factory
+from src.db.models import Incident, Message
 from src.lib.logger import logger
+from src.services.post_incident.base import format_db_messages, get_mini_llm
 from src.services.post_incident.agents_md_task import auto_update_agents_md
 from src.services.post_incident.history_task import auto_save_history
 from src.services.post_incident.skill_evolution_task import auto_evolve_skills
 
+SUMMARIZE_SYSTEM_PROMPT = """你是一个运维报告生成器。根据完整的对话历史，生成结构化的排查报告。
 
-async def run_post_incident_tasks(
-    incident_id: str,
-    summary_md: str,
-    messages: list,
-    description: str,
-) -> None:
-    """顺序执行所有事件后任务。从 AgentRunner._post_run() 调用。"""
+报告格式（Markdown）：
+
+# 事件排查报告
+
+## 事件概要
+- 标题: （简明扼要的事件标题）
+- 严重程度: （P0/P1/P2/P3）
+- 处理状态: （已解决/部分解决/待观察）
+
+## 问题描述
+什么服务受影响、症状、影响范围。
+
+## 排查过程
+按时间顺序列出关键排查步骤和发现。
+
+## 根因分析
+有证据支撑的根本原因分析。
+
+## 修复措施
+执行的修复操作及验证结果。
+
+注意事项：
+- 基于实际对话内容撰写，不编造未发生的操作或结论
+- 使用中文撰写，技术术语保持原文
+- 不要在报告末尾添加"报告生成时间"等元信息
+"""
+
+
+async def run_post_incident_tasks(incident_id: str) -> None:
+    """后台执行所有事件后任务。从 AgentRunner._post_run() 通过 asyncio.create_task 调用。"""
     sid = incident_id[:8]
+    logger.info(f"[{sid}] [post_incident] Starting post-incident tasks")
 
-    # Task 1: Auto-save incident history
     try:
-        await auto_save_history(incident_id, summary_md)
-    except Exception as e:
-        logger.error(f"[{sid}] [post_incident] Auto-save history failed: {e}")
+        # ① 从 DB 读 Incident + Messages
+        async with get_session_factory()() as session:
+            incident = await session.get(Incident, uuid.UUID(incident_id))
+            if not incident:
+                logger.error(f"[{sid}] [post_incident] Incident not found")
+                return
+            description = incident.description
+            severity = incident.severity
 
-    # Task 2: Auto-update AGENTS.md
-    try:
-        result = await auto_update_agents_md(
-            incident_id=incident_id,
-            summary_md=summary_md,
-            messages=messages,
-            description=description,
+            from sqlalchemy import select
+            result = await session.execute(
+                select(Message)
+                .where(Message.incident_id == uuid.UUID(incident_id))
+                .order_by(Message.created_at)
+            )
+            db_messages = list(result.scalars().all())
+
+        # ② 生成 summary_md（内部变量，不存 Incident 表）
+        conversation_text = format_db_messages(db_messages, description)
+        summary_md = await _generate_summary(conversation_text, severity, sid)
+
+        # ③ 生成 title + severity → 写入 DB
+        summary_title = None
+        new_severity = None
+        if summary_md:
+            try:
+                from src.services.incident_history_service import _generate_title_and_severity
+                summary_title, new_severity = await _generate_title_and_severity(summary_md)
+            except Exception as e:
+                logger.warning(f"[{sid}] [post_incident] Title/severity generation failed: {e}")
+
+        if summary_title or new_severity:
+            async with get_session_factory()() as session:
+                incident = await session.get(Incident, uuid.UUID(incident_id))
+                if incident:
+                    if summary_title:
+                        incident.summary_title = summary_title
+                    if new_severity:
+                        incident.severity = new_severity
+                    await session.commit()
+                    logger.info(f"[{sid}] [post_incident] DB updated: title='{summary_title}', severity={new_severity}")
+
+        # ④ 通知
+        from src.services.notification_service import notify_fire_and_forget
+        notify_fire_and_forget(
+            "resolved", incident_id, summary_title or description[:80],
+            severity=severity,
         )
-        logger.info(f"[{sid}] [post_incident] AGENTS.md update result: {result}")
-    except Exception as e:
-        logger.error(f"[{sid}] [post_incident] AGENTS.md update failed: {e}")
 
-    # Task 3: Auto-evolve skills
-    try:
-        result = await auto_evolve_skills(
-            incident_id=incident_id,
-            summary_md=summary_md,
-            messages=messages,
-            description=description,
+        # ⑤ 三个子任务并行: history / agents_md / skill_evolution
+        await asyncio.gather(
+            _safe_run(auto_save_history(incident_id, summary_md), "history", sid),
+            _safe_run(auto_update_agents_md(
+                incident_id=incident_id,
+                summary_md=summary_md,
+                conversation_text=conversation_text,
+            ), "agents_md", sid),
+            _safe_run(auto_evolve_skills(
+                incident_id=incident_id,
+                summary_md=summary_md,
+                conversation_text=conversation_text,
+            ), "skill_evolution", sid),
         )
-        logger.info(f"[{sid}] [post_incident] Skill evolution result: {result}")
+
+        logger.info(f"[{sid}] [post_incident] All post-incident tasks completed")
     except Exception as e:
-        logger.error(f"[{sid}] [post_incident] Skill evolution failed: {e}")
+        logger.error(f"[{sid}] [post_incident] Post-incident tasks failed: {e}", exc_info=True)
+
+
+async def _generate_summary(conversation_text: str, severity: str, sid: str) -> str:
+    """用 mini_model 生成 summary_md。"""
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+        llm = get_mini_llm()
+        resp = await llm.ainvoke([
+            SystemMessage(content=SUMMARIZE_SYSTEM_PROMPT),
+            HumanMessage(
+                content=f"请根据以下完整对话历史生成排查报告：\n\n"
+                f"严重程度: {severity}\n\n"
+                f"{conversation_text}"
+            ),
+        ])
+        summary = resp.content.strip()
+        logger.info(f"[{sid}] [post_incident] Summary generated ({len(summary)} chars)")
+        return summary or "报告生成失败"
+    except Exception as e:
+        logger.error(f"[{sid}] [post_incident] Summary generation failed: {e}", exc_info=True)
+        return f"报告生成失败: {e}"
+
+
+async def _safe_run(coro, task_name: str, sid: str) -> None:
+    """安全执行协程，捕获异常避免影响其他任务。"""
+    try:
+        result = await coro
+        if result is not None:
+            logger.info(f"[{sid}] [post_incident] {task_name} result: {result}")
+    except Exception as e:
+        logger.error(f"[{sid}] [post_incident] {task_name} failed: {e}")
