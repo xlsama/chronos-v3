@@ -164,6 +164,8 @@ def _message_to_event(m: Message) -> dict:
         data = metadata
     elif m.event_type == "user_message":
         data = {"content": m.content, **metadata}
+    elif m.event_type == "skill_read":
+        data = metadata or {"content": m.content}
     elif m.event_type == "skill_used":
         data = metadata
     elif m.event_type == "incident_stopped":
@@ -356,5 +358,4 @@ async def stop_incident(
         select(Incident).options(selectinload(Incident.attachments)).where(Incident.id == incident_id)
     )
     return result.scalar_one()
-
 
