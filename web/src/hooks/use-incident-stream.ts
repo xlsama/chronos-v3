@@ -57,7 +57,7 @@ export function useIncidentStream(
 
   // Close SSE when incident reaches terminal state
   useEffect(() => {
-    if (status === "resolved" || status === "closed" || status === "stopped") {
+    if (status === "resolved" || status === "stopped") {
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       clearTimeout(retryTimerRef.current);
@@ -115,7 +115,7 @@ export function useIncidentStream(
       loadedForRef.current === incidentId &&
       loadedEventsRef.current !== historyEvents &&
       (
-        statusRef.current === "resolved" || statusRef.current === "closed" || statusRef.current === "stopped" ||
+        statusRef.current === "resolved" || statusRef.current === "stopped" ||
         (historyEvents.length > 0 && (!loadedEventsRef.current || loadedEventsRef.current.length === 0))
       )
     ) {
@@ -137,7 +137,7 @@ export function useIncidentStream(
     // Gate SSE on history being loaded
     if (loadedForRef.current !== incidentId) return;
     // No SSE for terminal incidents
-    if (statusRef.current === "resolved" || statusRef.current === "closed" || statusRef.current === "stopped") return;
+    if (statusRef.current === "resolved" || statusRef.current === "stopped") return;
 
     retriesRef.current = 0;
 
@@ -230,12 +230,12 @@ export function useIncidentStream(
             // Update phase state
             if (phase === "gather_context") {
               updatePhase("gather_context");
-            } else if (event.event_type === "summary") {
+            } else if (event.event_type === "complete") {
               updatePhase("summary_complete");
             } else if (phase) {
               updatePhase(phase);
             } else {
-              updatePhase("main");
+              updatePhase("investigation");
             }
             return;
           }
@@ -263,8 +263,8 @@ export function useIncidentStream(
               event.data.approval_id as string,
               event.data.decision as string,
             );
-          } else if (event.event_type === "summary") {
-            // Summary generated silently in backend; just invalidate queries + close SSE
+          } else if (event.event_type === "complete") {
+            // Agent completed; invalidate queries + close SSE
             updatePhase("summary_complete");
             setResolutionConfirmResolved(true);
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
@@ -283,7 +283,7 @@ export function useIncidentStream(
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
           } else if (event.event_type === "ask_human") {
-            updatePhase("main");
+            updatePhase("investigation");
             // Flush residual thinking
             const { thinkingContent: thk } = useIncidentStreamStore.getState();
             if (thk) {
@@ -308,7 +308,7 @@ export function useIncidentStream(
               clearAskHumanStream();
             }
           } else if (event.event_type === "thinking") {
-            updatePhase("main");
+            updatePhase("investigation");
             appendThinking(event.data.content as string);
           } else if (event.event_type === "thinking_done") {
             // Flush thinking buffer
@@ -322,7 +322,7 @@ export function useIncidentStream(
               clearThinking();
             }
           } else if (event.event_type === "answer") {
-            updatePhase("main");
+            updatePhase("investigation");
             // Flush any residual thinking
             const { thinkingContent } = useIncidentStreamStore.getState();
             if (thinkingContent) {
@@ -349,7 +349,7 @@ export function useIncidentStream(
           } else if (event.event_type === "agent_status") {
             // main-phase agent_status: ignore (only relevant for gather_context)
           } else {
-            updatePhase("main");
+            updatePhase("investigation");
             const { thinkingContent } = useIncidentStreamStore.getState();
             if (thinkingContent) {
               addEvent({

@@ -154,7 +154,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       const ps = { ...state.phaseState };
       if (phase === "gather_context") {
         if (ps.contextGathering === "pending") ps.contextGathering = "active";
-      } else if (phase === "main") {
+      } else if (phase === "investigation") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
         if (ps.investigation === "pending") ps.investigation = "active";
       } else if (phase === "summary_complete") {
@@ -260,16 +260,16 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     }
 
     // Also mark resolution as resolved if summary event exists (backend completed)
-    const hasSummary = mainEvents.some((e) => e.event_type === "summary");
-    if (hasSummary && resolutionRequired) resolutionResolved = true;
+    const hasComplete = mainEvents.some((e) => e.event_type === "complete");
+    if (hasComplete && resolutionRequired) resolutionResolved = true;
 
     // Derive phase state from loaded events
     const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
-    const hasMain = mainEvents.some((e) => e.event_type !== "summary" && e.event_type !== "ask_human" && e.event_type !== "answer");
+    const hasMain = mainEvents.some((e) => e.event_type !== "complete" && e.event_type !== "ask_human" && e.event_type !== "answer");
 
     const derivedPhase: PhaseState = {
-      contextGathering: hasContext ? (hasMain || hasSummary ? "completed" : "active") : "pending",
-      investigation: hasMain ? (hasSummary ? "completed" : "active") : "pending",
+      contextGathering: hasContext ? (hasMain || hasComplete ? "completed" : "active") : "pending",
+      investigation: hasMain ? (hasComplete ? "completed" : "active") : "pending",
     };
 
     set({

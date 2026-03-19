@@ -264,9 +264,7 @@ class AgentRunner:
                     logger.info(f"[{sid}] [post_run] status -> resolved")
 
             # Step 3: Send summary SSE to trigger frontend invalidate + close SSE
-            await self.publisher.publish(channel, "summary", {
-                "summary_md": summary_md,
-            })
+            await self.publisher.publish(channel, "complete", {})
 
             # Step 4: Generate title + severity (LLM call, may take tens of seconds)
             summary_title = None
@@ -379,7 +377,7 @@ class AgentRunner:
         node = metadata.get("langgraph_node", "")
         if node == "gather_context":
             return "gather_context", "history"
-        return "main", ""
+        return "investigation", ""
 
     async def _process_event(self, channel: str, event: dict) -> None:
         kind = event.get("event")

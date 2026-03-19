@@ -18,7 +18,7 @@ _EVENT_ROLE = {
     "skill_read": "assistant",
     "ask_human": "assistant",
     "ask_human_done": "assistant",
-    "summary": "assistant",
+    "complete": "system",
     "agent_status": "system",
     "approval_required": "system",
     "approval_decided": "system",
@@ -175,8 +175,8 @@ class EventPublisher:
             return data.get("question", "")
         if event_type == "ask_human_done":
             return ""
-        if event_type == "summary":
-            return data.get("summary_md", "")
+        if event_type == "complete":
+            return ""
         if event_type == "error":
             return data.get("message", "")
         if event_type == "incident_stopped":

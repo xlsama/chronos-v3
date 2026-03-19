@@ -10,7 +10,7 @@ interface UserInputBarProps {
   incidentStatus?: string;
 }
 
-const TERMINAL_STATUSES = ["resolved", "closed", "stopped"];
+const TERMINAL_STATUSES = ["resolved", "stopped"];
 
 export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) {
   const queryClient = useQueryClient();

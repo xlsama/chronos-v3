@@ -154,4 +154,4 @@ export interface ContentVersionDetail extends ContentVersion {
 }
 
 export type SeverityLevel = "P0" | "P1" | "P2" | "P3";
-export type IncidentStatus = "open" | "investigating" | "resolved" | "closed" | "stopped";
+export type IncidentStatus = "open" | "investigating" | "resolved" | "stopped";
