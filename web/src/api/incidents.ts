@@ -46,6 +46,12 @@ export function getIncidentEvents(incidentId: string) {
   return request<SSEEvent[]>(`/incidents/${incidentId}/events`);
 }
 
+export function confirmResolution(incidentId: string) {
+  return request<{ status: string }>(`/incidents/${incidentId}/confirm-resolution`, {
+    method: "POST",
+  });
+}
+
 export function stopIncident(incidentId: string) {
   return request<Incident>(`/incidents/${incidentId}/stop`, {
     method: "POST",

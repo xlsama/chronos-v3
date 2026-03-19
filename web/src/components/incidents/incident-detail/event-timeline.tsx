@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Search, Brain, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle, ChevronRight } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
-import { sendIncidentMessage } from "@/api/incidents";
+import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
 import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
@@ -198,7 +198,7 @@ function ResolutionConfirmCard({ incidentId }: { incidentId: string }) {
   const setResolutionConfirmResolved = useIncidentStreamStore((s) => s.setResolutionConfirmResolved);
 
   const confirmMutation = useMutation({
-    mutationFn: () => sendIncidentMessage(incidentId, "confirmed"),
+    mutationFn: () => confirmResolution(incidentId),
     onMutate: () => {
       setResolutionConfirmResolved(true);
     },

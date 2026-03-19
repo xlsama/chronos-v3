@@ -212,8 +212,9 @@ export function useIncidentStream(
             } else if (event.event_type === "thinking_done" || event.event_type === "answer_done" || event.event_type === "ask_human_done") {
               // DB boundary marker, skip
             } else if (event.event_type === "confirm_resolution_required") {
-              // Replay: restore resolution confirm state, mark as resolved (already past)
+              // Replay: restore resolution confirm state
               setResolutionConfirmRequired(true);
+            } else if (event.event_type === "resolution_confirmed") {
               setResolutionConfirmResolved(true);
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
@@ -272,6 +273,8 @@ export function useIncidentStream(
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
           } else if (event.event_type === "confirm_resolution_required") {
             setResolutionConfirmRequired(true);
+          } else if (event.event_type === "resolution_confirmed") {
+            setResolutionConfirmResolved(true);
           } else if (event.event_type === "incident_stopped") {
             addEvent(event);
             // Close SSE and invalidate queries to refresh status

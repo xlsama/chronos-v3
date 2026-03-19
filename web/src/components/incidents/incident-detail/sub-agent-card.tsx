@@ -105,9 +105,9 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
             </pre>
           )}
           {output && (
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-blue-50/50 p-1.5 text-xs opacity-70">
-              {output}
-            </pre>
+            <div className="max-h-40 overflow-auto rounded bg-blue-50/50 p-1.5 text-xs opacity-70">
+              <Markdown content={output} variant="compact" />
+            </div>
           )}
         </div>
       )}
@@ -212,7 +212,7 @@ export function SubAgentCard({
         <Icon className="h-4 w-4" />
         <span>{config.label}</span>
         {"subAgentName" in config && (
-          <span className="ml-1.5 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-normal text-blue-500">
+          <span className="ml-1.5 rounded bg-blue-100 px-1 py-px text-[9px] font-normal text-blue-500">
             {config.subAgentName}
           </span>
         )}

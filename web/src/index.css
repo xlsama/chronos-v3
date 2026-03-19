@@ -186,7 +186,7 @@
     font-weight: 600;
     line-height: 1.4;
     margin-top: 0;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
   }
 
   h2 {
@@ -194,7 +194,7 @@
     font-weight: 600;
     line-height: 1.4;
     margin-top: 1rem;
-    margin-bottom: 0.375rem;
+    margin-bottom: 0.625rem;
   }
 
   h3 {
@@ -202,14 +202,14 @@
     font-weight: 600;
     line-height: 1.5;
     margin-top: 0.75rem;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
   }
 
   h4, h5, h6 {
     font-size: 0.8125rem;
     font-weight: 600;
     margin-top: 0.625rem;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
   }
 
   p { margin-top: 0.375rem; margin-bottom: 0.375rem; }
@@ -239,6 +239,25 @@
   h2 + *, h3 + *, h4 + * { margin-top: 0; }
 
   strong { font-weight: 600; }
+}
+
+/* prose-compact 下的 Streamdown 表格紧凑样式 */
+.prose-compact [data-streamdown="table"] {
+  font-size: 0.75rem;
+
+  & > div {
+    padding: 0.5rem;
+  }
+
+  & th {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  & td {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
 }
 
 /* 卡片内 Markdown 统一主题色 */
@@ -271,6 +290,12 @@
   --card-fg: theme(--color-red-700);
   --card-fg-emphasis: theme(--color-red-800);
   --card-code-bg: rgb(239 68 68 / 0.1);
+}
+
+/* mermaid 图表自适应 */
+[data-streamdown="mermaid"] svg {
+  width: 100%;
+  height: auto;
 }
 
 /* streamdown 表格字体大小覆盖 */

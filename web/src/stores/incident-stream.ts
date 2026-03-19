@@ -189,7 +189,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     let kbStatus: "idle" | "started" | "completed" | "failed" = "idle";
     let resolutionRequired = false;
     let resolutionResolved = false;
-    let lastResolutionConfirmIndex = -1;
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -218,14 +217,17 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       // confirm_resolution_required → track state
       if (event.event_type === "confirm_resolution_required") {
         resolutionRequired = true;
-        resolutionResolved = false;
-        lastResolutionConfirmIndex = i;
+        continue;
+      }
+
+      // resolution_confirmed → mark as resolved
+      if (event.event_type === "resolution_confirmed") {
+        resolutionResolved = true;
         continue;
       }
 
       if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_read") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
-        if (lastResolutionConfirmIndex >= 0 && event.event_type === "user_message") resolutionResolved = true;
         mainEvents.push(event);
         continue;
       }
@@ -259,11 +261,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       askQuestion = (askEvent.data.question as string) || null;
     }
 
-    // Also mark resolution as resolved if summary event exists (backend completed)
-    const hasDone = mainEvents.some((e) => e.event_type === "done");
-    if (hasDone && resolutionRequired) resolutionResolved = true;
-
     // Derive phase state from loaded events
+    const hasDone = mainEvents.some((e) => e.event_type === "done");
     const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
     const hasMain = mainEvents.some((e) => e.event_type !== "done" && e.event_type !== "ask_human" && e.event_type !== "answer");
 

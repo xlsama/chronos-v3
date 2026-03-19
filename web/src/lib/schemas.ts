@@ -222,6 +222,16 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
     data: z.object({}).passthrough(),
     ...baseSSEFields,
   }),
+  z.object({
+    event_type: z.literal("confirm_resolution_required"),
+    data: z.object({}).passthrough(),
+    ...baseSSEFields,
+  }),
+  z.object({
+    event_type: z.literal("resolution_confirmed"),
+    data: z.object({}).passthrough(),
+    ...baseSSEFields,
+  }),
 ]);
 
 export type SSEEventParsed = z.infer<typeof sseEventSchema>;

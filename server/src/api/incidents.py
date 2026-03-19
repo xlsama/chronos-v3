@@ -180,6 +180,8 @@ def _message_to_event(m: Message) -> dict:
         data = metadata  # {phase, agent, status}
     elif m.event_type == "confirm_resolution_required":
         data = metadata or {}
+    elif m.event_type == "resolution_confirmed":
+        data = {}
     else:
         data = {"content": m.content}
 
@@ -318,6 +320,38 @@ async def send_user_message(
 
     return message
 
+
+
+@router.post("/{incident_id}/confirm-resolution")
+async def confirm_resolution(
+    incident_id: uuid.UUID,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    incident = await session.get(Incident, incident_id)
+    if not incident:
+        raise NotFoundError("Incident not found")
+    if incident.status != "investigating":
+        raise BadRequestError("Incident is not in investigating state")
+
+    # Publish resolution_confirmed event (persist + SSE)
+    channel = EventPublisher.channel_for_incident(str(incident_id))
+    runner: AgentRunner = request.app.state.agent_runner
+    await runner.publisher.publish(channel, "resolution_confirmed", {})
+
+    # Resume agent with "confirmed" input
+    if incident.thread_id:
+        sid = str(incident.id)[:8]
+        logger.info(f"[{sid}] [api] Resolution confirmed, resuming agent")
+        background_tasks.add_task(
+            runner.resume_with_human_input,
+            thread_id=incident.thread_id,
+            incident_id=str(incident.id),
+            human_input="confirmed",
+        )
+
+    return {"status": "ok"}
 
 
 @router.post("/{incident_id}/stop", response_model=IncidentResponse)

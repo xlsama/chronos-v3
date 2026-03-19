@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Wrench, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ShellCodeBlock } from "@/components/ui/shell-code-block";
+import { Markdown } from "@/components/ui/markdown";
 
 interface ToolCallCardProps {
   name: string;
@@ -77,12 +78,12 @@ export function ToolCallCard({
 
           {/* Result */}
           {output && (
-            <pre
-              className="max-h-60 overflow-auto whitespace-pre-wrap rounded border-l-2 border-green-400 bg-background p-2 text-xs"
+            <div
+              className="max-h-60 overflow-auto rounded border-l-2 border-green-400 bg-background p-2 text-xs"
               data-testid="tool-output"
             >
-              {output}
-            </pre>
+              <Markdown content={output} variant="compact" />
+            </div>
           )}
         </div>
       )}

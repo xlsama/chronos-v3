@@ -25,6 +25,7 @@ _EVENT_ROLE = {
     "error": "system",
     "incident_stopped": "system",
     "confirm_resolution_required": "system",
+    "resolution_confirmed": "system",
 }
 
 
@@ -183,6 +184,8 @@ class EventPublisher:
             return data.get("reason", "")
         if event_type == "confirm_resolution_required":
             return ""
+        if event_type == "resolution_confirmed":
+            return ""
         return ""
 
     @staticmethod
@@ -248,6 +251,8 @@ class EventPublisher:
                 "decided_by": data.get("decided_by", ""),
             }
         if event_type == "confirm_resolution_required":
+            return None
+        if event_type == "resolution_confirmed":
             return None
         return None
 
