@@ -108,7 +108,7 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
           )}
           {output && (
             <div className="max-h-40 overflow-auto rounded border-l-2 border-green-400 bg-background p-1.5 pl-3 text-xs shadow-sm">
-              <Markdown content={output} variant="compact" />
+              <Markdown content={output} variant="tiny" />
             </div>
           )}
         </div>
@@ -276,7 +276,7 @@ export function SubAgentCard({
             if (item.type === "thinking") {
               return (
                 <div key={i} className="text-xs opacity-80">
-                  <Markdown content={item.event.data.content as string} variant="compact" />
+                  <Markdown content={item.event.data.content as string} variant="tiny" />
                 </div>
               );
             }
@@ -285,7 +285,7 @@ export function SubAgentCard({
 
           {status === "started" && streamingContent && (
             <div className="text-xs opacity-80">
-              <Markdown content={streamingContent} streaming variant="compact" />
+              <Markdown content={streamingContent} streaming variant="tiny" />
             </div>
           )}
         </div>

@@ -15,7 +15,7 @@ interface MarkdownProps {
   content: string;
   streaming?: boolean;
   className?: string;
-  variant?: "default" | "compact";
+  variant?: "default" | "compact" | "tiny";
 }
 
 export function Markdown({
@@ -28,7 +28,7 @@ export function Markdown({
     <Streamdown
       className={cn(
         "streamdown-markdown",
-        variant === "compact" ? "prose-compact" : "prose-default",
+        variant === "compact" ? "prose-compact" : variant === "tiny" ? "prose-tiny" : "prose-default",
         className,
       )}
       mode={streaming ? "streaming" : "static"}
