@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { getServers } from "@/api/servers";
 import { getServices } from "@/api/services";
+import { listVariants, listItemVariants } from "@/lib/motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Empty,
@@ -84,14 +86,18 @@ export function ConnectionList() {
   }
 
   return (
-    <div>
+    <motion.div variants={listVariants} initial="initial" animate="animate">
       {items.map((item) =>
         item.type === "server" ? (
-          <ServerItem key={item.data.id} server={item.data} />
+          <motion.div key={item.data.id} variants={listItemVariants}>
+            <ServerItem server={item.data} />
+          </motion.div>
         ) : (
-          <ServiceItem key={item.data.id} service={item.data} />
+          <motion.div key={item.data.id} variants={listItemVariants}>
+            <ServiceItem service={item.data} />
+          </motion.div>
         ),
       )}
-    </div>
+    </motion.div>
   );
 }

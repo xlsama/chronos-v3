@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { AlertCircle, ChevronLeft, ChevronRight, FileText, Square } from "lucide-react";
+import { listVariants, listItemVariants } from "@/lib/motion";
 import dayjs from "@/lib/dayjs";
 import { getIncidents, stopIncident } from "@/api/incidents";
 import { getAttachmentUrl } from "@/api/attachments";
@@ -91,13 +92,11 @@ export function IncidentList() {
 
   return (
     <>
-      <div className="divide-y">
-        {incidents.map((incident, i) => (
+      <motion.div className="divide-y" variants={listVariants} initial="initial" animate="animate">
+        {incidents.map((incident) => (
           <motion.div
             key={incident.id}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: i * 0.05 }}
+            variants={listItemVariants}
           >
             <Link
               to="/incidents/$incidentId"
@@ -169,7 +168,7 @@ export function IncidentList() {
             </Link>
           </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       {/* Pagination */}
       {totalPages > 1 && (

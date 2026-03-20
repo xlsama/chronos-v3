@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, EllipsisVertical, KeyRound, Pencil, Server, Trash2, Wifi, WifiOff } from "lucide-react";
+import { listVariants, listItemVariants } from "@/lib/motion";
 import {
   deleteServer,
   getServers,
@@ -219,9 +221,13 @@ export function ServerList() {
 
   return (
     <div>
-      {servers.map((server) => (
-        <ServerItem key={server.id} server={server} />
-      ))}
+      <motion.div variants={listVariants} initial="initial" animate="animate">
+        {servers.map((server) => (
+          <motion.div key={server.id} variants={listItemVariants}>
+            <ServerItem server={server} />
+          </motion.div>
+        ))}
+      </motion.div>
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t px-4 py-3">

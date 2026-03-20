@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ServerList } from "@/components/servers/server-list";
 import { ServiceList } from "@/components/connections/service-list";
 import { ConnectionList } from "@/components/connections/connection-list";
 import { AddConnectionDialog } from "@/components/connections/add-connection-dialog";
 import { Database, Server } from "lucide-react";
+import { pageVariants, pageTransition } from "@/lib/motion";
 
 export const Route = createFileRoute("/connections/")({
   component: ConnectionsPage,
@@ -12,7 +14,13 @@ export const Route = createFileRoute("/connections/")({
 
 function ConnectionsPage() {
   return (
-    <div className="flex h-full flex-col">
+    <motion.div
+      className="flex h-full flex-col"
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      transition={pageTransition}
+    >
       <Tabs defaultValue="all" className="flex flex-1 flex-col">
         <div className="flex items-center justify-between border-b px-6 py-4">
           <TabsList>
@@ -38,6 +46,6 @@ function ConnectionsPage() {
           <ServiceList />
         </TabsContent>
       </Tabs>
-    </div>
+    </motion.div>
   );
 }

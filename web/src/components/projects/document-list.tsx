@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { toast } from "sonner";
 import { FileText, Trash2 } from "lucide-react";
+import { listVariants, listItemVariants } from "@/lib/motion";
 import dayjs from "@/lib/dayjs";
 import { deleteDocument, getDocuments } from "@/api/documents";
 import { CreateDocumentButton, UploadDocumentButton } from "./document-upload";
@@ -125,10 +127,11 @@ export function DocumentList({ projectId }: DocumentListProps) {
 
   return (
     <>
-      <div className="divide-y rounded-lg border">
+      <motion.div className="divide-y rounded-lg border" variants={listVariants} initial="initial" animate="animate">
         {sortedDocuments.map((doc) => (
-          <div
+          <motion.div
             key={doc.id}
+            variants={listItemVariants}
             className="flex cursor-pointer items-center gap-3 p-3 hover:bg-muted/50"
             onClick={() =>
               navigate({
@@ -183,9 +186,9 @@ export function DocumentList({ projectId }: DocumentListProps) {
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             )}
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}

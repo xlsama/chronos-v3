@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -46,6 +47,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ServiceForm } from "./service-form";
+import { listVariants, listItemVariants } from "@/lib/motion";
 
 const statusBadgeColors: Record<string, string> = {
   online: "bg-green-100 text-green-800 border-transparent",
@@ -241,9 +243,13 @@ export function ServiceList() {
 
   return (
     <div>
-      {services.map((service) => (
-        <ServiceItem key={service.id} service={service} />
-      ))}
+      <motion.div variants={listVariants} initial="initial" animate="animate">
+        {services.map((service) => (
+          <motion.div key={service.id} variants={listItemVariants}>
+            <ServiceItem service={service} />
+          </motion.div>
+        ))}
+      </motion.div>
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t px-4 py-3">
           <span className="text-sm text-muted-foreground">共 {total} 个</span>

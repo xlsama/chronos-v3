@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Copy, EllipsisVertical, FolderOpen, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
@@ -39,6 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { listVariants, cardItemVariants } from "@/lib/motion";
 
 const GRADIENTS = [
   "from-violet-500 to-purple-600",
@@ -216,11 +218,13 @@ export function ProjectList() {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <motion.div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" variants={listVariants} initial="initial" animate="animate">
         {projects.map((project) => (
-          <ProjectCard key={project.id} project={project} />
+          <motion.div key={project.id} variants={cardItemVariants}>
+            <ProjectCard project={project} />
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-6 py-3">

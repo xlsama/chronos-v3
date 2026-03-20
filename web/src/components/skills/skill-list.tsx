@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { toast } from "sonner";
 import { EllipsisVertical, Sparkles, Trash2 } from "lucide-react";
+import { listVariants, listItemVariants } from "@/lib/motion";
 import dayjs from "@/lib/dayjs";
 import { deleteSkill, getSkills } from "@/api/skills";
 import type { Skill } from "@/lib/types";
@@ -161,14 +163,15 @@ export function SkillList() {
   }
 
   return (
-    <div>
+    <motion.div variants={listVariants} initial="initial" animate="animate">
       {skills.map((skill) => (
-        <SkillItem
-          key={skill.slug}
-          skill={skill}
-          onSelect={() => navigate({ to: "/skills/$slug", params: { slug: skill.slug } })}
-        />
+        <motion.div key={skill.slug} variants={listItemVariants}>
+          <SkillItem
+            skill={skill}
+            onSelect={() => navigate({ to: "/skills/$slug", params: { slug: skill.slug } })}
+          />
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 }
