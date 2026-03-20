@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -8,6 +9,12 @@ export default defineConfig({
   devtools: false,
   resolve: {
     tsconfigPaths: true,
+    alias: [
+      {
+        find: /^shiki$/,
+        replacement: path.resolve(import.meta.dirname, "src/lib/shiki-bundle.ts"),
+      },
+    ],
   },
   server: {
     proxy: {
