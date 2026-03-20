@@ -220,12 +220,14 @@ class EventPublisher:
             return {
                 "name": data.get("name", ""),
                 "args": data.get("args", {}),
+                "tool_call_id": data.get("tool_call_id", ""),
                 "phase": data.get("phase", ""),
                 "agent": data.get("agent", ""),
             }
         if event_type == "tool_result":
             meta = {
                 "name": data.get("name", ""),
+                "tool_call_id": data.get("tool_call_id", ""),
                 "phase": data.get("phase", ""),
                 "agent": data.get("agent", ""),
             }

@@ -262,7 +262,7 @@ export function SubAgentCard({
           })}
 
           {status === "started" && streamingContent && (
-            <div className="text-xs opacity-80 animate-pulse">
+            <div className="text-xs opacity-80">
               <Markdown content={streamingContent} streaming variant="compact" />
             </div>
           )}

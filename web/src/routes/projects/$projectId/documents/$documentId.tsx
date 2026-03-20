@@ -224,7 +224,7 @@ function DocumentDetailPage() {
           )}
         </div>
       </div>
-      <div className="min-h-0 flex-1 p-4">
+      <div className="min-h-0 flex-1">
         <QueryContent
           isLoading={isLoading}
           data={doc}

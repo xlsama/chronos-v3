@@ -1,6 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { motion } from "motion/react";
 import { ShieldAlert, AlertTriangle } from "lucide-react";
 import { decideApproval } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
@@ -50,7 +49,7 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
   const isHigh = riskLevel === "HIGH";
 
   return (
-    <motion.div
+    <div
       className={cn(
         "rounded-lg border-2 p-4",
         isHigh
@@ -59,9 +58,6 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
       )}
       data-testid="approval-card"
       data-approval-id={approvalId}
-      initial={{ scale: 0.95, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
       <div
         className={cn(
@@ -154,6 +150,6 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
           </span>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

@@ -1,7 +1,15 @@
 import { Streamdown } from "streamdown";
+import type { AnimateOptions } from "streamdown";
 import { code } from "@streamdown/code";
 import { mermaid } from "@streamdown/mermaid";
 import { cn } from "@/lib/utils";
+
+const DEFAULT_ANIMATION: AnimateOptions = {
+  animation: "blurIn",
+  duration: 200,
+  easing: "ease-out",
+  sep: "word",
+};
 
 interface MarkdownProps {
   content: string;
@@ -24,6 +32,9 @@ export function Markdown({
         className,
       )}
       mode={streaming ? "streaming" : "static"}
+      animated={DEFAULT_ANIMATION}
+      isAnimating={!!streaming}
+      caret={streaming ? "block" : undefined}
       plugins={{ code, mermaid }}
       shikiTheme={["github-light", "github-dark"]}
       controls={{ code: { copy: true, download: false } }}

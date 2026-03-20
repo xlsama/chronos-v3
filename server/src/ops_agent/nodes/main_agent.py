@@ -222,7 +222,10 @@ def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> A
     if not unknown_tools:
         return response
 
-    get_logger(component="main").warning("LLM returned unknown tool(s), stripping invalid calls", tools=unknown_tools)
+    get_logger(component="main").warning("LLM returned unknown tool(s), stripping invalid calls",
+                                         tools=unknown_tools,
+                                         stripped_count=len(unknown_tools),
+                                         kept_count=len(tool_calls) - len(unknown_tools))
     return AIMessage(content=response.content or "")
 
 
@@ -269,8 +272,11 @@ async def main_agent_node(state: OpsState) -> dict:
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
 
     tool_names = [t.name for t in tools]
+    retry_count = state.get("tool_call_retry_count", 0)
     log.info(
         "main_agent_node invoked",
+        is_retry=retry_count > 0,
+        retry_count=retry_count,
         history="yes" if history_summary else "no",
         kb="yes" if kb_summary else "no",
         messages=len(messages),
@@ -292,6 +298,10 @@ async def main_agent_node(state: OpsState) -> dict:
         log.info("LLM tool_call", name=tc["name"], args=tc.get("args", {}))
 
     safe_response = _sanitize_llm_response(response, set(tool_names))
+    if safe_response is not response:
+        log.info("Sanitized LLM response: stripped invalid tool_calls",
+                 original_tool_calls=len(tool_calls),
+                 content_len=len(safe_response.content or ""))
     return {"messages": [safe_response]}
 
 
@@ -319,6 +329,10 @@ async def route_decision(state: OpsState) -> str:
     valid_tool_names = {tool.name for tool in build_tools()}
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+        content_preview = ""
+        if hasattr(last_message, "content") and last_message.content:
+            content_preview = last_message.content[:200]
+
         if state.get("ask_human_count", 0) >= 5:
             log.warning("ask_human count exceeded limit, forcing complete")
             return "complete"
@@ -326,10 +340,10 @@ async def route_decision(state: OpsState) -> str:
         max_retries = get_settings().tool_call_max_retries
         retry_count = state.get("tool_call_retry_count", 0)
         if retry_count >= max_retries:
-            log.info("route_decision: no tool_calls after retries -> ask_human (fallback)", retries=retry_count)
+            log.info("route_decision: no tool_calls after retries -> ask_human (fallback)", retries=retry_count, content_preview=content_preview)
             return "ask_human"
 
-        log.info("route_decision: no tool_calls -> retry_tool_call", attempt=f"{retry_count + 1}/{max_retries}")
+        log.info("route_decision: no tool_calls -> retry_tool_call", attempt=f"{retry_count + 1}/{max_retries}", content_preview=content_preview)
         return "retry_tool_call"
 
     for tool_call in last_message.tool_calls:

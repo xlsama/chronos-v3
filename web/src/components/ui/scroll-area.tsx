@@ -12,7 +12,7 @@ function ScrollToTopButton({
   return (
     <button
       type="button"
-      className="absolute bottom-4 right-4 z-10 rounded-full border bg-background p-2 shadow-md
+      className="absolute bottom-12 right-6 z-10 rounded-full border bg-background p-2 shadow-md
         transition-all duration-200 opacity-0 scale-90 pointer-events-none hover:bg-accent
         group-data-[overflow-y-start]/scroll:opacity-100
         group-data-[overflow-y-start]/scroll:scale-100

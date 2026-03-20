@@ -195,7 +195,11 @@ class AgentRunner:
         state = await self.graph.aget_state(config)
         vals = state.values
 
-        log.info("Post-run", next_nodes=state.next, is_complete=vals.get("is_complete"))
+        log.info("Post-run",
+                 next_nodes=state.next,
+                 is_complete=vals.get("is_complete"),
+                 tool_call_retry_count=vals.get("tool_call_retry_count", 0),
+                 ask_human_count=vals.get("ask_human_count", 0))
 
         if "human_approval" in (state.next or ()):
             pending = self._extract_pending_tool_call(vals)

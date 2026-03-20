@@ -64,8 +64,12 @@ export function ServerItem({ server }: { server: ServerType }) {
 
   const testMutation = useMutation({
     mutationFn: testServer,
-    onSuccess: () => {
-      toast.success("连接测试完成");
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success("连接测试成功");
+      } else {
+        toast.error("连接测试失败", { description: data.message });
+      }
       queryClient.invalidateQueries({ queryKey: ["servers"] });
     },
   });

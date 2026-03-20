@@ -23,9 +23,13 @@ async def ask_human_node(state: OpsState) -> dict:
         for tc in last_msg.tool_calls:
             if tc["name"] == "ask_human":
                 question = tc["args"].get("question", "")
-                log.info("Interrupt (explicit)", question=question[:100])
+                log.info("Interrupt (explicit ask_human tool call)",
+                         question=question[:200],
+                         ask_human_count=current_count + 1,
+                         tool_call_retry_count=state.get("tool_call_retry_count", 0))
                 user_response = interrupt({"question": question})
                 log.info("Resume", response_len=len(str(user_response)))
+                log.info("Resetting tool_call_retry_count", from_count=state.get("tool_call_retry_count", 0))
                 return {
                     "messages": [ToolMessage(content=str(user_response), tool_call_id=tc["id"])],
                     "ask_human_count": current_count + 1,
@@ -34,9 +38,14 @@ async def ask_human_node(state: OpsState) -> dict:
 
     # Case 2: plain text response (no tool calls) — fallback after retry exhausted
     question = last_msg.content if hasattr(last_msg, "content") and last_msg.content else "请补充更多信息以便继续排查。"
-    log.info("Interrupt (fallback)", question=question[:100])
+    retry_count = state.get("tool_call_retry_count", 0)
+    log.info("Interrupt (fallback after retry exhaustion)",
+             question=question[:200],
+             ask_human_count=current_count + 1,
+             tool_call_retry_count=retry_count)
     user_response = interrupt({"question": question})
     log.info("Resume", response_len=len(str(user_response)))
+    log.info("Resetting tool_call_retry_count", from_count=state.get("tool_call_retry_count", 0))
     return {
         "messages": [HumanMessage(content=str(user_response))],
         "ask_human_count": current_count + 1,

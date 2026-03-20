@@ -33,6 +33,7 @@ dependencies = [
     "websockets>=14.0",
     "aiomysql>=0.2.0",
     "motor>=3.6.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]

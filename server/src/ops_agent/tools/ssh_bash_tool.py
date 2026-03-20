@@ -29,10 +29,6 @@ async def invalidate_connector(server_id: str) -> None:
         _connector_registry.pop(server_id, None)
 
 
-def register_connector(server_id: str, connector: SSHConnector):
-    _connector_registry[server_id] = (connector, time.monotonic())
-
-
 async def get_connector(server_id: str) -> SSHConnector:
     async with _registry_lock:
         _evict_expired()

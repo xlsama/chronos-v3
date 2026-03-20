@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
 import { getServices } from "@/api/services";
 import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
+import { timelineItemVariants } from "@/lib/motion";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 import { PhaseSection } from "./phase-section";
@@ -35,11 +36,6 @@ type TimelineItem =
   | { type: "skill_read"; event: SSEEvent }
   | { type: "answer"; event: SSEEvent };
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-  exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
-};
 
 function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   const items: TimelineItem[] = [];
@@ -150,9 +146,9 @@ function LiveThinkingSection() {
       {thinkingContent && (
         <motion.div
           key="live-thinking"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
           <ThinkingBubble content={thinkingContent} isStreaming />
@@ -169,9 +165,9 @@ function LiveAskHumanSection() {
       {askHumanStreamContent && (
         <motion.div
           key="live-ask-human"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
           <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
@@ -201,9 +197,9 @@ function LiveAnswerSection() {
       {answerContent && (
         <motion.div
           key="live-answer"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
         >
           <AnswerCard content={answerContent} isStreaming />
@@ -436,7 +432,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                 switch (item.type) {
                   case "thinking":
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <ThinkingBubble content={item.event.data.content as string} />
                       </motion.div>
                     );
@@ -459,7 +455,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                       ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
                       : undefined;
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <ToolCallCard
                           name={toolName}
                           args={toolArgs}
@@ -474,7 +470,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                   }
                   case "approval_required":
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <ApprovalCard
                           toolCall={item.event.data.tool_args as Record<string, unknown>}
                           approvalId={item.event.data.approval_id as string}
@@ -483,7 +479,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                     );
                   case "ask_human":
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
                           <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                           <div>
@@ -501,7 +497,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                     );
                   case "user_message":
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <UserMessageBubble
                           content={item.event.data.content as string}
                           attachments={item.event.data.attachments as { filename: string; content_type: string; size: number; preview_url: string | null }[]}
@@ -513,7 +509,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
 
                   case "error":
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <div className="rounded-md border border-destructive bg-destructive/10 p-3">
                           <Markdown
                             content={formatErrorMessage(item.event.data.message as string)}
@@ -525,7 +521,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                     );
                   case "incident_stopped":
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
                           <Square className="h-5 w-5 shrink-0 text-gray-500" />
                           <p className="text-sm text-gray-600">事件已被手动停止</p>
@@ -536,14 +532,14 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                     const skillName = (item.event.data.skill_name as string) || (item.event.data.skill_slug as string);
                     const skillContent = item.event.data.content as string;
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <SkillReadCard skillName={skillName} skillContent={skillContent} />
                       </motion.div>
                     );
                   }
                   case "answer":
                     return (
-                      <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
+                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <AnswerCard content={item.event.data.content as string} />
                       </motion.div>
                     );

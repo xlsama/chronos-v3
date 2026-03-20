@@ -130,7 +130,7 @@ function IncidentDetailPage() {
               {incident.summary_title || incident.description.slice(0, 30) + (incident.description.length > 30 ? "..." : "")}
             </h1>
             <Popover>
-              <PopoverTrigger asChild>
+              <PopoverTrigger openOnHover delay={0} asChild>
                 <Button variant="ghost" size="icon-sm">
                   <Info className="h-4 w-4 text-muted-foreground" />
                 </Button>

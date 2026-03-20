@@ -85,7 +85,11 @@ export function ServiceItem({ service }: { service: Service }) {
   const testMutation = useMutation({
     mutationFn: testService,
     onSuccess: (data) => {
-      toast.success(data.message);
+      if (data.success) {
+        toast.success("连接测试成功");
+      } else {
+        toast.error("连接测试失败", { description: data.message });
+      }
       queryClient.invalidateQueries({ queryKey: ["services"] });
     },
   });

@@ -31,3 +31,12 @@ export const contentFadeVariants = {
   exit: { opacity: 0 },
 }
 export const contentFadeTransition = { duration: 0.15 }
+
+// 时间轴卡片入场动画（SSE 流式逐条出现）
+export const timelineItemVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { duration: 0.2 },
+  },
+}

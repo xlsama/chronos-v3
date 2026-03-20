@@ -28,7 +28,7 @@ function SkillsPage() {
           创建技能
         </Button>
       </div>
-      <div className="flex flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <SkillList />
       </div>
       <SkillDialog

@@ -1,5 +1,6 @@
 from langchain_core.messages import HumanMessage
 
+from src.env import get_settings
 from src.lib.logger import get_logger
 from src.ops_agent.state import OpsState
 
@@ -19,8 +20,20 @@ async def retry_tool_call_node(state: OpsState) -> dict:
     """LLM 未调用工具时，注入提示让其重试。"""
     sid = state["incident_id"][:8]
     current_count = state.get("tool_call_retry_count", 0)
+    max_retries = get_settings().tool_call_max_retries
     logger = get_logger(component="retry", sid=sid)
-    logger.info("Retry tool call", attempt=current_count + 1)
+
+    last_msg = state["messages"][-1]
+    content_preview = ""
+    if hasattr(last_msg, "content") and last_msg.content:
+        content_preview = last_msg.content[:200]
+
+    logger.info(
+        "Retry tool call",
+        attempt=current_count + 1,
+        max_retries=max_retries,
+        last_msg_content_preview=content_preview,
+    )
     return {
         "messages": [HumanMessage(content=RETRY_MESSAGE)],
         "tool_call_retry_count": current_count + 1,
