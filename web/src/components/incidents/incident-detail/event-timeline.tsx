@@ -372,45 +372,41 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
           status={phaseState.contextGathering}
           icon={Search}
           contentClassName={cn(
-            shouldUseFixedContextLayout &&
-              // Fixed panel height keeps the sub-agent area stable within the detail view
-              // while accounting for the page header, timeline padding and input bar.
-              "h-[calc(100dvh-20rem)] min-h-[18rem] overflow-hidden md:h-[calc(100dvh-18rem)]",
+            shouldUseFixedContextLayout && [
+              "overflow-hidden",
+              "has-[[data-expanded]]:h-[calc(100dvh-20rem)]",
+              "has-[[data-expanded]]:min-h-[18rem]",
+              "has-[[data-expanded]]:md:h-[calc(100dvh-18rem)]",
+            ],
           )}
         >
           <div
             className={cn(
               "min-h-0",
               shouldUseFixedContextLayout
-                ? hasBothContextCards
-                  ? "grid h-full grid-rows-2 gap-3"
-                  : "flex h-full flex-col"
+                ? "flex flex-col gap-3 has-[[data-expanded]]:h-full"
                 : "space-y-3",
             )}
             data-testid="context-subagent-layout"
           >
             {hasHistory && (
               <SubAgentCard
-                className={cn(
-                  shouldUseFixedContextLayout && "h-full min-h-0 overflow-hidden",
-                )}
                 agentName="history"
                 events={historyAgentState.events}
                 status={historyAgentState.status}
                 streamingContent={historyAgentState.thinkingContent}
                 forceExpanded={phaseState.contextGathering === "active"}
+                fixedLayout={shouldUseFixedContextLayout}
               />
             )}
             {hasKB && (
               <SubAgentCard
-                className={cn(
-                  shouldUseFixedContextLayout && "h-full min-h-0 overflow-hidden",
-                )}
                 agentName="kb"
                 events={kbAgentState.events}
                 status={kbAgentState.status}
                 streamingContent={kbAgentState.thinkingContent}
                 forceExpanded={phaseState.contextGathering === "active"}
+                fixedLayout={shouldUseFixedContextLayout}
               />
             )}
           </div>

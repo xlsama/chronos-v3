@@ -11,6 +11,6 @@ class OpsState(MessagesState):
     approval_decision: str | None
     incident_history_summary: str | None
     kb_summary: str | None
-    kb_project_id: str | None
+    kb_project_ids: list[str]
     ask_human_count: int
     tool_call_retry_count: int

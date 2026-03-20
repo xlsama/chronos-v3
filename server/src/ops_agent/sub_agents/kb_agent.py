@@ -13,6 +13,7 @@ from src.ops_agent.prompts.kb_agent import KB_AGENT_SYSTEM_PROMPT
 from src.env import get_settings
 from src.lib.logger import get_logger
 from src.ops_agent.tools.knowledge_tools import (
+    get_agents_md as _get_agents_md,
     list_projects_for_matching as _list_projects,
     search_knowledge_base as _search_knowledge_base,
 )
@@ -20,17 +21,21 @@ from src.ops_agent.tools.knowledge_tools import (
 EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
 
 
-class KBAgentOutput(BaseModel):
-    project_id: str = Field(default="", description="匹配项目的 UUID")
+class KBProjectInfo(BaseModel):
+    project_id: str = Field(default="", description="项目 UUID")
     project_name: str = Field(default="", description="项目名称")
+    project_description: str = Field(default="", description="项目描述")
     agents_md_content: str = Field(default="", description="AGENTS.md 完整原文")
-    business_context: str = Field(default="", description="从知识库检索到的业务信息")
     agents_md_empty: bool = Field(default=False, description="AGENTS.md 是否为空")
-    no_match: bool = Field(default=False, description="是否未匹配到任何项目")
+    business_context: str = Field(default="", description="该项目下检索到的相关文档片段")
+
+
+class KBAgentOutput(BaseModel):
+    projects: list[KBProjectInfo] = Field(default_factory=list, description="匹配到的项目列表")
 
 
 def _build_tools():
-    """Build tools for KB agent (discover mode only)."""
+    """Build tools for KB agent."""
     _last_sources: list[dict] = []
 
     @tool
@@ -39,41 +44,100 @@ def _build_tools():
         return await _list_projects()
 
     @tool
-    async def search_knowledge_base(query: str, project_id: str) -> str:
-        """Search a specific project's knowledge base. Must call list_projects first to get valid project IDs.
+    async def search_knowledge_base(query: str) -> str:
+        """Search across all projects' knowledge base. Returns results grouped by project with project metadata.
 
         Args:
             query: The search query.
-            project_id: The project UUID to search within.
         """
-        text, sources = await _search_knowledge_base(query=query, project_id=project_id)
+        text, sources = await _search_knowledge_base(query=query)
         _last_sources.clear()
         _last_sources.extend(sources)
         return text
 
-    return [list_projects, search_knowledge_base], _last_sources
+    @tool
+    async def get_agents_md(project_ids: list[str]) -> str:
+        """Batch read AGENTS.md for multiple projects.
+
+        Args:
+            project_ids: List of project UUIDs to read AGENTS.md from.
+        """
+        return await _get_agents_md(project_ids=project_ids)
+
+    return [list_projects, search_knowledge_base, get_agents_md], _last_sources
 
 
-def _extract_agents_md_section(search_result: str) -> str:
-    match = re.search(
-        r"### AGENTS\.md\n(.*?)(?:\n\n---\n\n### |$)",
-        search_result,
-        re.DOTALL,
-    )
-    if match:
-        return match.group(1).strip()
-    return ""
+def _parse_search_results_by_project(search_result: str) -> dict[str, dict]:
+    """Parse search results into per-project info.
+
+    Returns dict: project_id -> {"project_name": ..., "project_description": ..., "business_context": ...}
+    """
+    result: dict[str, dict] = {}
+    # Split by project sections: ## 项目: xxx (ID: uuid)
+    parts = re.split(r'\n*---\n*', search_result)
+    for part in parts:
+        match = re.match(
+            r'## 项目:\s*(.+?)\s*\(ID:\s*([0-9a-f-]+)\)',
+            part.strip(),
+        )
+        if not match:
+            continue
+        project_name = match.group(1)
+        project_id = match.group(2)
+
+        # Extract description if present
+        desc_match = re.search(r'^描述:\s*(.+)$', part, re.MULTILINE)
+        project_description = desc_match.group(1).strip() if desc_match else ""
+
+        # The rest after header/description is the business context (chunk content)
+        # Remove the header line and description line
+        lines = part.strip().split('\n')
+        context_lines = []
+        skip_header = True
+        for line in lines:
+            if skip_header:
+                if line.startswith('## 项目:') or line.startswith('描述:'):
+                    continue
+                skip_header = False
+            context_lines.append(line)
+        business_context = '\n'.join(context_lines).strip()
+
+        result[project_id] = {
+            "project_name": project_name,
+            "project_description": project_description,
+            "business_context": business_context,
+        }
+    return result
 
 
-def _extract_business_context(search_result: str) -> str:
-    match = re.search(
-        r"### 相关文档\n\n(.*?)$",
-        search_result,
-        re.DOTALL,
-    )
-    if match:
-        return match.group(1).strip()
-    return ""
+def _parse_agents_md_result(agents_md_text: str) -> dict[str, dict]:
+    """Parse get_agents_md result into per-project info.
+
+    Returns dict: project_id -> {"project_name": ..., "agents_md_content": ..., "agents_md_empty": bool}
+    """
+    result: dict[str, dict] = {}
+    parts = re.split(r'\n*---\n*', agents_md_text)
+    for part in parts:
+        match = re.match(
+            r'## 项目:\s*(.+?)\s*\(ID:\s*([0-9a-f-]+)\)',
+            part.strip(),
+        )
+        if not match:
+            continue
+        project_name = match.group(1)
+        project_id = match.group(2)
+
+        # Extract AGENTS.md content (after ### AGENTS.md header)
+        md_match = re.search(r'### AGENTS\.md\n(.*)', part, re.DOTALL)
+        agents_md_content = md_match.group(1).strip() if md_match else ""
+        agents_md_empty = not agents_md_content or "[空" in agents_md_content
+
+        result[project_id] = {
+            "project_name": project_name,
+            "agents_md_content": agents_md_content,
+            "agents_md_empty": agents_md_empty,
+        }
+    return result
 
 
 async def run_kb_agent(
@@ -82,7 +146,7 @@ async def run_kb_agent(
 ) -> KBAgentOutput:
     """Run the KB sub agent to search project knowledge base.
 
-    Returns structured KBAgentOutput with project info and knowledge base content.
+    Returns structured KBAgentOutput with multi-project info and knowledge base content.
     """
     log = get_logger(component="kb_agent")
     s = get_settings()
@@ -96,16 +160,16 @@ async def run_kb_agent(
     tools, kb_sources = _build_tools()
     llm_with_tools = llm.bind_tools(tools)
 
-    log.info("Started", description=description[:50])
+    log.info("Started", description_len=len(description))
+    log.debug("Started", description=description)
 
     messages = [
         SystemMessage(content=KB_AGENT_SYSTEM_PROMPT),
         HumanMessage(content=f"当前事件描述: {description}"),
     ]
 
-    projects_json: list[dict] = []
-    last_search_project_id: str = ""
-    last_search_result: str = ""
+    agents_md_results: dict[str, dict] = {}  # project_id -> parsed agents_md info
+    search_results_by_project: dict[str, dict] = {}  # project_id -> parsed search info
 
     max_iterations = 10
     for i in range(max_iterations):
@@ -156,15 +220,47 @@ async def run_kb_agent(
                 event_data["sources"] = list(kb_sources)
             await event_callback("tool_result", event_data)
 
-            if tool_name == "list_projects":
-                try:
-                    projects_json = orjson.loads(result_str)
-                except (orjson.JSONDecodeError, TypeError):
-                    projects_json = []
+            if tool_name == "search_knowledge_base":
+                search_results_by_project = _parse_search_results_by_project(result_str)
+                iter_log.info(
+                    "search_knowledge_base parsed",
+                    project_count=len(search_results_by_project),
+                    projects=[
+                        {
+                            "project_id": pid,
+                            "project_name": info.get("project_name"),
+                            "business_context_len": len(info.get("business_context", "")),
+                        }
+                        for pid, info in search_results_by_project.items()
+                    ],
+                )
 
-            elif tool_name == "search_knowledge_base":
-                last_search_project_id = tc["args"].get("project_id", "")
-                last_search_result = result_str
+            elif tool_name == "list_projects":
+                try:
+                    parsed_projects = orjson.loads(result_str)
+                    iter_log.info(
+                        "list_projects parsed",
+                        project_count=len(parsed_projects),
+                        project_names=[p.get("project_name") for p in parsed_projects],
+                    )
+                except Exception:
+                    iter_log.info("list_projects result (non-JSON)", chars=len(result_str))
+
+            elif tool_name == "get_agents_md":
+                agents_md_results = _parse_agents_md_result(result_str)
+                iter_log.info(
+                    "get_agents_md parsed",
+                    project_count=len(agents_md_results),
+                    projects=[
+                        {
+                            "project_id": pid,
+                            "project_name": info.get("project_name"),
+                            "agents_md_len": len(info.get("agents_md_content", "")),
+                            "agents_md_empty": info.get("agents_md_empty"),
+                        }
+                        for pid, info in agents_md_results.items()
+                    ],
+                )
 
             messages.append(ToolMessage(content=result_str, tool_call_id=tc["id"]))
     else:
@@ -175,23 +271,46 @@ async def run_kb_agent(
                 await event_callback("thinking", {"content": chunk.content})
         await event_callback("thinking_done", {})
 
-    project_info = next(
-        (p for p in projects_json if p.get("project_id") == last_search_project_id),
-        {},
-    )
-    agents_md_content = _extract_agents_md_section(last_search_result)
-    business_context = _extract_business_context(last_search_result)
+    # Build output: merge search results and agents_md results
+    all_project_ids = set(search_results_by_project.keys()) | set(agents_md_results.keys())
+    project_infos: list[KBProjectInfo] = []
 
-    output = KBAgentOutput(
-        project_id=last_search_project_id,
-        project_name=project_info.get("project_name", ""),
-        agents_md_content=agents_md_content,
-        business_context=business_context,
-        agents_md_empty=not agents_md_content.strip() or "[空" in agents_md_content,
-        no_match=not last_search_project_id,
-    )
+    for pid in all_project_ids:
+        search_info = search_results_by_project.get(pid, {})
+        agents_info = agents_md_results.get(pid, {})
 
-    log.info("Completed", project_id=output.project_id, project_name=output.project_name,
-             agents_md_empty=output.agents_md_empty, no_match=output.no_match)
+        project_name = agents_info.get("project_name") or search_info.get("project_name", "")
+        agents_md_content = agents_info.get("agents_md_content", "")
+        agents_md_empty = agents_info.get("agents_md_empty", True)
+        business_context = search_info.get("business_context", "")
+        project_description = search_info.get("project_description", "")
+
+        project_infos.append(KBProjectInfo(
+            project_id=pid,
+            project_name=project_name,
+            project_description=project_description,
+            agents_md_content=agents_md_content,
+            agents_md_empty=agents_md_empty,
+            business_context=business_context,
+        ))
+
+    output = KBAgentOutput(projects=project_infos)
+
+    for p in output.projects:
+        log.info(
+            "KBProjectInfo",
+            project_id=p.project_id,
+            project_name=p.project_name,
+            agents_md_len=len(p.agents_md_content),
+            agents_md_empty=p.agents_md_empty,
+            business_context_len=len(p.business_context),
+        )
+
+    log.info(
+        "Completed",
+        project_count=len(output.projects),
+        project_ids=[p.project_id for p in output.projects],
+    )
+    log.debug("KBAgentOutput full", output=output.model_dump_json())
 
     return output

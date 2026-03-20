@@ -282,7 +282,7 @@ async def main_agent_node(state: OpsState) -> dict:
         messages=len(messages),
         tools=tool_names,
     )
-    log.debug("System prompt", chars=len(system_prompt), preview=system_prompt[:2000])
+    log.debug("System prompt", chars=len(system_prompt), system_prompt=system_prompt)
 
     t0 = time.monotonic()
     response = await _invoke_llm_with_retry(llm, messages)

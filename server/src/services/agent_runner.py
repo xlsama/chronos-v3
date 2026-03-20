@@ -88,7 +88,7 @@ class AgentRunner:
             "tool_call_retry_count": 0,
             "incident_history_summary": None,
             "kb_summary": None,
-            "kb_project_id": None,
+            "kb_project_ids": [],
         }
 
         log.info("===== Agent lifecycle started =====")
@@ -135,7 +135,7 @@ class AgentRunner:
         resume_input = Command(resume=human_input)
 
         log.info("Resuming agent (human input)", thread_id=thread_id)
-        log.debug("human_input", content=human_input[:200])
+        log.debug("human_input", content=human_input)
 
         cancelled = False
         try:
@@ -219,7 +219,7 @@ class AgentRunner:
 
                 risk_level = "HIGH" if cmd_type == CommandType.DANGEROUS else "MEDIUM"
                 log.info("human_approval interrupt", tool=tool_name, cmd_type=cmd_type.name, risk=risk_level)
-                log.debug("approval command", command=command[:200])
+                log.debug("approval command", command=command)
                 async with get_session_factory()() as session:
                     approval = await ApprovalService(session).create(
                         incident_id=uuid.UUID(incident_id),
@@ -246,7 +246,8 @@ class AgentRunner:
         if "ask_human" in (state.next or ()):
             question = self._extract_ask_human_question(vals)
             if question:
-                log.info("ask_human interrupt", question=question[:100], streamed=self._ask_human_streamed)
+                log.info("ask_human interrupt", question_len=len(question), streamed=self._ask_human_streamed)
+                log.debug("ask_human interrupt", question=question)
                 if not self._ask_human_streamed:
                     await self.publisher.publish(channel, "ask_human", {
                         "question": question,
@@ -275,7 +276,7 @@ class AgentRunner:
 
             asyncio.create_task(run_post_incident_tasks(
                 incident_id,
-                kb_project_id=vals.get("kb_project_id"),
+                kb_project_ids=vals.get("kb_project_ids", []),
             ))
 
     _APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
@@ -513,7 +514,7 @@ class AgentRunner:
             run_id = event.get("run_id", "")
             output_str = str(event["data"].get("output", ""))
             main_log.info("Tool end", tool=name)
-            main_log.debug("Tool output", output=output_str[:500])
+            main_log.debug("Tool output", output=output_str)
             await self.publisher.publish(channel, "tool_result", {
                 "name": name,
                 "output": output_str,

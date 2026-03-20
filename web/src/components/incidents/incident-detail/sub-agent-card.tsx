@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -123,6 +123,7 @@ interface SubAgentCardProps {
   status: "idle" | "started" | "completed" | "failed";
   streamingContent?: string;
   forceExpanded?: boolean;
+  fixedLayout?: boolean;
   className?: string;
 }
 
@@ -132,10 +133,18 @@ export function SubAgentCard({
   status,
   streamingContent,
   forceExpanded,
+  fixedLayout,
   className,
 }: SubAgentCardProps) {
-  const [localExpanded, setLocalExpanded] = useState(false);
-  const expanded = forceExpanded || localExpanded;
+  const [localExpanded, setLocalExpanded] = useState(!!forceExpanded);
+
+  useEffect(() => {
+    if (forceExpanded) {
+      setLocalExpanded(true);
+    }
+  }, [forceExpanded]);
+
+  const expanded = localExpanded;
 
   const { scrollRef: scrollContainerRef } = useAutoScroll({
     enabled: forceExpanded,
@@ -195,8 +204,10 @@ export function SubAgentCard({
 
   return (
     <div
+      data-expanded={expanded || undefined}
       className={cn(
         "flex min-h-0 flex-col rounded-lg border border-blue-200 bg-blue-50/50 p-3",
+        fixedLayout && expanded && "flex-1 overflow-hidden",
         className,
       )}
       data-testid="sub-agent-card"

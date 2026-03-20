@@ -41,7 +41,8 @@ class MySQLConnector(ServiceConnector):
         upper = cmd.upper()
 
         is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC|WITH\s)", upper))
-        log.info("Executing", mode="query" if is_query else "statement", command=cmd[:200])
+        log.info("Executing", mode="query" if is_query else "statement", command_len=len(cmd))
+        log.debug("Executing", command=cmd)
 
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:

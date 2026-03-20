@@ -72,7 +72,8 @@ class PrometheusConnector(ServiceConnector):
         expr = command.strip()
         url = f"{self._base_url}/api/v1/query"
         params = {"query": expr}
-        log.info("Executing PromQL", expr=expr[:200])
+        log.info("Executing PromQL", expr_len=len(expr))
+        log.debug("Executing PromQL", expr=expr)
 
         async with httpx.AsyncClient(timeout=30, verify=False) as client:
             kwargs: dict = {"params": params}

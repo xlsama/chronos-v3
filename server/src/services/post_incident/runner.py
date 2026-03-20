@@ -94,7 +94,7 @@ async def _build_service_map(messages: list[Message], session) -> dict[str, str]
     return {str(r.id): f"{r.name} ({r.service_type})" for r in result.all()}
 
 
-async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = None) -> None:
+async def run_post_incident_tasks(incident_id: str, kb_project_ids: list[str] | None = None) -> None:
     """后台执行所有事件后任务。从 AgentRunner._post_run() 通过 asyncio.create_task 调用。"""
     sid = incident_id[:8]
     log = get_logger(component="post_incident", sid=sid)
@@ -208,7 +208,7 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
                 incident_id=incident_id,
                 summary_md=summary_md,
                 conversation_text=conversation_text_topo,
-                kb_project_id=kb_project_id,
+                kb_project_ids=kb_project_ids,
             ), "agents_md", sid),
             _safe_run(auto_evolve_skills(
                 incident_id=incident_id,

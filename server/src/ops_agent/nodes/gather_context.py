@@ -85,39 +85,41 @@ async def gather_context_node(state: OpsState) -> dict:
 
     if isinstance(history_result, str) and not history_failed:
         log.info("history_summary", chars=len(history_result))
-        log.debug("history_summary preview", preview=history_result[:300])
+        log.debug("history_summary full", history_summary=history_result)
 
     kb_summary = None
-    kb_project_id = None
+    kb_project_ids: list[str] = []
     if isinstance(kb_result, KBAgentOutput):
-        if kb_result.project_id:
-            kb_project_id = kb_result.project_id
-        parts = []
-        if kb_result.project_name:
-            parts.append(f"匹配项目: {kb_result.project_name} (ID: {kb_result.project_id})")
-        if kb_result.agents_md_content:
-            parts.append(f"### AGENTS.md\n{kb_result.agents_md_content}")
-        elif kb_result.agents_md_empty:
-            parts.append("### AGENTS.md\n[空 - 未配置服务信息]")
-        if kb_result.business_context:
-            parts.append(f"### 业务背景\n{kb_result.business_context}")
-        if kb_result.no_match:
-            parts.append("未匹配到任何项目。")
-        if kb_result.agents_md_empty:
-            kb_summary = "\n\n".join(parts) + "\n\n[需要补充]"
+        if len(kb_result.projects) == 0:
+            kb_summary = "未匹配到任何项目。"
         else:
-            kb_summary = "\n\n".join(parts) if parts else None
+            parts = []
+            for p in kb_result.projects:
+                kb_project_ids.append(p.project_id)
+                project_parts = [f"匹配项目: {p.project_name} (ID: {p.project_id})"]
+                if p.agents_md_content and not p.agents_md_empty:
+                    project_parts.append(f"### AGENTS.md\n{p.agents_md_content}")
+                elif p.agents_md_empty:
+                    project_parts.append("### AGENTS.md\n[空 - 未配置服务信息]")
+                if p.business_context:
+                    project_parts.append(f"### 业务背景\n{p.business_context}")
+                parts.append("\n\n".join(project_parts))
+
+            kb_summary = "\n\n---\n\n".join(parts)
+            # If any project has empty agents_md, append hint
+            if any(p.agents_md_empty for p in kb_result.projects):
+                kb_summary += "\n\n[需要补充]"
     elif isinstance(kb_result, str):
         kb_summary = kb_result
 
     if kb_summary:
-        log.info("kb_summary", chars=len(kb_summary), project_id=kb_project_id)
-        log.debug("kb_summary preview", preview=kb_summary[:300])
+        log.info("kb_summary", chars=len(kb_summary), project_ids=kb_project_ids)
+        log.debug("kb_summary full", kb_summary=kb_summary)
 
     log.info("===== Gathering context completed =====")
 
     return {
         "incident_history_summary": history_result if isinstance(history_result, str) else None,
         "kb_summary": kb_summary,
-        "kb_project_id": kb_project_id,
+        "kb_project_ids": kb_project_ids,
     }

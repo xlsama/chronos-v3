@@ -24,7 +24,7 @@ def _make_state(description: str) -> dict:
         "ask_human_count": 0,
         "incident_history_summary": None,
         "kb_summary": None,
-        "kb_project_id": None,
+        "kb_project_ids": [],
     }
 
 

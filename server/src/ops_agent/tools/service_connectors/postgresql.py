@@ -40,7 +40,8 @@ class PostgreSQLConnector(ServiceConnector):
 
         # Determine if this is a query (returns rows) or a statement
         is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|WITH\s)", upper))
-        log.info("Executing", mode="query" if is_query else "statement", command=cmd[:200])
+        log.info("Executing", mode="query" if is_query else "statement", command_len=len(cmd))
+        log.debug("Executing", command=cmd)
 
         async with pool.acquire() as conn:
             if is_query:

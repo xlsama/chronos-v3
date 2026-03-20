@@ -48,7 +48,8 @@ async def run_history_agent(
     search_tool, last_sources = _build_search_tool()
     llm_with_tools = llm.bind_tools([search_tool])
 
-    log.info("Started", description=description[:50])
+    log.info("Started", description_len=len(description))
+    log.debug("Started", description=description)
 
     messages = [
         SystemMessage(content=HISTORY_AGENT_SYSTEM_PROMPT),

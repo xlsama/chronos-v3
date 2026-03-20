@@ -311,7 +311,7 @@ async def send_user_message(
     if incident.thread_id and incident.status == "investigating":
         sid = str(incident.id)[:8]
         log.info("User message received, resuming agent", sid=sid)
-        log.debug("User message content", sid=sid, content=body.content[:200])
+        log.debug("User message content", sid=sid, content=body.content)
         runner: AgentRunner = request.app.state.agent_runner
         background_tasks.add_task(
             runner.resume_with_human_input,

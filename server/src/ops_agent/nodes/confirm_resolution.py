@@ -11,7 +11,9 @@ async def confirm_resolution_node(state: OpsState) -> dict:
     log.info("Entered confirm_resolution_node, waiting for user response")
     user_response = interrupt({"type": "confirm_resolution"})
 
-    log.info("User responded", response=str(user_response)[:200])
+    response_str = str(user_response)
+    log.info("User responded", response_len=len(response_str))
+    log.debug("User responded", response=response_str)
 
     if user_response == "confirmed":
         log.info("User confirmed resolution")

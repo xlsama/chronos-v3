@@ -1,5 +1,6 @@
 import time
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 
 import orjson
@@ -82,49 +83,24 @@ async def list_projects_for_matching() -> str:
                 "has_agents_md": has_agents_md,
                 "agents_md_preview": (agents_doc.content[:300] + "...") if has_agents_md else "",
             })
-        return orjson.dumps(items).decode()
+        result_json = orjson.dumps(items).decode()
+        log.debug("list_projects_for_matching result", result=result_json)
+        return result_json
 
 
-async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[dict]]:
-    """Search the project knowledge base for relevant context.
+async def search_knowledge_base(query: str) -> tuple[str, list[dict]]:
+    """Search across all projects' knowledge base for relevant context.
 
     Args:
         query: The search query describing what information you need.
-        project_id: The project ID to search within.
 
     Returns:
-        Tuple of (formatted text, sources list).
+        Tuple of (formatted text grouped by project, sources list).
     """
     t_total = time.monotonic()
-    log.info("search_knowledge_base", query=query[:100], project_id=project_id)
+    log.info("search_knowledge_base", query_len=len(query))
+    log.debug("search_knowledge_base", query=query)
     async with get_session_ctx() as session:
-        project = await session.get(Project, uuid.UUID(project_id))
-        if not project:
-            return (f"未找到项目 (ID: {project_id})", [])
-
-        sections = []
-        sources: list[dict] = []
-        seen_doc_ids: set[str] = set()
-
-        # Read AGENTS.md (raw content, not vector search)
-        agents_result = await session.execute(
-            select(ProjectDocument).where(
-                ProjectDocument.project_id == uuid.UUID(project_id),
-                ProjectDocument.doc_type == "agents_config",
-            ).limit(1)
-        )
-        agents_doc = agents_result.scalar_one_or_none()
-
-        sections.append(f"## 项目: {project.name} (ID: {project.id})")
-
-        if agents_doc and agents_doc.content.strip():
-            sections.append(f"### AGENTS.md\n{agents_doc.content}")
-            sources.append({"type": "document", "id": str(agents_doc.id), "filename": agents_doc.filename})
-            seen_doc_ids.add(str(agents_doc.id))
-        else:
-            sections.append("### AGENTS.md\n[空 - 未配置服务信息]")
-
-        # Vector search for relevant document chunks
         embedder = _get_embedder()
         reranker = _get_reranker()
 
@@ -134,15 +110,24 @@ async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[
         log.info("Embedding computed", elapsed=f"{embed_elapsed:.2f}s")
 
         store = VectorStore(session=session)
-        candidates = await store.search(query_embedding, uuid.UUID(project_id), limit=20)
+        candidates = await store.search_all(query_embedding, limit=20)
         log.info("Vector search returned", candidate_count=len(candidates))
+        for idx, c in enumerate(candidates):
+            log.debug(
+                "Vector candidate",
+                index=idx,
+                project_name=c.get("project_name"),
+                filename=c.get("filename"),
+                distance=c.get("distance"),
+                content_preview=c.get("content", "")[:200],
+            )
 
         if candidates:
             t_rerank = time.monotonic()
             rerank_results = await reranker.rerank(
                 query=query,
                 documents=[c["content"] for c in candidates],
-                top_n=3,
+                top_n=5,
             )
             rerank_elapsed = time.monotonic() - t_rerank
             results = []
@@ -152,18 +137,53 @@ async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[
                 results.append(item)
             top_scores = [f"{r['relevance_score']:.2f}" for r in results]
             log.info("Rerank completed", elapsed=f"{rerank_elapsed:.2f}s", result_count=len(results), scores=top_scores)
+            for idx, r in enumerate(results):
+                log.debug(
+                    "Rerank result",
+                    index=idx,
+                    project_name=r.get("project_name"),
+                    filename=r.get("filename"),
+                    relevance_score=r.get("relevance_score"),
+                    content_preview=r.get("content", "")[:200],
+                )
         else:
             results = []
 
-        if results:
+        if not results:
+            total_elapsed = time.monotonic() - t_total
+            log.info("search_knowledge_base completed", elapsed=f"{total_elapsed:.2f}s", result_count=0)
+            return ("没有找到与查询相关的知识库内容。", [])
+
+        # Group results by project
+        by_project: dict[str, list[dict]] = defaultdict(list)
+        project_meta: dict[str, dict] = {}
+        for r in results:
+            pid = r["project_id"]
+            by_project[pid].append(r)
+            if pid not in project_meta:
+                project_meta[pid] = {
+                    "project_name": r["project_name"],
+                    "project_description": r["project_description"],
+                }
+
+        sections = []
+        sources: list[dict] = []
+        seen_doc_ids: set[str] = set()
+
+        for pid, chunks in by_project.items():
+            meta = project_meta[pid]
+            section_parts = [f"## 项目: {meta['project_name']} (ID: {pid})"]
+            if meta["project_description"]:
+                section_parts.append(f"描述: {meta['project_description']}")
+
             chunks_text = "\n\n".join(
                 f"**[{_format_source(r['filename'], r.get('metadata', {}))}]** (相关度: {r['relevance_score']:.2f})\n{r['content']}"
-                for r in results
+                for r in chunks
             )
-            sections.append(f"### 相关文档\n\n{chunks_text}")
+            section_parts.append(f"\n{chunks_text}")
+            sections.append("\n".join(section_parts))
 
-            # Collect unique document sources
-            for r in results:
+            for r in chunks:
                 doc_id = r["document_id"]
                 if doc_id not in seen_doc_ids:
                     seen_doc_ids.add(doc_id)
@@ -172,11 +192,76 @@ async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[
                         source["page"] = r["metadata"]["page"]
                     sources.append(source)
 
-        if len(sections) <= 1:
-            total_elapsed = time.monotonic() - t_total
-            log.info("search_knowledge_base completed", elapsed=f"{total_elapsed:.2f}s", result_count=0)
-            return ("没有找到与查询相关的知识库内容。", [])
+        for pid, chunks in by_project.items():
+            log.info(
+                "Project group",
+                project_id=pid,
+                project_name=project_meta[pid]["project_name"],
+                chunk_count=len(chunks),
+            )
 
+        formatted_text = "\n\n---\n\n".join(sections)
         total_elapsed = time.monotonic() - t_total
-        log.info("search_knowledge_base completed", elapsed=f"{total_elapsed:.2f}s")
-        return ("\n\n---\n\n".join(sections), sources)
+        log.info("search_knowledge_base completed", elapsed=f"{total_elapsed:.2f}s", project_count=len(by_project))
+        log.debug("search_knowledge_base formatted_text", formatted_text=formatted_text)
+        return (formatted_text, sources)
+
+
+async def get_agents_md(project_ids: list[str]) -> str:
+    """Batch read AGENTS.md for multiple projects.
+
+    Args:
+        project_ids: List of project UUIDs to read AGENTS.md from.
+
+    Returns:
+        Formatted text with AGENTS.md content per project.
+    """
+    log.info("get_agents_md", project_ids=project_ids)
+    if not project_ids:
+        return "未提供项目 ID。"
+
+    async with get_session_ctx() as session:
+        uuids = [uuid.UUID(pid) for pid in project_ids]
+        # Fetch projects
+        project_result = await session.execute(
+            select(Project).where(Project.id.in_(uuids))
+        )
+        projects = {p.id: p for p in project_result.scalars().all()}
+
+        # Fetch AGENTS.md documents
+        agents_result = await session.execute(
+            select(ProjectDocument).where(
+                ProjectDocument.project_id.in_(uuids),
+                ProjectDocument.doc_type == "agents_config",
+            )
+        )
+        agents_docs = {doc.project_id: doc for doc in agents_result.scalars().all()}
+
+        sections = []
+        for pid_uuid in uuids:
+            project = projects.get(pid_uuid)
+            if not project:
+                sections.append(f"## 项目: 未找到 (ID: {pid_uuid})\n[项目不存在]")
+                log.info("get_agents_md project", project_id=str(pid_uuid), project_name="NOT_FOUND", content_len=0, is_empty=True)
+                continue
+
+            doc = agents_docs.get(pid_uuid)
+            content = doc.content.strip() if doc and doc.content else ""
+            is_empty = not content
+            header = f"## 项目: {project.name} (ID: {pid_uuid})"
+            if not is_empty:
+                sections.append(f"{header}\n\n### AGENTS.md\n{doc.content}")
+            else:
+                sections.append(f"{header}\n\n### AGENTS.md\n[空 - 未配置服务信息]")
+            log.info(
+                "get_agents_md project",
+                project_id=str(pid_uuid),
+                project_name=project.name,
+                content_len=len(content),
+                is_empty=is_empty,
+            )
+
+        formatted_text = "\n\n---\n\n".join(sections)
+        log.info("get_agents_md completed", project_count=len(sections))
+        log.debug("get_agents_md formatted_text", formatted_text=formatted_text)
+        return formatted_text

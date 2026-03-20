@@ -36,7 +36,9 @@ class MongoDBConnector(ServiceConnector):
         if not isinstance(cmd_doc, dict) or not cmd_doc:
             return ServiceResult(success=False, output="", error="命令必须是非空 JSON 对象")
 
-        log.info("Executing command", command=str(cmd_doc)[:200])
+        cmd_str = str(cmd_doc)
+        log.info("Executing command", command_len=len(cmd_str))
+        log.debug("Executing command", command=cmd_str)
         client = self._get_client()
         db = client[self._database]
         result = await db.command(cmd_doc)

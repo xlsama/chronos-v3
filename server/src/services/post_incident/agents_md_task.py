@@ -155,7 +155,7 @@ async def auto_update_agents_md(
     incident_id: str,
     summary_md: str,
     conversation_text: str,
-    kb_project_id: str | None = None,
+    kb_project_ids: list[str] | None = None,
 ) -> dict:
     """主入口。向量搜索匹配项目，KB Agent 已匹配的项目作为必选候选。"""
     sid = incident_id[:8]
@@ -191,11 +191,13 @@ async def auto_update_agents_md(
     log.info("Candidate project search completed", elapsed=f"{find_elapsed:.2f}s")
 
     # 确保 KB Agent 匹配的项目在候选列表中
-    if kb_project_id:
-        pid = uuid.UUID(kb_project_id)
+    if kb_project_ids:
         existing_pids = {c[0] for c in candidates}
-        if pid not in existing_pids:
-            candidates.insert(0, (pid, 0.0))
+        for kb_pid_str in kb_project_ids:
+            pid = uuid.UUID(kb_pid_str)
+            if pid not in existing_pids:
+                candidates.insert(0, (pid, 0.0))
+                existing_pids.add(pid)
 
     if not candidates:
         log.info("No candidate projects found")
@@ -253,7 +255,8 @@ async def _extract_knowledge(
         raise
     result = resp.content.strip()
     if result == "NO_KNOWLEDGE" or len(result) < 20:
-        log.info("LLM returned no extractable knowledge", preview=result[:100])
+        log.info("LLM returned no extractable knowledge", result_len=len(result))
+        log.debug("LLM returned no extractable knowledge", result=result)
         return None
     log.info("LLM extracted knowledge", chars=len(result))
     log.debug("Extracted knowledge", content=result)

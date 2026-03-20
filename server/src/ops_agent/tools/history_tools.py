@@ -17,7 +17,8 @@ async def search_incident_history(query: str) -> tuple[str, list[dict]]:
         Tuple of (formatted text, sources list).
     """
     t0 = time.monotonic()
-    log.info("search_incident_history", query=query[:100])
+    log.info("search_incident_history", query_len=len(query))
+    log.debug("search_incident_history", query=query)
     factory = get_session_factory()
     async with factory() as session:
         service = IncidentHistoryService(session=session)

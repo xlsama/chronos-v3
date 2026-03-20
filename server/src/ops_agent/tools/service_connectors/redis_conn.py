@@ -63,7 +63,9 @@ class RedisConnector(ServiceConnector):
         if not parts:
             return ServiceResult(success=False, output="", error="空命令")
 
-        log.info("Executing", command=parts[0], args=" ".join(parts[1:])[:200])
+        args_str = " ".join(parts[1:])
+        log.info("Executing", command=parts[0], args_len=len(args_str))
+        log.debug("Executing", command=parts[0], args=args_str)
         result = await client.execute_command(*parts)
         output = _format_redis_result(result)
         log.info("Result", output_len=len(output))

@@ -115,10 +115,11 @@ async def ssh_bash(server_id: str, command: str) -> dict:
     """Execute a shell command on the target server via SSH."""
     cmd_type = ShellSafety.classify(command)
 
-    log.info("Executing", server=server_id[:8], cmd_type=cmd_type.name, command=command[:100])
+    log.info("Executing", server=server_id[:8], cmd_type=cmd_type.name, command_len=len(command))
+    log.debug("Executing", server=server_id[:8], command=command)
 
     if cmd_type == CommandType.BLOCKED:
-        log.warning("BLOCKED", command=command[:100])
+        log.warning("BLOCKED", command=command)
         return {"error": "命令被系统拦截：此命令过于危险，禁止执行"}
 
     try:
@@ -149,9 +150,9 @@ async def ssh_bash(server_id: str, command: str) -> dict:
 
     stdout_compressed = compress_output(result.stdout)
     log.info("Result", elapsed=f"{exec_elapsed:.2f}s", exit_code=result.exit_code, stdout_len=len(stdout_compressed), stderr_len=len(result.stderr))
-    log.debug("stdout", stdout=stdout_compressed[:500])
+    log.debug("stdout", stdout=stdout_compressed)
     if result.stderr:
-        log.debug("stderr", stderr=result.stderr[:500])
+        log.debug("stderr", stderr=result.stderr)
 
     return {
         "exit_code": result.exit_code,

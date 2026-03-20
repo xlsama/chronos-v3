@@ -112,7 +112,8 @@ async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
         HumanMessage(content=f"## 已有报告\n\n{existing_md}\n\n## 新报告\n\n{new_md}"),
     ])
     result = resp.content.strip()
-    log.info("LLM responded for merge", resp_len=len(result), preview=result[:200])
+    log.info("LLM responded for merge", resp_len=len(result))
+    log.debug("LLM responded for merge", result=result)
     if result == "NO_CHANGE":
         log.info("Merge result: NO_CHANGE")
         return None
