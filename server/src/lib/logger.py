@@ -14,4 +14,22 @@ logger.add(
     level=_log_level,
 )
 
-__all__ = ["logger"]
+_AGENT_COLORS: dict[str, str] = {
+    "main":               "\033[1;33m[main]\033[0m",
+    "gather_context":     "\033[34m[gather_context]\033[0m",
+    "history_agent":      "\033[35m[history_agent]\033[0m",
+    "kb_agent":           "\033[36m[kb_agent]\033[0m",
+    "ask_human":          "\033[32m[ask_human]\033[0m",
+    "approval":           "\033[31m[approval]\033[0m",
+    "confirm_resolution": "\033[94m[confirm_resolution]\033[0m",
+    "stream":             "\033[96m[stream]\033[0m",
+    "skill":              "\033[95m[skill]\033[0m",
+    "post_run":           "\033[92m[post_run]\033[0m",
+}
+
+
+def ac(component: str) -> str:
+    return _AGENT_COLORS.get(component, f"[{component}]")
+
+
+__all__ = ["logger", "ac"]

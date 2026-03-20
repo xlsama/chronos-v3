@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from src.ops_agent.prompts.kb_agent import KB_AGENT_SYSTEM_PROMPT
 from src.env import get_settings
-from src.lib.logger import logger
+from src.lib.logger import logger, ac
 from src.ops_agent.tools.knowledge_tools import (
     list_projects_for_matching as _list_projects,
     search_knowledge_base as _search_knowledge_base,
@@ -98,7 +98,7 @@ async def run_kb_agent(
     tools, kb_sources = _build_tools()
     llm_with_tools = llm.bind_tools(tools)
 
-    logger.info(f"\n[kb_agent] Started, description='{description[:50]}...'")
+    logger.info(f"\n{ac('kb_agent')} Started, description='{description[:50]}...'")
 
     messages = [
         SystemMessage(content=KB_AGENT_SYSTEM_PROMPT),
@@ -127,16 +127,16 @@ async def run_kb_agent(
         await event_callback("thinking_done", {})
         messages.append(full_response)
 
-        logger.info(f"[kb_agent] [iter {i+1}] LLM responded in {llm_elapsed:.2f}s, content_len={len(full_content)}")
+        logger.info(f"\n{ac('kb_agent')} [iter {i+1}] LLM responded in {llm_elapsed:.2f}s, content_len={len(full_content)}")
         if full_content:
-            logger.info(f"\n[kb_agent] [iter {i+1}] LLM content:\n{full_content}\n")
+            logger.info(f"\n{ac('kb_agent')} [iter {i+1}] LLM content:\n{full_content}\n")
 
         if not full_response.tool_calls:
             break
 
         for tc in full_response.tool_calls:
             tool_name = tc["name"]
-            logger.info(f"[kb_agent] [iter {i+1}] Tool call: {tool_name}({tc['args']})")
+            logger.info(f"\n{ac('kb_agent')} [iter {i+1}] Tool call: {tool_name}({tc['args']})")
             await event_callback("tool_call", {
                 "name": tool_name,
                 "args": tc["args"],
@@ -148,7 +148,7 @@ async def run_kb_agent(
             tool_elapsed = time.monotonic() - t_tool
             result_str = str(result)
 
-            logger.info(f"[kb_agent] [iter {i+1}] Tool result in {tool_elapsed:.2f}s: {len(result_str)} chars")
+            logger.info(f"{ac('kb_agent')} [iter {i+1}] Tool result in {tool_elapsed:.2f}s: {len(result_str)} chars")
 
             event_data: dict[str, Any] = {
                 "name": tool_name,
@@ -196,7 +196,7 @@ async def run_kb_agent(
         no_match=not last_search_project_id,
     )
 
-    logger.info(f"[kb_agent] Completed: project_id={output.project_id}, project_name={output.project_name}, "
+    logger.info(f"\n{ac('kb_agent')} Completed: project_id={output.project_id}, project_name={output.project_name}, "
                 f"agents_md_empty={output.agents_md_empty}, no_match={output.no_match}")
 
     return output

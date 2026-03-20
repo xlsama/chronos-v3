@@ -1,7 +1,7 @@
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from src.lib.logger import logger
+from src.lib.logger import logger, ac
 from src.ops_agent.nodes.ask_human import ask_human_node
 from src.ops_agent.nodes.confirm_resolution import confirm_resolution_node, route_after_resolution
 from src.ops_agent.nodes.gather_context import gather_context_node
@@ -15,7 +15,7 @@ def route_after_approval(state: OpsState) -> str:
     sid = state["incident_id"][:8]
     decision = state.get("approval_decision", "approved")
     route = "main_agent" if decision == "rejected" else "tools"
-    logger.info(f"[{sid}] [approval] route_after_approval: decision={decision} -> {route}")
+    logger.info(f"\n[{sid}] {ac('approval')} route_after_approval: decision={decision} -> {route}")
     if decision == "rejected":
         return "main_agent"
     return "tools"

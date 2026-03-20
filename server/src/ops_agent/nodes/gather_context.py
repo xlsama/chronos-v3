@@ -8,7 +8,7 @@ from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.state import OpsState
 from src.ops_agent.sub_agents.history_agent import run_history_agent
 from src.ops_agent.sub_agents.kb_agent import KBAgentOutput, run_kb_agent
-from src.lib.logger import logger
+from src.lib.logger import logger, ac
 from src.lib.redis import get_redis
 
 EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
@@ -49,7 +49,7 @@ async def gather_context_node(state: OpsState) -> dict:
     channel = EventPublisher.channel_for_incident(state["incident_id"])
     description = state["description"]
 
-    logger.info(f"\n[{sid}] [gather_context] ===== Gathering context started =====")
+    logger.info(f"\n[{sid}] {ac('gather_context')} ===== Gathering context started =====")
 
     history_cb, history_pub = _build_callback(channel, agent="history")
     kb_cb, kb_pub = _build_callback(channel, agent="kb")
@@ -61,14 +61,14 @@ async def gather_context_node(state: OpsState) -> dict:
     )
 
     # Run both sub-agents in parallel
-    logger.info(f"[{sid}] [gather_context] Starting parallel sub-agents: history + kb")
+    logger.info(f"\n[{sid}] {ac('gather_context')} Starting parallel sub-agents: history + kb")
     t0 = time.monotonic()
     history_result, kb_result = await asyncio.gather(
         _safe_run(run_history_agent, description, history_cb),
         _safe_run(run_kb_agent, description, kb_cb),
     )
     parallel_elapsed = time.monotonic() - t0
-    logger.info(f"[{sid}] [gather_context] Parallel sub-agents completed in {parallel_elapsed:.2f}s")
+    logger.info(f"\n[{sid}] {ac('gather_context')} Parallel sub-agents completed in {parallel_elapsed:.2f}s")
 
     # Flush sub-agent thinking buffers so all thinking events are persisted
     if history_pub:
@@ -84,12 +84,12 @@ async def gather_context_node(state: OpsState) -> dict:
         kb_cb("agent_status", {"status": "failed" if kb_failed else "completed"}),
     )
 
-    logger.info(f"[{sid}] [gather_context] Sub-agents completed: history={'FAILED' if history_failed else 'OK'}, kb={'FAILED' if kb_failed else 'OK'}")
+    logger.info(f"\n[{sid}] {ac('gather_context')} Sub-agents completed: history={'FAILED' if history_failed else 'OK'}, kb={'FAILED' if kb_failed else 'OK'}")
 
     # Log history summary details
     if isinstance(history_result, str) and not history_failed:
-        logger.info(f"[{sid}] [gather_context] history_summary: {len(history_result)} chars")
-        logger.debug(f"[{sid}] [gather_context] history_summary preview:\n{history_result[:300]}")
+        logger.info(f"[{sid}] {ac('gather_context')} history_summary: {len(history_result)} chars")
+        logger.debug(f"[{sid}] {ac('gather_context')} history_summary preview:\n{history_result[:300]}")
 
     # Extract KB result
     kb_summary = None
@@ -116,10 +116,10 @@ async def gather_context_node(state: OpsState) -> dict:
         kb_summary = kb_result  # Error case
 
     if kb_summary:
-        logger.info(f"[{sid}] [gather_context] kb_summary: {len(kb_summary)} chars, project_id={kb_project_id}")
-        logger.debug(f"[{sid}] [gather_context] kb_summary preview:\n{kb_summary[:300]}")
+        logger.info(f"[{sid}] {ac('gather_context')} kb_summary: {len(kb_summary)} chars, project_id={kb_project_id}")
+        logger.debug(f"[{sid}] {ac('gather_context')} kb_summary preview:\n{kb_summary[:300]}")
 
-    logger.info(f"\n[{sid}] [gather_context] ===== Gathering context completed =====")
+    logger.info(f"\n[{sid}] {ac('gather_context')} ===== Gathering context completed =====")
 
     return {
         "incident_history_summary": history_result if isinstance(history_result, str) else None,

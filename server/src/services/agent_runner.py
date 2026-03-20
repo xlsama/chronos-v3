@@ -14,7 +14,7 @@ from src.ops_agent.state import OpsState
 from src.ops_agent.tools.tool_permissions import ShellSafety, ServiceSafety, CommandType
 from src.db.connection import get_session_factory
 from src.db.models import Incident
-from src.lib.logger import logger
+from src.lib.logger import logger, ac
 from src.services.approval_service import ApprovalService
 from src.services.notification_service import notify_fire_and_forget
 from src.services.post_incident import run_post_incident_tasks
@@ -89,27 +89,27 @@ class AgentRunner:
             "kb_project_id": None,
         }
 
-        logger.info(f"\n[{sid}] [main] ===== Agent lifecycle started =====")
-        logger.info(f"[{sid}] [main] thread_id={thread_id}, severity={severity}, recursion_limit={config['recursion_limit']}")
+        logger.info(f"\n[{sid}] {ac('main')} ===== Agent lifecycle started =====")
+        logger.info(f"[{sid}] {ac('main')} thread_id={thread_id}, severity={severity}, recursion_limit={config['recursion_limit']}")
 
         cancelled = False
         try:
             async for event in self.graph.astream_events(initial_state, config=config, version="v2"):
                 cancel_reason = await self._check_cancelled(incident_id)
                 if cancel_reason:
-                    logger.info(f"[{sid}] [main] Agent cancelled: {cancel_reason}")
+                    logger.info(f"[{sid}] {ac('main')} Agent cancelled: {cancel_reason}")
                     cancelled = True
                     break
                 await self._process_event(channel, event)
         except Exception as e:
-            logger.error(f"[{sid}] [main] Agent error: {e}")
+            logger.error(f"[{sid}] {ac('main')} Agent error: {e}")
             await self.publisher.publish(channel, "error", {"message": self._format_agent_error(e)})
             raise
 
         await self.publisher.flush_remaining(channel)
         if not cancelled:
             await self._post_run(config, channel, incident_id)
-        logger.info(f"\n[{sid}] [main] ===== Agent lifecycle completed =====")
+        logger.info(f"\n[{sid}] {ac('main')} ===== Agent lifecycle completed =====")
         return thread_id
 
     async def resume_with_human_input(self, thread_id: str, incident_id: str, human_input: str) -> None:
@@ -132,8 +132,8 @@ class AgentRunner:
 
         resume_input = Command(resume=human_input)
 
-        logger.info(f"[{sid}] [main] Resuming agent (human input), thread={thread_id}")
-        logger.debug(f"[{sid}] [main] human_input: {human_input[:200]}")
+        logger.info(f"[{sid}] {ac('main')} Resuming agent (human input), thread={thread_id}")
+        logger.debug(f"[{sid}] {ac('main')} human_input: {human_input[:200]}")
 
         cancelled = False
         try:
@@ -161,7 +161,7 @@ class AgentRunner:
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
 
-        logger.info(f"[{sid}] [main] Resuming agent (approval), thread={thread_id}, decision={approval_result.get('decision')}")
+        logger.info(f"[{sid}] {ac('main')} Resuming agent (approval), thread={thread_id}, decision={approval_result.get('decision')}")
 
         from langgraph.types import Command
 
@@ -191,7 +191,7 @@ class AgentRunner:
         state = await self.graph.aget_state(config)
         vals = state.values
 
-        logger.info(f"[{sid}] [post_run] Post-run: next_nodes={state.next}, is_complete={vals.get('is_complete')}")
+        logger.info(f"[{sid}] {ac('post_run')} Post-run: next_nodes={state.next}, is_complete={vals.get('is_complete')}")
 
         # Interrupted before human_approval → create approval record + SSE
         if "human_approval" in (state.next or ()):
@@ -213,8 +213,8 @@ class AgentRunner:
                     cmd_type = CommandType.WRITE
 
                 risk_level = "HIGH" if cmd_type == CommandType.DANGEROUS else "MEDIUM"
-                logger.info(f"[{sid}] [post_run] human_approval interrupt: tool={tool_name}, cmd_type={cmd_type.name}, risk={risk_level}")
-                logger.debug(f"[{sid}] [post_run] approval command: {command[:200]}")
+                logger.info(f"[{sid}] {ac('post_run')} human_approval interrupt: tool={tool_name}, cmd_type={cmd_type.name}, risk={risk_level}")
+                logger.debug(f"[{sid}] {ac('post_run')} approval command: {command[:200]}")
                 async with get_session_factory()() as session:
                     approval = await ApprovalService(session).create(
                         incident_id=uuid.UUID(incident_id),
@@ -223,7 +223,7 @@ class AgentRunner:
                         risk_level=risk_level,
                         explanation=args.get("explanation"),
                     )
-                logger.info(f"[{sid}] [post_run] Approval created: id={approval.id}")
+                logger.info(f"[{sid}] {ac('post_run')} Approval created: id={approval.id}")
                 await self.publisher.publish(channel, "approval_required", {
                     "approval_id": str(approval.id),
                     "tool_name": pending["name"],
@@ -242,11 +242,14 @@ class AgentRunner:
         if "ask_human" in (state.next or ()):
             question = self._extract_ask_human_question(vals)
             if question:
-                logger.info(f"[{sid}] [post_run] ask_human interrupt: question={question[:100]}, streamed={self._ask_human_streamed}")
+                logger.info(f"[{sid}] {ac('post_run')} ask_human interrupt: question={question[:100]}, streamed={self._ask_human_streamed}")
                 if not self._ask_human_streamed:
-                    # Non-streamed (implicit ask_human): publish full question + done
+                    # Non-streamed (implicit ask_human): thinking 已展示完整内容，
+                    # 这里用标准化的简短提问替代，避免重复
+                    from src.ops_agent.context_guardrails import build_context_request_question
+                    concise_question = build_context_request_question()
                     await self.publisher.publish(channel, "ask_human", {
-                        "question": question,
+                        "question": concise_question,
                     })
                     await self.publisher.publish(channel, "ask_human_done", {})
                 notify_fire_and_forget(
@@ -258,7 +261,7 @@ class AgentRunner:
 
         # Interrupted before confirm_resolution → publish confirm event
         if "confirm_resolution" in (state.next or ()):
-            logger.info(f"[{sid}] [post_run] confirm_resolution interrupt")
+            logger.info(f"[{sid}] {ac('post_run')} confirm_resolution interrupt")
             await self.publisher.publish(channel, "confirm_resolution_required", {})
 
         # Graph complete → update DB, send done SSE, fire background tasks
@@ -269,7 +272,7 @@ class AgentRunner:
                 if incident and incident.status == "investigating":
                     incident.status = "resolved"
                     await session.commit()
-                    logger.info(f"[{sid}] [post_run] status -> resolved")
+                    logger.info(f"[{sid}] {ac('post_run')} status -> resolved")
 
             # ② SSE: done (immediately, no waiting for LLM)
             await self.publisher.publish(channel, "done", {})
@@ -393,7 +396,7 @@ class AgentRunner:
                                 "phase": phase, "agent": agent,
                             })
                             self._thinking_done_sent = True
-                        logger.info(f"[{sid}] [stream] Answer stream started, thinking_chars={len(self._thinking_content_log_buffer)}")
+                        logger.info(f"[{sid}] {ac('stream')} Answer stream started, thinking_chars={len(self._thinking_content_log_buffer)}")
 
                     if tcc.get("name") == "ask_human":
                         self._ask_human_stream_active = True
@@ -405,7 +408,7 @@ class AgentRunner:
                                 "phase": phase, "agent": agent,
                             })
                             self._thinking_done_sent = True
-                        logger.info(f"[{sid}] [stream] Ask_human stream started, thinking_chars={len(self._thinking_content_log_buffer)}")
+                        logger.info(f"[{sid}] {ac('stream')} Ask_human stream started, thinking_chars={len(self._thinking_content_log_buffer)}")
 
                     if self._answer_stream_active and tcc.get("args"):
                         self._answer_args_buffer += tcc["args"]
@@ -440,29 +443,29 @@ class AgentRunner:
             # Log full LLM response
             content_text = output.content if hasattr(output, "content") else ""
             tool_calls = output.tool_calls if hasattr(output, "tool_calls") else []
-            logger.info(f"\n[{sid}] [main] LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}")
+            logger.info(f"\n[{sid}] {ac('main')} LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}")
             if content_text:
-                logger.info(f"\n[{sid}] [main] LLM content:\n{content_text}\n")
+                logger.info(f"\n[{sid}] {ac('main')} LLM content:\n{content_text}\n")
             for tc in tool_calls:
-                logger.info(f"\n[{sid}] [main] LLM tool_call: {tc['name']}({tc.get('args', {})})")
+                logger.info(f"\n[{sid}] {ac('main')} LLM tool_call: {tc['name']}({tc.get('args', {})})")
 
             if self._answer_stream_active:
                 # Already streamed answer via tool_call_chunks, just send answer_done
                 answer_len = self._answer_published_len
-                logger.info(f"[{sid}] [stream] Answer stream done, answer_chars={answer_len}")
-                logger.debug(f"[{sid}] [stream] Answer content:\n{self._answer_args_buffer}")
+                logger.info(f"[{sid}] {ac('stream')} Answer stream done, answer_chars={answer_len}")
+                logger.debug(f"[{sid}] {ac('stream')} Answer content:\n{self._answer_args_buffer}")
                 await self.publisher.publish(channel, "answer_done", {"phase": phase})
                 self._reset_answer_stream_state()
             elif self._ask_human_stream_active:
                 ask_human_len = self._ask_human_published_len
-                logger.info(f"[{sid}] [stream] Ask_human stream done, question_chars={ask_human_len}")
+                logger.info(f"[{sid}] {ac('stream')} Ask_human stream done, question_chars={ask_human_len}")
                 await self.publisher.publish(channel, "ask_human_done", {})
                 self._reset_ask_human_stream_state()
             else:
                 # End current thinking segment
                 thinking_len = len(self._thinking_content_log_buffer)
-                logger.info(f"[{sid}] [stream] Thinking done (no tool_call), thinking_chars={thinking_len}")
-                logger.debug(f"[{sid}] [stream] Thinking content:\n{self._thinking_content_log_buffer}")
+                logger.info(f"[{sid}] {ac('stream')} Thinking done (no tool_call), thinking_chars={thinking_len}")
+                logger.debug(f"[{sid}] {ac('stream')} Thinking content:\n{self._thinking_content_log_buffer}")
                 self._thinking_content_log_buffer = ""
                 await self.publisher.publish(channel, "thinking_done", {
                     "phase": phase, "agent": agent,
@@ -483,11 +486,11 @@ class AgentRunner:
             name = event.get("name", "")
             if name == "read_skill":
                 path = event["data"].get("input", {}).get("path", "")
-                logger.info(f"[{sid}] [skill] read_skill start: path={path}")
+                logger.info(f"[{sid}] {ac('skill')} read_skill start: path={path}")
                 return  # Don't emit tool_call; wait for tool_end to emit skill_read
             run_id = event.get("run_id", "")
-            logger.info(f"\n[{sid}] [main] Tool start: {name}")
-            logger.debug(f"[{sid}] [main] Tool input: {event['data'].get('input', {})}")
+            logger.info(f"\n[{sid}] {ac('main')} Tool start: {name}")
+            logger.debug(f"[{sid}] {ac('main')} Tool input: {event['data'].get('input', {})}")
             await self.publisher.publish(channel, "tool_call", {
                 "name": name,
                 "args": event["data"].get("input", {}),
@@ -503,8 +506,8 @@ class AgentRunner:
                 output = str(event["data"].get("output", ""))
                 success = not output.startswith("未找到")
                 path = args.get("path", "")
-                logger.info(f"[{sid}] [skill] read_skill done: path={path}, success={success}, content_len={len(output)}")
-                logger.debug(f"[{sid}] [skill] read_skill content:\n{output}")
+                logger.info(f"[{sid}] {ac('skill')} read_skill done: path={path}, success={success}, content_len={len(output)}")
+                logger.debug(f"[{sid}] {ac('skill')} read_skill content:\n{output}")
                 # Extract slug and determine display name
                 parts = path.split("/", 1)
                 skill_slug = parts[0]
@@ -521,8 +524,8 @@ class AgentRunner:
                 return
             run_id = event.get("run_id", "")
             output_str = str(event["data"].get("output", ""))
-            logger.info(f"\n[{sid}] [main] Tool end: {name}")
-            logger.debug(f"[{sid}] [main] Tool output: {output_str[:500]}")
+            logger.info(f"\n[{sid}] {ac('main')} Tool end: {name}")
+            logger.debug(f"[{sid}] {ac('main')} Tool output: {output_str[:500]}")
             await self.publisher.publish(channel, "tool_result", {
                 "name": name,
                 "output": output_str,

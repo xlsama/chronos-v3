@@ -152,7 +152,6 @@ class EventPublisher:
         }).decode()
 
         await self.redis.publish(channel, payload)
-        logger.debug(f"Published {event_type} to {channel}")
 
     @staticmethod
     def _extract_content(event_type: str, data: dict) -> str:

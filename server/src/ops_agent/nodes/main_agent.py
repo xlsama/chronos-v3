@@ -17,7 +17,7 @@ from src.ops_agent.tools.service_exec_tool import (
 )
 from src.ops_agent.tools.tool_permissions import ShellSafety, ServiceSafety, CommandType
 from src.services.skill_service import SkillService
-from src.lib.logger import logger
+from src.lib.logger import logger, ac
 
 
 def build_tools():
@@ -75,7 +75,8 @@ def build_tools():
     @tool
     def ask_human(question: str) -> str:
         """当你缺少关键信息无法继续排查时，向用户提问。
-        例如：不确定事件涉及哪个服务、哪个服务器、需要额外上下文等。
+        question 应简短精练（1-3行），只写你需要用户回答的关键问题。
+        分析推理写在思考过程中，不要放进 question。
         """
         return question
 
@@ -90,9 +91,9 @@ def build_tools():
         if path.strip() == "?":
             available = service.get_available_skills()
             if not available:
-                logger.info("[skill] read_skill: path=?, no skills available")
+                logger.info(f"{ac('skill')} read_skill: path=?, no skills available")
                 return "当前没有可用技能。"
-            logger.info(f"[skill] read_skill: path=?, returning {len(available)} skills")
+            logger.info(f"{ac('skill')} read_skill: path=?, returning {len(available)} skills")
             lines = ["所有可用技能:"]
             for s in available:
                 lines.append(f"- {s['slug']}: {s['description']}")
@@ -102,11 +103,11 @@ def build_tools():
         rel_path = parts[1] if len(parts) > 1 else None
         try:
             content = service.read_file(slug, rel_path)
-            logger.info(f"[skill] read_skill: slug={slug}, rel_path={rel_path}, content_len={len(content)}")
-            logger.debug(f"[skill] read_skill content:\n{content}")
+            logger.info(f"{ac('skill')} read_skill: slug={slug}, rel_path={rel_path}, content_len={len(content)}")
+            logger.debug(f"{ac('skill')} read_skill content:\n{content}")
             return content
         except FileNotFoundError:
-            logger.warning(f"[skill] read_skill: not found, path={path}")
+            logger.warning(f"{ac('skill')} read_skill: not found, path={path}")
             return f"未找到: {path}"
 
     @tool
@@ -144,12 +145,12 @@ def _build_skills_context(
     available = skill_service.get_available_skills()
 
     if not available:
-        logger.info("[skill] _build_skills_context: no available skills")
+        logger.info(f"{ac('skill')} _build_skills_context: no available skills")
         return ""
 
     slugs = [s["slug"] for s in available]
     fmt = "compact" if len(available) > _COMPACT_THRESHOLD else "full"
-    logger.info(f"[skill] _build_skills_context: {len(available)} skills ({fmt}), slugs={slugs}")
+    logger.info(f"{ac('skill')} _build_skills_context: {len(available)} skills ({fmt}), slugs={slugs}")
 
     xml_lines = [
         "\n<available_skills>",
@@ -211,7 +212,7 @@ def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> A
     if not unknown_tools:
         return response
 
-    logger.warning(f"[main] LLM returned unknown tool(s): {unknown_tools}")
+    logger.warning(f"{ac('main')} LLM returned unknown tool(s): {unknown_tools}")
     return AIMessage(content=build_context_request_question(unknown_tools))
 
 
@@ -259,27 +260,27 @@ async def main_agent_node(state: OpsState) -> dict:
 
     tool_names = [t.name for t in tools]
     logger.info(
-        f"[{sid}] [main] main_agent_node invoked, history={'yes' if history_summary else 'no'}, kb={'yes' if kb_summary else 'no'}, "
+        f"\n[{sid}] {ac('main')} main_agent_node invoked, history={'yes' if history_summary else 'no'}, kb={'yes' if kb_summary else 'no'}, "
         f"messages={len(messages)}, tools={tool_names}"
     )
     logger.debug(
-        f"[{sid}] [main] System prompt ({len(system_prompt)} chars):\n{system_prompt[:2000]}"
+        f"[{sid}] {ac('main')} System prompt ({len(system_prompt)} chars):\n{system_prompt[:2000]}"
     )
 
     t0 = time.monotonic()
     response = await _invoke_llm_with_retry(llm, messages)
     llm_elapsed = time.monotonic() - t0
-    logger.info(f"[{sid}] [main] LLM responded in {llm_elapsed:.2f}s")
+    logger.info(f"\n[{sid}] {ac('main')} LLM responded in {llm_elapsed:.2f}s")
 
     content_text = response.content if hasattr(response, "content") else ""
     tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
     logger.info(
-        f"\n[{sid}] [main] LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}"
+        f"\n[{sid}] {ac('main')} LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}"
     )
     if content_text:
-        logger.info(f"\n[{sid}] [main] LLM content:\n{content_text}\n")
+        logger.info(f"\n[{sid}] {ac('main')} LLM content:\n{content_text}\n")
     for tc in tool_calls:
-        logger.info(f"\n[{sid}] [main] LLM tool_call: {tc['name']}({tc.get('args', {})})")
+        logger.info(f"\n[{sid}] {ac('main')} LLM tool_call: {tc['name']}({tc.get('args', {})})")
 
     safe_response = _sanitize_llm_response(response, set(tool_names))
     return {"messages": [safe_response]}
@@ -310,25 +311,25 @@ async def route_decision(state: OpsState) -> str:
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
         # Check ask_human count to prevent infinite loops
         if state.get("ask_human_count", 0) >= 5:
-            logger.warning(f"[{sid}] [main] ask_human count exceeded limit, forcing complete")
+            logger.warning(f"[{sid}] {ac('main')} ask_human count exceeded limit, forcing complete")
             return "complete"
-        logger.info(f"[{sid}] [main] route_decision: no tool_calls -> ask_human")
+        logger.info(f"[{sid}] {ac('main')} route_decision: no tool_calls -> ask_human")
         return "ask_human"
 
     for tool_call in last_message.tool_calls:
         name = tool_call["name"]
         if name not in valid_tool_names:
-            logger.warning(f"[{sid}] [main] route_decision: unknown tool '{name}' -> ask_human")
+            logger.warning(f"[{sid}] {ac('main')} route_decision: unknown tool '{name}' -> ask_human")
             return "ask_human"
         if name == "complete":
-            logger.info(f"[{sid}] [main] route_decision: tool=complete -> complete")
+            logger.info(f"[{sid}] {ac('main')} route_decision: tool=complete -> complete")
             return "complete"
         if name == "ask_human":
             # Check ask_human count
             if state.get("ask_human_count", 0) >= 5:
-                logger.warning(f"[{sid}] [main] ask_human count exceeded limit, forcing complete")
+                logger.warning(f"[{sid}] {ac('main')} ask_human count exceeded limit, forcing complete")
                 return "complete"
-            logger.info(f"[{sid}] [main] route_decision: tool=ask_human -> ask_human")
+            logger.info(f"[{sid}] {ac('main')} route_decision: tool=ask_human -> ask_human")
             return "ask_human"
         if name in ("ssh_bash", "bash"):
             cmd_type = ShellSafety.classify(
@@ -337,7 +338,7 @@ async def route_decision(state: OpsState) -> str:
             )
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
                 logger.info(
-                    f"[{sid}] [main] route_decision: need_approval (tool={name}, cmd_type={cmd_type.name})"
+                    f"[{sid}] {ac('main')} route_decision: need_approval (tool={name}, cmd_type={cmd_type.name})"
                 )
                 return "need_approval"
         if name == "service_exec":
@@ -345,9 +346,9 @@ async def route_decision(state: OpsState) -> str:
             cmd_type = ServiceSafety.classify(service_type, tool_call["args"].get("command", ""))
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
                 logger.info(
-                    f"[{sid}] [main] route_decision: need_approval (tool=service_exec, cmd_type={cmd_type.name})"
+                    f"[{sid}] {ac('main')} route_decision: need_approval (tool=service_exec, cmd_type={cmd_type.name})"
                 )
                 return "need_approval"
 
-    logger.info(f"[{sid}] [main] route_decision: -> continue")
+    logger.info(f"[{sid}] {ac('main')} route_decision: -> continue")
     return "continue"
