@@ -11,7 +11,7 @@ from src.api.schemas import (
     ServiceUpdate,
     ServerTestResponse,
 )
-from src.config import get_settings
+from src.env import get_settings
 from src.db.connection import get_session
 from src.db.models import Service
 from src.lib.errors import NotFoundError

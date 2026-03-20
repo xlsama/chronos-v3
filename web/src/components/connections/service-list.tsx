@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import {
@@ -24,6 +24,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { QueryContent } from "@/components/query-content";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -200,82 +201,85 @@ export function ServiceList() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isPlaceholderData } = useQuery({
     queryKey: ["services", page],
     queryFn: () => getServices({ page, page_size: pageSize }),
+    placeholderData: keepPreviousData,
   });
 
   const services = data?.items;
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
 
-  if (isLoading) {
-    return (
-      <div className="divide-y">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 p-4">
-            <Skeleton className="h-4 w-4 rounded-full" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-            <Skeleton className="h-5 w-16 rounded-full" />
-            <Skeleton className="h-8 w-16" />
-            <Skeleton className="h-8 w-8" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (!services?.length) {
-    return (
-      <Empty className="pb-[20%]">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Database />
-          </EmptyMedia>
-          <EmptyTitle>暂无服务</EmptyTitle>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
-
   return (
-    <div>
-      <motion.div variants={listVariants} initial="initial" animate="animate">
-        {services.map((service) => (
-          <motion.div key={service.id} variants={listItemVariants}>
-            <ServiceItem service={service} />
+    <QueryContent
+      isLoading={isLoading}
+      data={data}
+      isEmpty={(d) => !d.items?.length}
+      skeleton={
+        <div className="divide-y">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 p-4">
+              <Skeleton className="h-4 w-4 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-48" />
+              </div>
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-8 w-8" />
+            </div>
+          ))}
+        </div>
+      }
+      empty={
+        <Empty className="pt-[20vh]">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Database />
+            </EmptyMedia>
+            <EmptyTitle>暂无服务</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
+      }
+    >
+      {() => (
+        <div className={isPlaceholderData ? "opacity-60 transition-opacity" : "transition-opacity"}>
+          <motion.div variants={listVariants} initial="initial" animate="animate">
+            {services!.map((service) => (
+              <motion.div key={service.id} variants={listItemVariants}>
+                <ServiceItem service={service} />
+              </motion.div>
+            ))}
           </motion.div>
-        ))}
-      </motion.div>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t px-4 py-3">
-          <span className="text-sm text-muted-foreground">共 {total} 个</span>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="px-2 text-sm">
-              {page} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-4 py-3">
+              <span className="text-sm text-muted-foreground">共 {total} 个</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="px-2 text-sm">
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </QueryContent>
   );
 }

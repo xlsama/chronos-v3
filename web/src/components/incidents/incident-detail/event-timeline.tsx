@@ -6,6 +6,7 @@ import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
+import { getServices } from "@/api/services";
 import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
@@ -42,28 +43,30 @@ const itemVariants = {
 
 function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   const items: TimelineItem[] = [];
-  // Map from tool name to the index in items array for pending (unresolved) tool_calls
+  // Map from tool_call_id to the index in items array for pending (unresolved) tool_calls
   const pendingTools = new Map<string, number>();
 
-  for (const event of events) {
+  for (const [idx, event] of events.entries()) {
     switch (event.event_type) {
       case "thinking":
         items.push({ type: "thinking", event });
         break;
       case "tool_call": {
         const name = event.data.name as string;
-        const idx = items.length;
+        const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
+        const itemIdx = items.length;
         items.push({ type: "paired_tool", toolCall: event });
-        pendingTools.set(name, idx);
+        pendingTools.set(callId, itemIdx);
         break;
       }
       case "tool_result": {
         const name = event.data.name as string;
-        const pendingIdx = pendingTools.get(name);
+        const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
+        const pendingIdx = pendingTools.get(callId);
         if (pendingIdx !== undefined) {
           const item = items[pendingIdx] as { type: "paired_tool"; toolCall: SSEEvent; toolResult?: SSEEvent };
           item.toolResult = event;
-          pendingTools.delete(name);
+          pendingTools.delete(callId);
         }
         // If no pending match, ignore (shouldn't happen with ordered events)
         break;
@@ -263,6 +266,13 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Services for resolving service_id → name
+  const { data: servicesData } = useQuery({
+    queryKey: ["services", "all"],
+    queryFn: () => getServices({ page_size: 200 }),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const serverMap = useMemo(() => {
     const map = new Map<string, string>();
     if (serversData?.items) {
@@ -272,6 +282,16 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
     }
     return map;
   }, [serversData]);
+
+  const serviceMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (servicesData?.items) {
+      for (const s of servicesData.items) {
+        map.set(s.id, s.name);
+      }
+    }
+    return map;
+  }, [servicesData]);
 
   const contextActive = phaseState.contextGathering === "active";
 
@@ -403,22 +423,33 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                       </motion.div>
                     );
                   case "paired_tool": {
-                    const serverId = item.toolCall.data.args
-                      ? (item.toolCall.data.args as Record<string, unknown>).server_id as string | undefined
-                      : undefined;
-                    const serverName = serverId ? serverMap.get(serverId) : undefined;
+                    const toolName = item.toolCall.data.name as string;
+                    const toolArgs = item.toolCall.data.args as Record<string, unknown> | undefined;
+
+                    // Resolve server/service info based on tool type
+                    let serverInfo: string | undefined;
+                    let serviceInfo: string | undefined;
+                    if (toolName === "ssh_bash") {
+                      const serverId = toolArgs?.server_id as string | undefined;
+                      serverInfo = serverId ? serverMap.get(serverId) : undefined;
+                    } else if (toolName === "service_exec") {
+                      const serviceId = toolArgs?.service_id as string | undefined;
+                      serviceInfo = serviceId ? serviceMap.get(serviceId) : undefined;
+                    }
+
                     const relTime = baseTimestamp
                       ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
                       : undefined;
                     return (
                       <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
                         <ToolCallCard
-                          name={item.toolCall.data.name as string}
-                          args={item.toolCall.data.args as Record<string, unknown>}
+                          name={toolName}
+                          args={toolArgs}
                           output={item.toolResult?.data.output as string | undefined}
                           isExecuting={!item.toolResult}
                           relativeTime={relTime}
-                          serverInfo={serverName}
+                          serverInfo={serverInfo}
+                          serviceInfo={serviceInfo}
                         />
                       </motion.div>
                     );

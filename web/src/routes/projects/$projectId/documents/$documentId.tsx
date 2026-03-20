@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { ArrowLeft, History, Loader2, Pencil, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { pageVariants, pageTransition } from "@/lib/motion";
 import {
   deleteDocument,
   getDocument,
@@ -26,6 +28,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { QueryContent } from "@/components/query-content";
 
 export const Route = createFileRoute(
   "/projects/$projectId/documents/$documentId",
@@ -94,20 +97,7 @@ function DocumentDetailPage() {
     },
   });
 
-  function renderContent() {
-    if (isLoading) {
-      return (
-        <div className="space-y-3 p-4">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-4 w-5/6" />
-          <Skeleton className="h-4 w-2/3" />
-        </div>
-      );
-    }
-
-    if (!doc) return null;
-
+  function renderDocContent(doc: NonNullable<typeof doc>) {
     // Editing mode
     if (editing && draft !== null) {
       if (isMarkdown) {
@@ -133,7 +123,7 @@ function DocumentDetailPage() {
     // View mode: markdown preview
     if (isMarkdown) {
       return (
-        <ScrollArea className="h-full">
+        <ScrollArea className="h-full" scrollToTop>
           <div className="p-4">
             <Markdown content={doc.content} />
           </div>
@@ -144,7 +134,7 @@ function DocumentDetailPage() {
     // View mode: editable text types (read-only display)
     if (isEditable) {
       return (
-        <ScrollArea className="h-full">
+        <ScrollArea className="h-full" scrollToTop>
           <pre className="whitespace-pre-wrap p-4 font-mono text-sm">
             {doc.content}
           </pre>
@@ -164,7 +154,13 @@ function DocumentDetailPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <motion.div
+      className="flex h-full flex-col"
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      transition={pageTransition}
+    >
       <div className="flex items-center justify-between border-b px-6 py-4">
         <div className="flex items-center gap-3 min-w-0">
           <Link to="/projects/$projectId" params={{ projectId }}>
@@ -228,7 +224,24 @@ function DocumentDetailPage() {
           )}
         </div>
       </div>
-      <div className="min-h-0 flex-1 p-4">{renderContent()}</div>
+      <div className="min-h-0 flex-1 p-4">
+        <QueryContent
+          isLoading={isLoading}
+          data={doc}
+          className="h-full"
+          skeleton={
+            <div className="space-y-3 p-4">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-4 w-5/6" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          }
+          empty={<div />}
+        >
+          {(doc) => renderDocContent(doc)}
+        </QueryContent>
+      </div>
 
       <AlertDialog
         open={showDeleteDialog}
@@ -254,6 +267,6 @@ function DocumentDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </motion.div>
   );
 }

@@ -11,7 +11,7 @@ from src.api.schemas import (
     ServerTestResponse,
     ServerUpdate,
 )
-from src.config import get_settings
+from src.env import get_settings
 from src.ops_agent.ssh import SSHConnector
 from src.db.connection import get_session
 from src.db.models import Server

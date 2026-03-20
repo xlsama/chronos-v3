@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 function fieldError(errors: unknown[]) {
   return errors.map((e) => ({
@@ -61,6 +62,7 @@ type FormValues = {
   username: string;
   database: string;
   use_tls: boolean;
+  path: string;
 };
 
 export function ServiceForm({
@@ -109,6 +111,7 @@ export function ServiceForm({
           username: (service.config.username as string) ?? "",
           database: (service.config.database as string) ?? "",
           use_tls: (service.config.use_tls as boolean) ?? false,
+          path: (service.config.path as string) ?? "",
         }
       : {
           name: "",
@@ -120,6 +123,7 @@ export function ServiceForm({
           username: "",
           database: "",
           use_tls: false,
+          path: "",
         };
 
   const form = useForm({
@@ -129,6 +133,7 @@ export function ServiceForm({
       if (value.username) config.username = value.username;
       if (value.database) config.database = value.database;
       if (value.use_tls) config.use_tls = value.use_tls;
+      if (value.path) config.path = value.path;
 
       if (isEdit) {
         const data: Record<string, unknown> = {};
@@ -189,6 +194,7 @@ export function ServiceForm({
     "mongodb",
     "redis",
   ].includes(serviceType);
+  const showPath = serviceType === "prometheus";
 
   return (
     <form
@@ -380,6 +386,38 @@ export function ServiceForm({
             )}
           </form.Field>
         )}
+
+        {showPath && (
+          <form.Field name="path">
+            {(field) => (
+              <Field>
+                <FieldLabel>API 路径</FieldLabel>
+                <Input
+                  placeholder="例如: /prometheus"
+                  value={field.state.value}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  反向代理路径前缀（可选）
+                </p>
+              </Field>
+            )}
+          </form.Field>
+        )}
+
+        <form.Field name="use_tls">
+          {(field) => (
+            <Field>
+              <div className="flex items-center justify-between">
+                <FieldLabel>启用 TLS</FieldLabel>
+                <Switch
+                  checked={field.state.value}
+                  onCheckedChange={(v) => field.handleChange(v)}
+                />
+              </div>
+            </Field>
+          )}
+        </form.Field>
       </div>
       <DialogFooter className="mt-4">
         <DialogClose render={<Button variant="outline" />}>取消</DialogClose>

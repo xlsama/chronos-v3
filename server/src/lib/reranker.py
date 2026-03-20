@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from src.config import get_settings
+from src.env import get_settings
 
 
 @dataclass

@@ -8,7 +8,7 @@ from src.api.schemas import (
     WebhookTestRequest,
     WebhookTestResponse,
 )
-from src.config import get_settings
+from src.env import get_settings
 from src.db.connection import get_session
 from src.db.models import NotificationSetting
 from src.lib.feishu import send_feishu_message

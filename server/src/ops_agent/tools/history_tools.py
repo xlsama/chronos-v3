@@ -1,4 +1,7 @@
+import time
+
 from src.db.connection import get_session_factory
+from src.lib.logger import logger
 from src.services.incident_history_service import IncidentHistoryService
 
 
@@ -11,10 +14,15 @@ async def search_incident_history(query: str) -> tuple[str, list[dict]]:
     Returns:
         Tuple of (formatted text, sources list).
     """
+    t0 = time.monotonic()
+    logger.info(f"[history] search_incident_history: query={query[:100]}")
     factory = get_session_factory()
     async with factory() as session:
         service = IncidentHistoryService(session=session)
         results = await service.search(query=query, limit=3)
+
+    elapsed = time.monotonic() - t0
+    logger.info(f"[history] search_incident_history completed in {elapsed:.2f}s: {len(results)} results")
 
     if not results:
         return ("暂无相似历史事件。", [])

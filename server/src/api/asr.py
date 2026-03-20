@@ -3,7 +3,7 @@ import asyncio
 import orjson
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from src.config import get_settings
+from src.env import get_settings
 from src.lib.logger import logger
 from src.services.asr_service import ASRProxySession
 

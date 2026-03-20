@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from src.lib.logger import logger
 
 SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "skills"
 
@@ -265,6 +266,7 @@ class SkillService:
                 "has_references": meta.has_references,
                 "has_assets": meta.has_assets,
             })
+        logger.info(f"[skill] get_available_skills: returning {len(result)} skills")
         return result
 
     def read_file(self, slug: str, rel_path: str | None = None) -> str:
@@ -278,14 +280,23 @@ class SkillService:
         if not skill_file.exists():
             raise FileNotFoundError(f"Skill '{slug}' not found")
 
+        logger.info(f"[skill] read_file: slug={slug}, rel_path={rel_path}")
+
         if rel_path:
-            return self.read_skill_file(slug, rel_path)
+            content = self.read_skill_file(slug, rel_path)
+            logger.info(f"[skill] read_file: slug={slug}, file={rel_path}, content_len={len(content)}")
+            logger.debug(f"[skill] read_file content:\n{content}")
+            return content
 
         # 返回 SKILL.md body + 文件列表
         _, body = self._parse_skill_file(skill_file)
         files = self.list_skill_files(slug)
 
         has_files = any(files[k] for k in files)
+        file_count = sum(len(files[k]) for k in files)
+        logger.info(f"[skill] read_file: slug={slug}, SKILL.md body_len={len(body)}, attached_files={file_count}")
+        logger.debug(f"[skill] read_file SKILL.md body:\n{body}")
+
         if not has_files:
             return body
 

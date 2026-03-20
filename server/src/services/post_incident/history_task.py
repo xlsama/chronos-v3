@@ -1,4 +1,5 @@
 import re
+import time
 import uuid
 
 from sqlalchemy import func, select
@@ -38,17 +39,17 @@ async def auto_save_history(incident_id: str, summary_md: str) -> None:
         return
 
     async with get_session_factory()() as session:
-        # Check tool_call events with bash → agent executed commands
+        # Check tool_call events with ssh_bash/bash/service_exec → agent executed commands
         tool_count = await session.scalar(
             select(func.count())
             .select_from(Message)
             .where(
                 Message.incident_id == uuid.UUID(incident_id),
                 Message.event_type == "tool_call",
-                Message.content == "bash",
+                Message.content.in_(["ssh_bash", "bash", "service_exec"]),
             )
         )
-        logger.info(f"[{sid}] [history] Check: bash_tool_calls={tool_count}")
+        logger.info(f"[{sid}] [history] Check: exec_tool_calls={tool_count}")
         if not tool_count:
             return
 
@@ -61,7 +62,10 @@ async def auto_save_history(incident_id: str, summary_md: str) -> None:
 
         service = IncidentHistoryService(session=session)
         logger.info(f"[{sid}] [history] Calling service.auto_save()")
+        t0 = time.monotonic()
         result = await service.auto_save(incident, summary_md)
+        save_elapsed = time.monotonic() - t0
+        logger.info(f"[{sid}] [history] service.auto_save() completed in {save_elapsed:.2f}s")
         if result is None:
             logger.warning(f"[{sid}] [history] Auto-save returned None (unexpected)")
             return

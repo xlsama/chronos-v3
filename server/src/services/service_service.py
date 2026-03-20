@@ -63,11 +63,19 @@ class ServiceService:
 
         await self.session.commit()
         await self.session.refresh(service)
+
+        from src.ops_agent.tools.service_exec_tool import invalidate_service_connector
+        await invalidate_service_connector(str(service.id))
+
         return service
 
     async def delete(self, service: Service) -> None:
+        service_id = str(service.id)
         await self.session.delete(service)
         await self.session.commit()
+
+        from src.ops_agent.tools.service_exec_tool import invalidate_service_connector
+        await invalidate_service_connector(service_id)
 
     async def test_connection(self, service: Service) -> tuple[bool, str]:
         """Test connectivity to the service. Uses TCP socket for DB services, HTTP for web services."""

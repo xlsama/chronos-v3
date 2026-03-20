@@ -62,10 +62,11 @@ class SSHConnector:
         return opts
 
     async def execute(self, command: str) -> SSHResult:
-        logger.info(f"SSH executing on {self.host}: {command}")
+        logger.info(f"[ssh] Executing on {self.host}: {command}")
 
         async def _run() -> SSHResult:
             if self.bastion_host:
+                logger.info(f"[ssh] Connecting via bastion {self.bastion_host}:{self.bastion_port} -> {self.host}:{self.port}")
                 bastion_opts = self._build_connect_opts(
                     host=self.bastion_host,
                     port=self.bastion_port,
@@ -95,6 +96,7 @@ class SSHConnector:
                             stderr=result.stderr or "",
                         )
             else:
+                logger.info(f"[ssh] Direct connect to {self.host}:{self.port}")
                 target_opts = self._build_connect_opts(
                     host=self.host,
                     port=self.port,

@@ -2,13 +2,16 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { toast } from "sonner";
+import { pageVariants, pageTransition } from "@/lib/motion";
 import { EllipsisVertical, Trash2 } from "lucide-react";
 import { deleteProject, getProject } from "@/api/projects";
 import { CreateDocumentButton, UploadDocumentButton } from "@/components/projects/document-upload";
 import { DocumentList } from "@/components/projects/document-list";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryContent } from "@/components/query-content";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,20 +53,26 @@ function ProjectDetailPage() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-4 w-72" />
-      </div>
-    );
-  }
-
-  if (!project) {
-    return <div className="p-6 text-muted-foreground">Project not found.</div>;
-  }
-
   return (
+    <motion.div
+      className="h-full"
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      transition={pageTransition}
+    >
+    <QueryContent
+      isLoading={isLoading}
+      data={project}
+      skeleton={
+        <div className="space-y-4 p-6">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+      }
+      empty={<div className="p-6 text-muted-foreground">Project not found.</div>}
+    >
+      {(project) => (
     <div className="flex h-full flex-col">
       <div className="flex items-start justify-between border-b px-6 py-4">
         <div>
@@ -124,5 +133,8 @@ function ProjectDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+      )}
+    </QueryContent>
+    </motion.div>
   );
 }

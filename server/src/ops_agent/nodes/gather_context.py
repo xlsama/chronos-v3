@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -61,10 +62,13 @@ async def gather_context_node(state: OpsState) -> dict:
 
     # Run both sub-agents in parallel
     logger.info(f"[{sid}] [gather_context] Starting parallel sub-agents: history + kb")
+    t0 = time.monotonic()
     history_result, kb_result = await asyncio.gather(
         _safe_run(run_history_agent, description, history_cb),
         _safe_run(run_kb_agent, description, kb_cb),
     )
+    parallel_elapsed = time.monotonic() - t0
+    logger.info(f"[{sid}] [gather_context] Parallel sub-agents completed in {parallel_elapsed:.2f}s")
 
     # Flush sub-agent thinking buffers so all thinking events are persisted
     if history_pub:
@@ -81,6 +85,11 @@ async def gather_context_node(state: OpsState) -> dict:
     )
 
     logger.info(f"[{sid}] [gather_context] Sub-agents completed: history={'FAILED' if history_failed else 'OK'}, kb={'FAILED' if kb_failed else 'OK'}")
+
+    # Log history summary details
+    if isinstance(history_result, str) and not history_failed:
+        logger.info(f"[{sid}] [gather_context] history_summary: {len(history_result)} chars")
+        logger.debug(f"[{sid}] [gather_context] history_summary preview:\n{history_result[:300]}")
 
     # Extract KB result
     kb_summary = None
@@ -105,6 +114,10 @@ async def gather_context_node(state: OpsState) -> dict:
             kb_summary = "\n\n".join(parts) if parts else None
     elif isinstance(kb_result, str):
         kb_summary = kb_result  # Error case
+
+    if kb_summary:
+        logger.info(f"[{sid}] [gather_context] kb_summary: {len(kb_summary)} chars, project_id={kb_project_id}")
+        logger.debug(f"[{sid}] [gather_context] kb_summary preview:\n{kb_summary[:300]}")
 
     logger.info(f"\n[{sid}] [gather_context] ===== Gathering context completed =====")
 

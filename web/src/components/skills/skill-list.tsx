@@ -34,6 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { QueryContent } from "@/components/query-content";
 
 interface SkillItemProps {
   skill: Skill;
@@ -128,50 +129,52 @@ export function SkillList() {
     queryFn: getSkills,
   });
 
-  if (isLoading) {
-    return (
-      <div className="divide-y">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 p-4">
-            <Skeleton className="h-5 w-5 rounded" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-8 w-8" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (!skills?.length) {
-    return (
-      <Empty className="pb-[20%]">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Sparkles />
-          </EmptyMedia>
-          <EmptyTitle>暂无技能</EmptyTitle>
-          <EmptyDescription>
-            创建技能来定义标准化的排查流程，Agent 排查时可调用。
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
-
   return (
-    <motion.div variants={listVariants} initial="initial" animate="animate">
-      {skills.map((skill) => (
-        <motion.div key={skill.slug} variants={listItemVariants}>
-          <SkillItem
-            skill={skill}
-            onSelect={() => navigate({ to: "/skills/$slug", params: { slug: skill.slug } })}
-          />
+    <QueryContent
+      isLoading={isLoading}
+      data={skills}
+      isEmpty={(d) => !d.length}
+      skeleton={
+        <div className="divide-y">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 p-4">
+              <Skeleton className="h-5 w-5 rounded" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-48" />
+              </div>
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-8 w-8" />
+            </div>
+          ))}
+        </div>
+      }
+      empty={
+        <Empty className="pt-[20vh]">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Sparkles />
+            </EmptyMedia>
+            <EmptyTitle>暂无技能</EmptyTitle>
+            <EmptyDescription>
+              创建技能来定义标准化的排查流程，Agent 排查时可调用。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      }
+    >
+      {(skills) => (
+        <motion.div variants={listVariants} initial="initial" animate="animate">
+          {skills.map((skill) => (
+            <motion.div key={skill.slug} variants={listItemVariants}>
+              <SkillItem
+                skill={skill}
+                onSelect={() => navigate({ to: "/skills/$slug", params: { slug: skill.slug } })}
+              />
+            </motion.div>
+          ))}
         </motion.div>
-      ))}
-    </motion.div>
+      )}
+    </QueryContent>
   );
 }

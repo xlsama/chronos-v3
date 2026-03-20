@@ -4,7 +4,7 @@ import json
 import orjson
 import websockets
 
-from src.config import Settings
+from src.env import Settings
 from src.lib.logger import logger
 
 

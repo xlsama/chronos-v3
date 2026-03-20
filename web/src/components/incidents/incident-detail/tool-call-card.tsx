@@ -11,7 +11,10 @@ interface ToolCallCardProps {
   isExecuting?: boolean;
   relativeTime?: string;
   serverInfo?: string;
+  serviceInfo?: string;
 }
+
+const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
 
 export function ToolCallCard({
   name,
@@ -20,12 +23,20 @@ export function ToolCallCard({
   isExecuting,
   relativeTime,
   serverInfo,
+  serviceInfo,
 }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(isExecuting ?? false);
 
-  const isBash = name === "bash";
-  const command = isBash ? (args?.command as string | undefined) : undefined;
-  const hasNonBashArgs = !isBash && args && Object.keys(args).length > 0;
+  const hasCommand = COMMAND_TOOLS.has(name);
+  const command = hasCommand ? (args?.command as string | undefined) : undefined;
+  const hasNonCommandArgs = !hasCommand && args && Object.keys(args).length > 0;
+
+  // Badge info
+  const badgeLabel =
+    name === "ssh_bash" ? serverInfo :
+    name === "bash" ? "本地" :
+    name === "service_exec" ? serviceInfo :
+    undefined;
 
   return (
     <div
@@ -44,9 +55,9 @@ export function ToolCallCard({
         )}
         <Wrench className="h-4 w-4 shrink-0 text-blue-700" />
         <span className="font-medium text-blue-900" data-testid="tool-name">{name}</span>
-        {serverInfo && (
+        {badgeLabel && (
           <Badge variant="secondary" className="text-xs">
-            {serverInfo}
+            {badgeLabel}
           </Badge>
         )}
         {isExecuting && (
@@ -60,7 +71,7 @@ export function ToolCallCard({
       {/* Expanded content */}
       {expanded && (
         <div className="flex flex-col gap-3 border-t border-blue-100 p-3 pt-2">
-          {/* Bash command */}
+          {/* Command */}
           {command && (
             <ShellCodeBlock
               code={command}
@@ -69,8 +80,8 @@ export function ToolCallCard({
             />
           )}
 
-          {/* Non-bash args */}
-          {hasNonBashArgs && (
+          {/* Non-command args */}
+          {hasNonCommandArgs && (
             <pre className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 pl-3 text-xs shadow-sm">
               {JSON.stringify(args, null, 2)}
             </pre>

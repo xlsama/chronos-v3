@@ -1,0 +1,62 @@
+import re
+
+import asyncpg
+
+from src.lib.logger import logger
+from src.ops_agent.tools.service_connectors.base import ServiceConnector, ServiceResult, format_as_table
+
+
+class PostgreSQLConnector(ServiceConnector):
+    service_type = "postgresql"
+
+    def __init__(self, host: str, port: int, username: str, password: str | None, database: str):
+        self._host = host
+        self._port = port
+        self._username = username
+        self._password = password
+        self._database = database
+        self._pool: asyncpg.Pool | None = None
+
+    async def _get_pool(self) -> asyncpg.Pool:
+        if self._pool is None:
+            logger.info(f"[postgresql] Creating pool: {self._host}:{self._port}/{self._database}")
+            self._pool = await asyncpg.create_pool(
+                host=self._host,
+                port=self._port,
+                user=self._username,
+                password=self._password,
+                database=self._database,
+                min_size=1,
+                max_size=3,
+            )
+        return self._pool
+
+    async def execute(self, command: str) -> ServiceResult:
+        pool = await self._get_pool()
+        cmd = command.strip()
+        upper = cmd.upper()
+
+        # Determine if this is a query (returns rows) or a statement
+        is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|WITH\s)", upper))
+        logger.info(f"[postgresql] Executing {'query' if is_query else 'statement'}: {cmd[:200]}")
+
+        async with pool.acquire() as conn:
+            if is_query:
+                rows = await conn.fetch(cmd)
+                if not rows:
+                    logger.info("[postgresql] Query returned 0 rows")
+                    return ServiceResult(success=True, output="(0 rows)", row_count=0)
+                columns = list(rows[0].keys())
+                data = [tuple(row.values()) for row in rows]
+                output = format_as_table(columns, data)
+                logger.info(f"[postgresql] Query returned {len(data)} rows")
+                return ServiceResult(success=True, output=output, row_count=len(data))
+            else:
+                result = await conn.execute(cmd)
+                logger.info(f"[postgresql] Statement result: {result}")
+                return ServiceResult(success=True, output=f"执行成功: {result}")
+
+    async def close(self) -> None:
+        if self._pool:
+            await self._pool.close()
+            self._pool = None

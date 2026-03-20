@@ -5,7 +5,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from src.config import get_settings
+from src.env import get_settings
 from src.db.connection import Base
 from src.db import models  # noqa: F401 — ensure models are registered
 

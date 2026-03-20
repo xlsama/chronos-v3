@@ -5,7 +5,7 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
-from src.config import get_settings
+from src.env import get_settings
 
 MIME_MAP = {
     ".png": "image/png",

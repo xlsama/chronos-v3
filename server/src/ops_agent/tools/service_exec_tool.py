@@ -1,0 +1,227 @@
+import asyncio
+import time
+import uuid
+
+from src.lib.logger import logger
+from src.ops_agent.tools.tool_permissions import ServiceSafety, CommandType, compress_output
+from src.ops_agent.tools.service_connectors.base import ServiceConnector
+
+# Registry of service connectors with TTL and capacity management
+_connector_registry: dict[str, tuple[ServiceConnector, float]] = {}
+_registry_lock = asyncio.Lock()
+_CONNECTOR_TTL = 600  # 10 minutes
+_CONNECTOR_MAX_SIZE = 50
+
+CONNECTOR_MAP: dict[str, type] = {}
+
+
+def _load_connector_map():
+    """Lazy-load connector classes to avoid import errors at module level."""
+    global CONNECTOR_MAP
+    if CONNECTOR_MAP:
+        return
+    from src.ops_agent.tools.service_connectors.postgresql import PostgreSQLConnector
+    from src.ops_agent.tools.service_connectors.redis_conn import RedisConnector
+    from src.ops_agent.tools.service_connectors.prometheus import PrometheusConnector
+    from src.ops_agent.tools.service_connectors.mysql import MySQLConnector
+    from src.ops_agent.tools.service_connectors.mongodb import MongoDBConnector
+    from src.ops_agent.tools.service_connectors.elasticsearch import ElasticsearchConnector
+    CONNECTOR_MAP = {
+        "postgresql": PostgreSQLConnector,
+        "mysql": MySQLConnector,
+        "redis": RedisConnector,
+        "prometheus": PrometheusConnector,
+        "mongodb": MongoDBConnector,
+        "elasticsearch": ElasticsearchConnector,
+    }
+
+
+def _evict_expired() -> None:
+    """Remove expired connectors (must be called under lock)."""
+    now = time.monotonic()
+    expired = [k for k, (_, ts) in _connector_registry.items() if now - ts > _CONNECTOR_TTL]
+    for k in expired:
+        del _connector_registry[k]
+
+
+async def invalidate_service_connector(service_id: str) -> None:
+    """Remove a service connector from cache, e.g. after credentials update."""
+    async with _registry_lock:
+        entry = _connector_registry.pop(service_id, None)
+    if entry:
+        connector, _ = entry
+        try:
+            await connector.close()
+        except Exception:
+            pass
+
+
+async def get_service_connector(service_id: str) -> ServiceConnector:
+    """Get or create a service connector by service_id."""
+    async with _registry_lock:
+        _evict_expired()
+
+        if service_id in _connector_registry:
+            connector, _ = _connector_registry[service_id]
+            _connector_registry[service_id] = (connector, time.monotonic())
+            return connector
+
+        if len(_connector_registry) >= _CONNECTOR_MAX_SIZE:
+            oldest_key = min(_connector_registry, key=lambda k: _connector_registry[k][1])
+            entry = _connector_registry.pop(oldest_key)
+            try:
+                await entry[0].close()
+            except Exception:
+                pass
+
+    # Cache miss → query DB → create connector → cache
+    from src.env import get_settings
+    from src.db.connection import get_session_factory
+    from src.db.models import Service
+    from src.services.crypto import CryptoService
+
+    _load_connector_map()
+
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            service_uuid = uuid.UUID(service_id)
+        except ValueError:
+            raise ValueError(
+                f"Invalid service_id '{service_id}': not a valid UUID. "
+                f"Call list_services() to get valid service IDs."
+            )
+        service = await session.get(Service, service_uuid)
+        if not service:
+            raise ValueError(f"Service not found: {service_id}")
+
+        stype = service.service_type
+        connector_cls = CONNECTOR_MAP.get(stype)
+        if connector_cls is None:
+            supported = ", ".join(CONNECTOR_MAP.keys())
+            raise ValueError(f"不支持的服务类型: {stype}，当前支持: {supported}")
+
+        crypto = CryptoService(key=get_settings().encryption_key)
+        password = crypto.decrypt(service.encrypted_password) if service.encrypted_password else None
+        config = service.config or {}
+
+        if stype == "postgresql":
+            connector = connector_cls(
+                host=service.host,
+                port=service.port,
+                username=config.get("username", "postgres"),
+                password=password,
+                database=config.get("database", "postgres"),
+            )
+        elif stype == "mysql":
+            connector = connector_cls(
+                host=service.host,
+                port=service.port,
+                username=config.get("username", "root"),
+                password=password,
+                database=config.get("database", "mysql"),
+            )
+        elif stype == "redis":
+            db = 0
+            db_str = config.get("database", "0")
+            try:
+                db = int(db_str) if db_str else 0
+            except (ValueError, TypeError):
+                db = 0
+            connector = connector_cls(
+                host=service.host,
+                port=service.port,
+                password=password,
+                db=db,
+            )
+        elif stype == "prometheus":
+            connector = connector_cls(
+                host=service.host,
+                port=service.port,
+                use_tls=config.get("use_tls", False),
+                path=config.get("path", ""),
+                username=config.get("username"),
+                password=password,
+            )
+        elif stype == "mongodb":
+            connector = connector_cls(
+                host=service.host,
+                port=service.port,
+                username=config.get("username"),
+                password=password,
+                database=config.get("database", "admin"),
+            )
+        elif stype == "elasticsearch":
+            connector = connector_cls(
+                host=service.host,
+                port=service.port,
+                use_tls=config.get("use_tls", False),
+                username=config.get("username"),
+                password=password,
+            )
+        else:
+            raise ValueError(f"不支持的服务类型: {stype}")
+
+        async with _registry_lock:
+            _connector_registry[service_id] = (connector, time.monotonic())
+        return connector
+
+
+async def list_services() -> list[dict]:
+    """List available services, excluding offline ones."""
+    from sqlalchemy import select
+
+    from src.db.connection import get_session_factory
+    from src.db.models import Service
+
+    factory = get_session_factory()
+    async with factory() as session:
+        stmt = select(Service).where(Service.status != "offline")
+        result = await session.execute(stmt)
+        services = result.scalars().all()
+
+        return [
+            {
+                "id": str(s.id),
+                "name": s.name,
+                "service_type": s.service_type,
+                "host": s.host,
+                "port": s.port,
+                "status": s.status,
+            }
+            for s in services
+        ]
+
+
+async def service_exec(service_id: str, command: str) -> str:
+    """Execute a command on a service. Returns plain text string."""
+    try:
+        connector = await get_service_connector(service_id)
+    except ValueError as e:
+        return f"错误: {e}"
+
+    cmd_type = ServiceSafety.classify(connector.service_type, command)
+    if cmd_type == CommandType.BLOCKED:
+        return "命令被系统拦截"
+
+    logger.info(
+        f"\n[service_exec] Executing: service={service_id[:8]}..., "
+        f"type={connector.service_type}, cmd_type={cmd_type.name}, command={command[:100]}"
+    )
+
+    try:
+        t0 = time.monotonic()
+        result = await asyncio.wait_for(connector.execute(command), timeout=30)
+        exec_elapsed = time.monotonic() - t0
+        logger.info(f"[service_exec] Completed in {exec_elapsed:.2f}s")
+    except asyncio.TimeoutError:
+        actual_elapsed = time.monotonic() - t0
+        logger.warning(f"[service_exec] Timeout after {actual_elapsed:.2f}s (limit=30s)")
+        return "查询执行超时（30秒），请简化查询或增加限制条件"
+    except Exception as e:
+        logger.error(f"[service_exec] Error: {e}")
+        return f"执行异常: {e}"
+
+    if not result.success:
+        return f"执行失败: {result.error}"
+    return compress_output(result.output)

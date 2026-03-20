@@ -3,6 +3,8 @@ from langchain_core.messages import ToolMessage
 from src.lib.logger import logger
 from src.ops_agent.state import OpsState
 
+_APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
+
 
 async def human_approval_node(state: OpsState) -> dict:
     """This node is an interrupt point.
@@ -25,13 +27,14 @@ async def human_approval_node(state: OpsState) -> dict:
             tool_messages = []
             if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                 for tc in last_message.tool_calls:
-                    if tc["name"] == "bash":
+                    if tc["name"] in _APPROVAL_TOOLS:
                         tool_messages.append(
                             ToolMessage(
                                 content="用户拒绝了该命令，请换一个方案继续排查。",
                                 tool_call_id=tc["id"],
                             )
                         )
+            logger.info(f"[{sid}] [approval] Rejected: injected {len(tool_messages)} rejection message(s)")
             return {
                 "messages": tool_messages,
                 "needs_approval": False,
@@ -46,15 +49,19 @@ async def human_approval_node(state: OpsState) -> dict:
             "approval_decision": None,
         }
 
-    # Initial entry: extract pending bash tool call
+    # Initial entry: extract pending tool call that needs approval
     last_message = state["messages"][-1]
-    bash_calls = [
-        tc for tc in last_message.tool_calls if tc["name"] == "bash"
+    approval_calls = [
+        tc for tc in last_message.tool_calls if tc["name"] in _APPROVAL_TOOLS
     ]
 
-    logger.info(f"[{sid}] [approval] Initial entry: pending bash_calls={len(bash_calls)}")
+    for tc in approval_calls:
+        cmd_preview = tc.get("args", {}).get("command", "")[:200]
+        logger.info(f"[{sid}] [approval] Pending tool: {tc['name']}, command={cmd_preview}")
+
+    logger.info(f"[{sid}] [approval] Initial entry: pending approval_calls={len(approval_calls)}")
 
     return {
         "needs_approval": True,
-        "pending_tool_call": bash_calls[0] if bash_calls else None,
+        "pending_tool_call": approval_calls[0] if approval_calls else None,
     }

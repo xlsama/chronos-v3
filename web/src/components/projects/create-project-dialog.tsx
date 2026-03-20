@@ -26,7 +26,6 @@ export function CreateProjectDialog() {
   const mutation = useMutation({
     mutationFn: createProject,
     onSuccess: (project) => {
-      toast.success("项目已创建");
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       setOpen(false);
       navigate({

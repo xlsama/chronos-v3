@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDebounceFn } from "ahooks";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { History, Loader2, Search, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import {
@@ -48,9 +48,10 @@ export function IncidentHistoryPanel() {
     { wait: 300 },
   );
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isPlaceholderData } = useQuery({
     queryKey: ["incident-history", page, debouncedSearch],
     queryFn: () => getIncidentHistoryList(page, PAGE_SIZE, debouncedSearch || undefined),
+    placeholderData: keepPreviousData,
   });
 
   const deleteMutation = useMutation({
@@ -64,7 +65,7 @@ export function IncidentHistoryPanel() {
 
   if (!isLoading && !data?.items.length && !debouncedSearch) {
     return (
-      <Empty className="py-24">
+      <Empty className="pt-[20vh]">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <History />
@@ -110,7 +111,7 @@ export function IncidentHistoryPanel() {
       ) : !data?.items.length ? (
         <p className="py-8 text-center text-sm text-muted-foreground">未找到匹配的历史事件</p>
       ) : (
-        <>
+        <div className={isPlaceholderData ? "opacity-60 transition-opacity" : "transition-opacity"}>
       <div className="space-y-2">
         {data.items.map((item) => (
           <button
@@ -167,7 +168,7 @@ export function IncidentHistoryPanel() {
           </Button>
         </div>
       )}
-        </>
+        </div>
       )}
 
       <IncidentHistoryDetailSheet

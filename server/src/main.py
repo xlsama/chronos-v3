@@ -15,7 +15,7 @@ from src.api.incidents import router as incidents_router
 from src.api.servers import router as servers_router
 from src.api.projects import router as projects_router
 from src.api.asr import router as asr_router
-from src.config import get_settings
+from src.env import get_settings
 from src.lib.errors import AppError
 from src.lib.logger import logger
 from src.lib.redis import get_redis

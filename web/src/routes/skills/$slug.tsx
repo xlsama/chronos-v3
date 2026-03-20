@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { ArrowLeft, History, Loader2, Pencil, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { pageVariants, pageTransition } from "@/lib/motion";
 import {
   deleteSkill,
   getSkill,
@@ -30,6 +32,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkillFileTree } from "@/components/skills/skill-file-tree";
+import { QueryContent } from "@/components/query-content";
 
 export const Route = createFileRoute("/skills/$slug")({
   component: SkillDetailPage,
@@ -212,7 +215,13 @@ function SkillDetailPage() {
     : "";
 
   return (
-    <div className="flex h-full flex-col">
+    <motion.div
+      className="flex h-full flex-col"
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      transition={pageTransition}
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b px-6 py-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -264,97 +273,105 @@ function SkillDetailPage() {
 
       {/* Content */}
       <div className="min-h-0 flex-1">
-        {isLoading ? (
-          <div className="space-y-3 p-6">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-4 w-5/6" />
-          </div>
-        ) : skill ? (
-          <div className="flex h-full">
-            {/* Left: File Tree */}
-            <aside className="w-60 shrink-0 border-r overflow-y-auto p-3">
-              <SkillFileTree
-                slug={slug}
-                scriptFiles={skill.script_files}
-                referenceFiles={skill.reference_files}
-                assetFiles={skill.asset_files}
-                selectedFile={selectedFile}
-                dirtyFiles={editing ? dirtyFiles : undefined}
-                onSelectFile={(f) => {
-                  setSelectedFile(f);
-                }}
-              />
-            </aside>
+        <QueryContent
+          isLoading={isLoading}
+          data={skill}
+          className="h-full"
+          skeleton={
+            <div className="space-y-3 p-6">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-4 w-5/6" />
+            </div>
+          }
+          empty={<div />}
+        >
+          {(skill) => (
+            <div className="flex h-full">
+              {/* Left: File Tree */}
+              <aside className="w-60 shrink-0 border-r overflow-y-auto p-3">
+                <SkillFileTree
+                  slug={slug}
+                  scriptFiles={skill.script_files}
+                  referenceFiles={skill.reference_files}
+                  assetFiles={skill.asset_files}
+                  selectedFile={selectedFile}
+                  dirtyFiles={editing ? dirtyFiles : undefined}
+                  onSelectFile={(f) => {
+                    setSelectedFile(f);
+                  }}
+                />
+              </aside>
 
-            {/* Right: Editor */}
-            <div className="flex-1 min-w-0 flex flex-col">
-              {/* Toolbar */}
-              <div className="flex items-center justify-between border-b px-4 py-2">
-                <span className="text-sm text-muted-foreground">
-                  {selectedFile ?? "SKILL.md"}
-                </span>
-                {editing && (
-                  <Button
-                    size="sm"
-                    onClick={() => saveMutation.mutate()}
-                    disabled={saveMutation.isPending || !currentDirty}
-                  >
-                    {saveMutation.isPending ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Save className="mr-1.5 h-3.5 w-3.5" />
-                    )}
-                    保存
-                  </Button>
-                )}
-              </div>
+              {/* Right: Editor */}
+              <div className="flex-1 min-w-0 flex flex-col">
+                {/* Toolbar */}
+                <div className="flex items-center justify-between border-b px-4 py-2">
+                  <span className="text-sm text-muted-foreground">
+                    {selectedFile ?? "SKILL.md"}
+                  </span>
+                  {editing && (
+                    <Button
+                      size="sm"
+                      onClick={() => saveMutation.mutate()}
+                      disabled={saveMutation.isPending || !currentDirty}
+                    >
+                      {saveMutation.isPending ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Save className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      保存
+                    </Button>
+                  )}
+                </div>
 
-              {/* Editor area */}
-              <div className="min-h-0 flex-1">
-                {selectedFile === null ? (
-                  // SKILL.md
-                  editing && currentFileDraft !== undefined ? (
-                    <div className="h-full p-4">
-                      <MarkdownEditor
-                        value={currentFileDraft}
-                        onChange={(v) => updateDraft(null, v)}
-                        className="h-full"
-                        autoFocus
-                        previewTransform={(v) => parseFrontmatter(v).body}
-                        variant="default"
-                      />
-                    </div>
-                  ) : parsed ? (
-                    <ScrollArea className="h-full p-4">
-                      <Markdown content={parsed.body} />
-                    </ScrollArea>
-                  ) : null
-                ) : (
-                  // Attached file
-                  fileLoading ? (
-                    <div className="p-6 space-y-3">
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
-                    </div>
-                  ) : editing ? (
-                    <CodeEditor
-                      value={currentFileDraft ?? currentFileContent}
-                      onChange={(v) => updateDraft(selectedFile, v)}
-                      language={getLanguageFromPath(selectedFile)}
-                    />
+                {/* Editor area */}
+                <div className="min-h-0 flex-1">
+                  {selectedFile === null ? (
+                    // SKILL.md
+                    editing && currentFileDraft !== undefined ? (
+                      <div className="h-full p-4">
+                        <MarkdownEditor
+                          value={currentFileDraft}
+                          onChange={(v) => updateDraft(null, v)}
+                          className="h-full"
+                          autoFocus
+                          previewTransform={(v) => parseFrontmatter(v).body}
+                          variant="default"
+                        />
+                      </div>
+                    ) : parsed ? (
+                      <ScrollArea className="h-full p-4" scrollToTop>
+                        <Markdown content={parsed.body} />
+                      </ScrollArea>
+                    ) : null
                   ) : (
-                    <CodeEditor
-                      value={currentFileContent}
-                      language={getLanguageFromPath(selectedFile)}
-                      readOnly
-                    />
-                  )
-                )}
+                    // Attached file
+                    fileLoading ? (
+                      <div className="p-6 space-y-3">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
+                      </div>
+                    ) : editing ? (
+                      <CodeEditor
+                        value={currentFileDraft ?? currentFileContent}
+                        onChange={(v) => updateDraft(selectedFile, v)}
+                        language={getLanguageFromPath(selectedFile)}
+                      />
+                    ) : (
+                      <CodeEditor
+                        value={currentFileContent}
+                        language={getLanguageFromPath(selectedFile)}
+                        readOnly
+                      />
+                    )
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
+          )}
+        </QueryContent>
       </div>
 
       {/* Delete dialog */}
@@ -417,6 +434,6 @@ function SkillDetailPage() {
         entityId={slug}
         title={`技能 ${displayName} 更新历史`}
       />
-    </div>
+    </motion.div>
   );
 }

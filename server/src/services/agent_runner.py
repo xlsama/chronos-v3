@@ -1,16 +1,17 @@
 import asyncio
 import json
+import time
 import uuid
 
 import orjson
 import redis.asyncio as aioredis
 from langchain_core.messages import HumanMessage
 
-from src.config import get_settings
+from src.env import get_settings
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.graph import compile_graph
 from src.ops_agent.state import OpsState
-from src.ops_agent.tools.safety import CommandSafety, CommandType
+from src.ops_agent.tools.tool_permissions import ShellSafety, ServiceSafety, CommandType
 from src.db.connection import get_session_factory
 from src.db.models import Incident
 from src.lib.logger import logger
@@ -34,6 +35,8 @@ class AgentRunner:
         self._ask_human_args_buffer = ""
         self._ask_human_published_len = 0
         self._ask_human_streamed = False
+        # Thinking content log buffer
+        self._thinking_content_log_buffer = ""
 
     async def _check_cancelled(self, incident_id: str) -> str | None:
         """Check if this incident has been cancelled. Returns cancel reason or None."""
@@ -183,11 +186,22 @@ class AgentRunner:
             pending = self._extract_pending_tool_call(vals)
             if pending:
                 args = pending.get("args", {})
-                # Derive risk_level from CommandSafety instead of LLM args
+                tool_name = pending["name"]
                 command = args.get("command", "")
-                cmd_type = CommandSafety.classify(command)
+
+                # Derive risk_level based on tool type
+                if tool_name in ("ssh_bash", "bash"):
+                    cmd_type = ShellSafety.classify(command, local=(tool_name == "bash"))
+                elif tool_name == "service_exec":
+                    # Need service_type for classification
+                    from src.ops_agent.nodes.main_agent import _get_service_type
+                    service_type = await _get_service_type(args.get("service_id", ""))
+                    cmd_type = ServiceSafety.classify(service_type, command)
+                else:
+                    cmd_type = CommandType.WRITE
+
                 risk_level = "HIGH" if cmd_type == CommandType.DANGEROUS else "MEDIUM"
-                logger.info(f"[{sid}] [post_run] human_approval interrupt: tool={pending['name']}, cmd_type={cmd_type.name}, risk={risk_level}")
+                logger.info(f"[{sid}] [post_run] human_approval interrupt: tool={tool_name}, cmd_type={cmd_type.name}, risk={risk_level}")
                 logger.debug(f"[{sid}] [post_run] approval command: {command[:200]}")
                 async with get_session_factory()() as session:
                     approval = await ApprovalService(session).create(
@@ -254,14 +268,16 @@ class AgentRunner:
                 kb_project_id=vals.get("kb_project_id"),
             ))
 
+    _APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
+
     @staticmethod
     def _extract_pending_tool_call(vals: dict) -> dict | None:
-        """Extract the bash tool call that needs approval from the last AI message."""
+        """Extract the tool call that needs approval from the last AI message."""
         messages = vals.get("messages", [])
         for msg in reversed(messages):
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    if tc["name"] == "bash":
+                    if tc["name"] in AgentRunner._APPROVAL_TOOLS:
                         return tc
         return None
 
@@ -292,6 +308,7 @@ class AgentRunner:
         self._answer_args_buffer = ""
         self._answer_published_len = 0
         self._thinking_done_sent = False
+        self._thinking_content_log_buffer = ""
 
     def _reset_ask_human_stream_state(self) -> None:
         self._ask_human_stream_active = False
@@ -364,6 +381,7 @@ class AgentRunner:
                                 "phase": phase, "agent": agent,
                             })
                             self._thinking_done_sent = True
+                        logger.info(f"[{sid}] [stream] Answer stream started, thinking_chars={len(self._thinking_content_log_buffer)}")
 
                     if tcc.get("name") == "ask_human":
                         self._ask_human_stream_active = True
@@ -375,6 +393,7 @@ class AgentRunner:
                                 "phase": phase, "agent": agent,
                             })
                             self._thinking_done_sent = True
+                        logger.info(f"[{sid}] [stream] Ask_human stream started, thinking_chars={len(self._thinking_content_log_buffer)}")
 
                     if self._answer_stream_active and tcc.get("args"):
                         self._answer_args_buffer += tcc["args"]
@@ -394,6 +413,7 @@ class AgentRunner:
 
             # Regular content (thinking) — only if not in answer/ask_human stream
             if chunk.content and not self._answer_stream_active and not self._ask_human_stream_active:
+                self._thinking_content_log_buffer += chunk.content
                 await self.publisher.publish(channel, "thinking", {
                     "content": chunk.content,
                     "phase": phase,
@@ -416,13 +436,22 @@ class AgentRunner:
 
             if self._answer_stream_active:
                 # Already streamed answer via tool_call_chunks, just send answer_done
+                answer_len = self._answer_published_len
+                logger.info(f"[{sid}] [stream] Answer stream done, answer_chars={answer_len}")
+                logger.debug(f"[{sid}] [stream] Answer content:\n{self._answer_args_buffer}")
                 await self.publisher.publish(channel, "answer_done", {"phase": phase})
                 self._reset_answer_stream_state()
             elif self._ask_human_stream_active:
+                ask_human_len = self._ask_human_published_len
+                logger.info(f"[{sid}] [stream] Ask_human stream done, question_chars={ask_human_len}")
                 await self.publisher.publish(channel, "ask_human_done", {})
                 self._reset_ask_human_stream_state()
             else:
                 # End current thinking segment
+                thinking_len = len(self._thinking_content_log_buffer)
+                logger.info(f"[{sid}] [stream] Thinking done (no tool_call), thinking_chars={thinking_len}")
+                logger.debug(f"[{sid}] [stream] Thinking content:\n{self._thinking_content_log_buffer}")
+                self._thinking_content_log_buffer = ""
                 await self.publisher.publish(channel, "thinking_done", {
                     "phase": phase, "agent": agent,
                 })
@@ -441,12 +470,16 @@ class AgentRunner:
         elif kind == "on_tool_start":
             name = event.get("name", "")
             if name == "read_skill":
+                path = event["data"].get("input", {}).get("path", "")
+                logger.info(f"[{sid}] [skill] read_skill start: path={path}")
                 return  # Don't emit tool_call; wait for tool_end to emit skill_read
+            run_id = event.get("run_id", "")
             logger.info(f"\n[{sid}] [main] Tool start: {name}")
             logger.debug(f"[{sid}] [main] Tool input: {event['data'].get('input', {})}")
             await self.publisher.publish(channel, "tool_call", {
                 "name": name,
                 "args": event["data"].get("input", {}),
+                "tool_call_id": run_id,
                 "phase": phase,
                 "agent": agent,
             })
@@ -458,6 +491,8 @@ class AgentRunner:
                 output = str(event["data"].get("output", ""))
                 success = not output.startswith("未找到")
                 path = args.get("path", "")
+                logger.info(f"[{sid}] [skill] read_skill done: path={path}, success={success}, content_len={len(output)}")
+                logger.debug(f"[{sid}] [skill] read_skill content:\n{output}")
                 # Extract slug and determine display name
                 parts = path.split("/", 1)
                 skill_slug = parts[0]
@@ -472,12 +507,14 @@ class AgentRunner:
                     "agent": agent,
                 })
                 return
+            run_id = event.get("run_id", "")
             output_str = str(event["data"].get("output", ""))
             logger.info(f"\n[{sid}] [main] Tool end: {name}")
             logger.debug(f"[{sid}] [main] Tool output: {output_str[:500]}")
             await self.publisher.publish(channel, "tool_result", {
                 "name": name,
                 "output": output_str,
+                "tool_call_id": run_id,
                 "phase": phase,
                 "agent": agent,
             })

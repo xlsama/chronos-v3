@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
@@ -6,9 +7,14 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import OpsState
-from src.config import get_settings
-from src.ops_agent.tools.bash_tool import bash as _bash, list_servers as _list_servers
-from src.ops_agent.tools.safety import CommandSafety, CommandType
+from src.env import get_settings
+from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash, list_servers as _list_servers
+from src.ops_agent.tools.bash_tool import local_bash as _local_bash
+from src.ops_agent.tools.service_exec_tool import (
+    service_exec as _service_exec,
+    list_services as _list_services,
+)
+from src.ops_agent.tools.tool_permissions import ShellSafety, ServiceSafety, CommandType
 from src.services.skill_service import SkillService
 from src.lib.logger import logger
 
@@ -17,9 +23,9 @@ def build_tools():
     from langchain_core.tools import tool
 
     @tool
-    async def bash(server_id: str, command: str, explanation: str = "") -> dict:
-        """在目标服务器执行 Shell 命令。
-        命令通过 SSH 在 server_id 对应的远程主机上运行，不是在 agent 自身容器中运行。
+    async def ssh_bash(server_id: str, command: str, explanation: str = "") -> dict:
+        """在目标服务器执行 Shell 命令（通过 SSH）。
+        命令在 server_id 对应的远程主机上运行，不是在 agent 自身容器中运行。
         `localhost`、`127.0.0.1`、文件路径、监听端口都必须按目标服务器视角解释。
         系统自动判断命令权限：只读命令直接执行，写操作需人工审批。
         网络请求用 curl。查看日志/配置文件用 cat/tail/grep，但禁止通过 cat 源码或构建产物来获取数据库表结构、连接串等运行时信息——应使用 psql/mysql/redis-cli 等 CLI 直接查询。
@@ -27,14 +33,43 @@ def build_tools():
         - command: 要执行的 Shell 命令
         - explanation: 可选，写操作时提供操作说明（展示在审批卡片上）
         """
-        return await _bash(server_id=server_id, command=command)
+        return await _ssh_bash(server_id=server_id, command=command)
+
+    @tool
+    async def bash(command: str, explanation: str = "") -> dict:
+        """在本地执行命令（curl、技能脚本、文本处理等）。
+        用于不需要 SSH 到远程服务器的场景：运行本地脚本、curl 调用 API、文本处理等。
+        注意：本地环境禁止 docker/kubectl/systemctl/env/printenv/sudo 等命令。
+        - command: 要执行的命令
+        - explanation: 可选，写操作时提供操作说明
+        """
+        return await _local_bash(command=command)
+
+    @tool
+    async def service_exec(service_id: str, command: str, explanation: str = "") -> str:
+        """直连服务执行命令。
+        - PostgreSQL: 纯 SQL 语句（SELECT/INSERT/UPDATE 等，不支持 psql 元命令，需要表信息用 information_schema）
+        - Redis: Redis 命令（GET/SET/INFO 等）
+        - Prometheus: PromQL 表达式
+        - service_id: 必须是 list_services() 返回的有效 UUID
+        - command: 要执行的命令/查询
+        - explanation: 可选，写操作时提供操作说明
+        """
+        return await _service_exec(service_id=service_id, command=command)
 
     @tool
     async def list_servers() -> list[dict]:
-        """List all available servers. Returns id, name, host, status.
-        Use this to discover target server when KB context is insufficient.
+        """列出所有可用服务器。返回 id, name, host, status。
+        用于发现目标服务器（SSH 远程执行）。
         """
         return await _list_servers()
+
+    @tool
+    async def list_services() -> list[dict]:
+        """列出所有可用服务。返回 id, name, service_type, host, port, status。
+        用于发现可直连的数据库/缓存/监控服务。
+        """
+        return await _list_services()
 
     @tool
     def ask_human(question: str) -> str:
@@ -54,7 +89,9 @@ def build_tools():
         if path.strip() == "?":
             available = service.get_available_skills()
             if not available:
+                logger.info("[skill] read_skill: path=?, no skills available")
                 return "当前没有可用技能。"
+            logger.info(f"[skill] read_skill: path=?, returning {len(available)} skills")
             lines = ["所有可用技能:"]
             for s in available:
                 lines.append(f"- {s['slug']}: {s['description']}")
@@ -63,8 +100,12 @@ def build_tools():
         slug = parts[0]
         rel_path = parts[1] if len(parts) > 1 else None
         try:
-            return service.read_file(slug, rel_path)
+            content = service.read_file(slug, rel_path)
+            logger.info(f"[skill] read_skill: slug={slug}, rel_path={rel_path}, content_len={len(content)}")
+            logger.debug(f"[skill] read_skill content:\n{content}")
+            return content
         except FileNotFoundError:
+            logger.warning(f"[skill] read_skill: not found, path={path}")
             return f"未找到: {path}"
 
     @tool
@@ -72,7 +113,16 @@ def build_tools():
         """排查完成后调用。answer_md 是给用户看的正式回答，要直面问题、给出结论和建议。"""
         return answer_md
 
-    return [bash, list_servers, read_skill, ask_human, complete]
+    return [
+        ssh_bash,
+        bash,
+        service_exec,
+        list_servers,
+        list_services,
+        read_skill,
+        ask_human,
+        complete,
+    ]
 
 
 _COMPACT_THRESHOLD = 10  # >10 个 skill 使用 compact 格式
@@ -84,7 +134,7 @@ def _build_skills_context(
     history_summary: str | None = None,
     incident_description: str | None = None,
 ) -> str:
-    """构建 skills 上下文，仅包含全量 XML 目录。
+    """构建 skills 上下文，包含结构化使用规则和全量 XML 目录。
 
     两层格式策略:
     - Full format (≤10): <skill><name>...</name><description>...</description></skill>
@@ -93,11 +143,21 @@ def _build_skills_context(
     available = skill_service.get_available_skills()
 
     if not available:
+        logger.info("[skill] _build_skills_context: no available skills")
         return ""
+
+    slugs = [s["slug"] for s in available]
+    fmt = "compact" if len(available) > _COMPACT_THRESHOLD else "full"
+    logger.info(f"[skill] _build_skills_context: {len(available)} skills ({fmt}), slugs={slugs}")
 
     xml_lines = [
         "\n<available_skills>",
-        "扫描所有技能的 name 和 description，自行判断是否 read_skill 读取完整内容；不匹配则跳过。",
+        "使用规则:",
+        "1. 批量扫描: 逐条看 name 和 description，将所有与当前事件相关的技能找出来，在同一轮响应中批量调用 read_skill 一次性加载。",
+        '2. 渐进加载: 先读 SKILL.md 主体获取流程概要；scripts/references 等子文件只在执行到相关步骤时再按需加载（read_skill("slug/scripts/xxx")）。',
+        "3. 上下文控制: 技能内容较长时，在推理中总结关键步骤和命令，不要大段复制粘贴原文。",
+        "4. 多技能协调: 多个技能同时匹配时，选最小必要集合，声明使用顺序和原因。",
+        "5. 缺失回退: 若匹配的技能无法读取或不适用当前场景，简要说明原因，用通用排查方法继续。",
     ]
 
     if len(available) > _COMPACT_THRESHOLD:
@@ -179,11 +239,19 @@ async def main_agent_node(state: OpsState) -> dict:
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
 
+    tool_names = [t.name for t in tools]
     logger.info(
-        f"[{sid}] [main] main_agent_node invoked, history={'yes' if history_summary else 'no'}, kb={'yes' if kb_summary else 'no'}"
+        f"[{sid}] [main] main_agent_node invoked, history={'yes' if history_summary else 'no'}, kb={'yes' if kb_summary else 'no'}, "
+        f"messages={len(messages)}, tools={tool_names}"
+    )
+    logger.debug(
+        f"[{sid}] [main] System prompt ({len(system_prompt)} chars):\n{system_prompt[:2000]}"
     )
 
+    t0 = time.monotonic()
     response = await _invoke_llm_with_retry(llm, messages)
+    llm_elapsed = time.monotonic() - t0
+    logger.info(f"[{sid}] [main] LLM responded in {llm_elapsed:.2f}s")
 
     content_text = response.content if hasattr(response, "content") else ""
     tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
@@ -198,7 +266,24 @@ async def main_agent_node(state: OpsState) -> dict:
     return {"messages": [response]}
 
 
-def route_decision(state: OpsState) -> str:
+async def _get_service_type(service_id: str) -> str:
+    """Lookup service_type for a given service_id. Returns empty string on error."""
+    if not service_id:
+        return ""
+    try:
+        from src.db.connection import get_session_factory
+        from src.db.models import Service
+        import uuid as _uuid
+
+        factory = get_session_factory()
+        async with factory() as session:
+            svc = await session.get(Service, _uuid.UUID(service_id))
+            return svc.service_type if svc else ""
+    except Exception:
+        return ""
+
+
+async def route_decision(state: OpsState) -> str:
     sid = state["incident_id"][:8]
     last_message = state["messages"][-1]
 
@@ -222,11 +307,22 @@ def route_decision(state: OpsState) -> str:
                 return "complete"
             logger.info(f"[{sid}] [main] route_decision: tool=ask_human -> ask_human")
             return "ask_human"
-        if name == "bash":
-            cmd_type = CommandSafety.classify(tool_call["args"].get("command", ""))
+        if name in ("ssh_bash", "bash"):
+            cmd_type = ShellSafety.classify(
+                tool_call["args"].get("command", ""),
+                local=(name == "bash"),
+            )
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
                 logger.info(
-                    f"[{sid}] [main] route_decision: need_approval (cmd_type={cmd_type.name})"
+                    f"[{sid}] [main] route_decision: need_approval (tool={name}, cmd_type={cmd_type.name})"
+                )
+                return "need_approval"
+        if name == "service_exec":
+            service_type = await _get_service_type(tool_call["args"].get("service_id", ""))
+            cmd_type = ServiceSafety.classify(service_type, tool_call["args"].get("command", ""))
+            if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
+                logger.info(
+                    f"[{sid}] [main] route_decision: need_approval (tool=service_exec, cmd_type={cmd_type.name})"
                 )
                 return "need_approval"
 

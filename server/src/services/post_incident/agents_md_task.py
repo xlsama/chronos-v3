@@ -1,4 +1,5 @@
 import re
+import time
 import uuid
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -174,7 +175,10 @@ async def auto_update_agents_md(
         len(conversation_text),
         len(summary_md),
     )
+    t_step = time.monotonic()
     knowledge_text = await _extract_knowledge(conversation_text, summary_md, entity_anchors)
+    extract_elapsed = time.monotonic() - t_step
+    logger.info("[{}] [agents_md] _extract_knowledge completed in {:.2f}s", sid, extract_elapsed)
     if not knowledge_text:
         logger.info("[{}] [agents_md] No knowledge extracted, skipping", sid)
         return {"action": "no_knowledge"}
@@ -182,7 +186,10 @@ async def auto_update_agents_md(
     logger.info("[{}] [agents_md] Knowledge extracted ({} chars)", sid, len(knowledge_text))
 
     # Step 2: Find candidate projects via vector search
+    t_step = time.monotonic()
     candidates = await _find_candidate_projects(knowledge_text)
+    find_elapsed = time.monotonic() - t_step
+    logger.info("[{}] [agents_md] _find_candidate_projects completed in {:.2f}s", sid, find_elapsed)
 
     # 确保 KB Agent 匹配的项目在候选列表中
     if kb_project_id:
@@ -200,16 +207,19 @@ async def auto_update_agents_md(
     # Step 3: Update each candidate project's AGENTS.md
     results = {}
     for project_id, distance in candidates:
+        t_update = time.monotonic()
         async with get_session_factory()() as session:
             result = await _update_project_agents_md(session, project_id, knowledge_text)
-            results[str(project_id)] = result
-            logger.info(
-                "[{}] [agents_md] Project {}: {} (distance={:.4f})",
-                sid,
-                str(project_id)[:8],
-                result,
-                distance,
-            )
+        update_elapsed = time.monotonic() - t_update
+        results[str(project_id)] = result
+        logger.info(
+            "[{}] [agents_md] Project {}: {} in {:.2f}s (distance={:.4f})",
+            sid,
+            str(project_id)[:8],
+            result,
+            update_elapsed,
+            distance,
+        )
 
     return {"action": "completed", "results": results}
 

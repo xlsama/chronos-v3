@@ -21,6 +21,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { QueryContent } from "@/components/query-content";
 
 interface DocumentViewerProps {
   documentId: string | null;
@@ -71,20 +72,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
     }
   }
 
-  function renderContent() {
-    if (isLoading) {
-      return (
-        <div className="space-y-3 p-4">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-4 w-5/6" />
-          <Skeleton className="h-4 w-2/3" />
-        </div>
-      );
-    }
-
-    if (!doc) return null;
-
+  function renderDocContent(doc: NonNullable<typeof doc>) {
     // 编辑模式
     if (editing) {
       if (isMarkdown) {
@@ -110,7 +98,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
     // 只读模式
     if (isMarkdown) {
       return (
-        <ScrollArea className="h-full">
+        <ScrollArea className="h-full" scrollToTop>
           <div className="p-4">
             <Markdown content={doc.content} />
           </div>
@@ -176,7 +164,23 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
             )}
           </div>
         </DialogHeader>
-        <div className="min-h-0 flex-1">{renderContent()}</div>
+        <div className="min-h-0 flex-1">
+          <QueryContent
+            isLoading={isLoading}
+            data={doc}
+            skeleton={
+              <div className="space-y-3 p-4">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            }
+            empty={<div />}
+          >
+            {(doc) => renderDocContent(doc)}
+          </QueryContent>
+        </div>
       </DialogContent>
     </Dialog>
   );

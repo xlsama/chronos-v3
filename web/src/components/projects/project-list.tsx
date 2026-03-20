@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { toast } from "sonner";
@@ -41,6 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { listVariants, cardItemVariants } from "@/lib/motion";
+import { QueryContent } from "@/components/query-content";
 
 const GRADIENTS = [
   "from-violet-500 to-purple-600",
@@ -174,86 +175,88 @@ export function ProjectList() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isPlaceholderData } = useQuery({
     queryKey: ["projects", page],
     queryFn: () => getProjects({ page, page_size: pageSize }),
+    placeholderData: keepPreviousData,
   });
 
   const projects = data?.items;
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
 
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Card key={i} className="pt-0 overflow-hidden">
-            <Skeleton className="h-24 rounded-none" />
-            <CardHeader>
-              <Skeleton className="h-5 w-32" />
-              <Skeleton className="h-4 w-full" />
-            </CardHeader>
-            <CardFooter>
-              <Skeleton className="h-3 w-24" />
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
-  if (!projects?.length) {
-    return (
-      <Empty className="py-12">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <FolderOpen />
-          </EmptyMedia>
-          <EmptyTitle>暂无项目</EmptyTitle>
-          <EmptyDescription>创建一个以开始使用。</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
-
   return (
-    <>
-      <motion.div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" variants={listVariants} initial="initial" animate="animate">
-        {projects.map((project) => (
-          <motion.div key={project.id} variants={cardItemVariants}>
-            <ProjectCard project={project} />
+    <QueryContent
+      isLoading={isLoading}
+      data={data}
+      isEmpty={(d) => !d.items?.length}
+      skeleton={
+        <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="pt-0 overflow-hidden">
+              <Skeleton className="h-24 rounded-none" />
+              <CardHeader>
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-full" />
+              </CardHeader>
+              <CardFooter>
+                <Skeleton className="h-3 w-24" />
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      }
+      empty={
+        <Empty className="pt-[20vh]">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FolderOpen />
+            </EmptyMedia>
+            <EmptyTitle>暂无项目</EmptyTitle>
+            <EmptyDescription>创建一个以开始使用。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      }
+    >
+      {() => (
+        <div className={isPlaceholderData ? "opacity-60 transition-opacity" : "transition-opacity"}>
+          <motion.div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" variants={listVariants} initial="initial" animate="animate">
+            {projects!.map((project) => (
+              <motion.div key={project.id} variants={cardItemVariants}>
+                <ProjectCard project={project} />
+              </motion.div>
+            ))}
           </motion.div>
-        ))}
-      </motion.div>
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-6 py-3">
-          <span className="text-sm text-muted-foreground">
-            共 {total} 个项目
-          </span>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="px-2 text-sm">
-              {page} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-3">
+              <span className="text-sm text-muted-foreground">
+                共 {total} 个项目
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="px-2 text-sm">
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
-    </>
+    </QueryContent>
   );
 }

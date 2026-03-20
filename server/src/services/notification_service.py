@@ -3,7 +3,7 @@ import uuid
 
 from sqlalchemy import select
 
-from src.config import get_settings
+from src.env import get_settings
 from src.db.connection import get_session_factory
 from src.db.models import NotificationSetting, Project
 from src.lib.feishu import send_feishu_card

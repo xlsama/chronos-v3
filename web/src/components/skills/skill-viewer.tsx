@@ -16,6 +16,7 @@ import { Markdown } from "@/components/ui/markdown";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryContent } from "@/components/query-content";
 
 interface SkillViewerProps {
   skillSlug: string | null;
@@ -113,31 +114,38 @@ export function SkillViewer({ skillSlug, onClose, autoEdit }: SkillViewerProps) 
           </div>
         </DialogHeader>
         <div className="min-h-0 flex-1">
-          {isLoading ? (
-            <div className="space-y-3 p-4">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-1/2" />
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
-          ) : skill ? (
-            editing ? (
-              <MarkdownEditor
-                value={draft}
-                onChange={setDraft}
-                className="h-full"
-                autoFocus
-                previewTransform={(v) => parseFrontmatter(v).body}
-                variant="default"
-              />
-            ) : (
-              <ScrollArea className="h-full">
-                <div className="p-4">
-                  <Markdown content={parseFrontmatter(skill.content).body} />
-                </div>
-              </ScrollArea>
-            )
-          ) : null}
+          <QueryContent
+            isLoading={isLoading}
+            data={skill}
+            skeleton={
+              <div className="space-y-3 p-4">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            }
+            empty={<div />}
+          >
+            {(skill) =>
+              editing ? (
+                <MarkdownEditor
+                  value={draft}
+                  onChange={setDraft}
+                  className="h-full"
+                  autoFocus
+                  previewTransform={(v) => parseFrontmatter(v).body}
+                  variant="default"
+                />
+              ) : (
+                <ScrollArea className="h-full" scrollToTop>
+                  <div className="p-4">
+                    <Markdown content={parseFrontmatter(skill.content).body} />
+                  </div>
+                </ScrollArea>
+              )
+            }
+          </QueryContent>
         </div>
       </DialogContent>
     </Dialog>

@@ -1,4 +1,5 @@
 import re
+import time
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -9,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from src.ops_agent.prompts.kb_agent import KB_AGENT_SYSTEM_PROMPT
-from src.config import get_settings
+from src.env import get_settings
 from src.lib.logger import logger
 from src.ops_agent.tools.knowledge_tools import (
     list_projects_for_matching as _list_projects,
@@ -110,40 +111,44 @@ async def run_kb_agent(
     last_search_result: str = ""
 
     max_iterations = 5
-    for _ in range(max_iterations):
+    for i in range(max_iterations):
         full_content = ""
         full_response: AIMessage | None = None
 
+        t_llm = time.monotonic()
         async for chunk in llm_with_tools.astream(messages):
             if chunk.content:
                 full_content += chunk.content
                 await event_callback("thinking", {"content": chunk.content})
             full_response = chunk if full_response is None else full_response + chunk
+        llm_elapsed = time.monotonic() - t_llm
 
         assert full_response is not None
         await event_callback("thinking_done", {})
         messages.append(full_response)
 
-        logger.info(f"\n[kb_agent] LLM response (len={len(full_content)})")
+        logger.info(f"[kb_agent] [iter {i+1}] LLM responded in {llm_elapsed:.2f}s, content_len={len(full_content)}")
         if full_content:
-            logger.info(f"\n[kb_agent] LLM content:\n{full_content}\n")
+            logger.info(f"\n[kb_agent] [iter {i+1}] LLM content:\n{full_content}\n")
 
         if not full_response.tool_calls:
             break
 
         for tc in full_response.tool_calls:
             tool_name = tc["name"]
-            logger.info(f"\n[kb_agent] Tool call: {tool_name}({tc['args']})")
+            logger.info(f"[kb_agent] [iter {i+1}] Tool call: {tool_name}({tc['args']})")
             await event_callback("tool_call", {
                 "name": tool_name,
                 "args": tc["args"],
             })
 
             matching_tool = next(t for t in tools if t.name == tool_name)
+            t_tool = time.monotonic()
             result = await matching_tool.ainvoke(tc["args"])
+            tool_elapsed = time.monotonic() - t_tool
             result_str = str(result)
 
-            logger.info(f"\n[kb_agent] Tool result: {len(result_str)} chars")
+            logger.info(f"[kb_agent] [iter {i+1}] Tool result in {tool_elapsed:.2f}s: {len(result_str)} chars")
 
             event_data: dict[str, Any] = {
                 "name": tool_name,

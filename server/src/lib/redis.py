@@ -1,6 +1,6 @@
 import redis.asyncio as aioredis
 
-from src.config import get_settings
+from src.env import get_settings
 
 
 def get_redis():

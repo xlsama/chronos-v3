@@ -1,3 +1,4 @@
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -8,6 +9,7 @@ from src.db.connection import get_session_factory
 from src.db.models import Project, ProjectDocument
 from src.db.vector_store import VectorStore
 from src.lib.embedder import Embedder
+from src.lib.logger import logger
 from src.lib.reranker import Reranker
 
 
@@ -57,6 +59,7 @@ async def list_projects_for_matching() -> str:
             select(Project).order_by(Project.created_at.desc())
         )
         projects = list(result.scalars().all())
+        logger.info(f"[knowledge] list_projects_for_matching: {len(projects)} projects")
         if not projects:
             return "[]"
 
@@ -91,6 +94,8 @@ async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[
     Returns:
         Tuple of (formatted text, sources list).
     """
+    t_total = time.monotonic()
+    logger.info(f"[knowledge] search_knowledge_base: query={query[:100]}, project_id={project_id}")
     async with get_session_ctx() as session:
         project = await session.get(Project, uuid.UUID(project_id))
         if not project:
@@ -121,22 +126,31 @@ async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[
         # Vector search for relevant document chunks
         embedder = _get_embedder()
         reranker = _get_reranker()
+
+        t_embed = time.monotonic()
         query_embedding = await embedder.embed_text(query)
+        embed_elapsed = time.monotonic() - t_embed
+        logger.info(f"[knowledge] Embedding computed in {embed_elapsed:.2f}s")
 
         store = VectorStore(session=session)
         candidates = await store.search(query_embedding, uuid.UUID(project_id), limit=20)
+        logger.info(f"[knowledge] Vector search returned {len(candidates)} candidates")
 
         if candidates:
+            t_rerank = time.monotonic()
             rerank_results = await reranker.rerank(
                 query=query,
                 documents=[c["content"] for c in candidates],
                 top_n=3,
             )
+            rerank_elapsed = time.monotonic() - t_rerank
             results = []
             for rr in rerank_results:
                 item = candidates[rr.index].copy()
                 item["relevance_score"] = rr.relevance_score
                 results.append(item)
+            top_scores = [f"{r['relevance_score']:.2f}" for r in results]
+            logger.info(f"[knowledge] Rerank completed in {rerank_elapsed:.2f}s: {len(results)} results, scores={top_scores}")
         else:
             results = []
 
@@ -158,6 +172,10 @@ async def search_knowledge_base(query: str, project_id: str) -> tuple[str, list[
                     sources.append(source)
 
         if len(sections) <= 1:
+            total_elapsed = time.monotonic() - t_total
+            logger.info(f"[knowledge] search_knowledge_base completed in {total_elapsed:.2f}s: no results")
             return ("没有找到与查询相关的知识库内容。", [])
 
+        total_elapsed = time.monotonic() - t_total
+        logger.info(f"[knowledge] search_knowledge_base completed in {total_elapsed:.2f}s")
         return ("\n\n---\n\n".join(sections), sources)

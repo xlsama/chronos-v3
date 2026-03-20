@@ -1,5 +1,7 @@
 """Skill 自进化: 事件后自动提取可复用排查流程，创建或更新 skill。"""
 
+import time
+
 from src.lib.logger import logger
 from src.services.post_incident.base import get_mini_llm
 from src.services.skill_service import SkillService
@@ -154,11 +156,14 @@ async def auto_evolve_skills(
         sid,
         len(extract_prompt),
     )
+    t_step1 = time.monotonic()
     try:
         extract_resp = await llm.ainvoke(extract_prompt)
+        step1_elapsed = time.monotonic() - t_step1
         logger.info(
-            "[{}] [skill_evolution] Step1: LLM responded, len={}, preview={!r}",
+            "[{}] [skill_evolution] Step1: LLM responded in {:.2f}s, len={}, preview={!r}",
             sid,
+            step1_elapsed,
             len(extract_resp.content),
             extract_resp.content[:200],
         )
@@ -226,11 +231,14 @@ async def auto_evolve_skills(
         len(match_prompt),
         len(all_skills),
     )
+    t_step2 = time.monotonic()
     try:
         match_resp = await llm.ainvoke(match_prompt)
+        step2_elapsed = time.monotonic() - t_step2
         logger.info(
-            "[{}] [skill_evolution] Step2: LLM responded, len={}, preview={!r}",
+            "[{}] [skill_evolution] Step2: LLM responded in {:.2f}s, len={}, preview={!r}",
             sid,
+            step2_elapsed,
             len(match_resp.content),
             match_resp.content[:200],
         )
@@ -264,11 +272,14 @@ async def auto_evolve_skills(
             slug,
             len(merge_prompt),
         )
+        t_step3 = time.monotonic()
         try:
             merge_resp = await llm.ainvoke(merge_prompt)
+            step3_elapsed = time.monotonic() - t_step3
             logger.info(
-                "[{}] [skill_evolution] Step3: LLM responded, len={}, preview={!r}",
+                "[{}] [skill_evolution] Step3: LLM responded in {:.2f}s, len={}, preview={!r}",
                 sid,
+                step3_elapsed,
                 len(merge_resp.content),
                 merge_resp.content[:200],
             )

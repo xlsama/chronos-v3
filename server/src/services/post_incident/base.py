@@ -1,6 +1,6 @@
 from langchain_openai import ChatOpenAI
 
-from src.config import get_settings
+from src.env import get_settings
 from src.db.models import Message
 
 
@@ -8,6 +8,7 @@ def format_db_messages(
     messages: list[Message],
     description: str,
     server_map: dict[str, str] | None = None,
+    service_map: dict[str, str] | None = None,
 ) -> str:
     """将 DB Message 记录转为可读文本，供 LLM 生成 summary / 提取知识。"""
     lines = [f"事件描述: {description}", ""]
@@ -22,15 +23,25 @@ def format_db_messages(
             if event_type == "tool_call":
                 metadata = msg.metadata_json or {}
                 tool_name = content  # msg.content 即工具名
+                args = metadata.get("args", {})
+                command = args.get("command", "")
 
-                if server_map and tool_name == "bash":
-                    args = metadata.get("args", {})
+                if tool_name == "ssh_bash" and server_map:
                     server_id = args.get("server_id", "")
-                    command = args.get("command", "")
                     server_label = server_map.get(server_id, server_id)
                     if len(command) > 400:
                         command = command[:400] + "..."
                     lines.append(f"[Agent 在 {server_label} 上执行] {command}")
+                elif tool_name == "bash":
+                    if len(command) > 400:
+                        command = command[:400] + "..."
+                    lines.append(f"[Agent 本地执行] {command}")
+                elif tool_name == "service_exec" and service_map:
+                    service_id = args.get("service_id", "")
+                    service_label = service_map.get(service_id, service_id)
+                    if len(command) > 400:
+                        command = command[:400] + "..."
+                    lines.append(f"[Agent 查询 {service_label}] {command}")
                 else:
                     args_str = str(metadata)
                     if len(args_str) > 500:

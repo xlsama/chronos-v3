@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import AttachmentResponse
-from src.config import get_settings
+from src.env import get_settings
 from src.db.connection import get_session
 from src.db.models import Attachment
 from src.lib.errors import NotFoundError

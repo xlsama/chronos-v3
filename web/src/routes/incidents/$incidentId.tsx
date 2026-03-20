@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { motion } from "motion/react";
 import { ArrowDown, ArrowLeft, Square } from "lucide-react";
 import { getIncident, stopIncident } from "@/api/incidents";
+import { pageVariants, pageTransition } from "@/lib/motion";
 import { useIncidentStream } from "@/hooks/use-incident-stream";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import { EventTimeline } from "@/components/incidents/incident-detail/event-timeline";
@@ -10,6 +12,7 @@ import { UserInputBar } from "@/components/incidents/incident-detail/user-input-
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryContent } from "@/components/query-content";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,26 +59,7 @@ function IncidentDetailPage() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full flex-col">
-        <div className="border-b px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-5 w-16 rounded-full" />
-          </div>
-          <Skeleton className="mt-2 h-4 w-72" />
-        </div>
-        <div className="flex-1 p-4 space-y-4">
-          <Skeleton className="h-24 w-full rounded-lg" />
-          <Skeleton className="h-16 w-full rounded-lg" />
-          <Skeleton className="h-16 w-full rounded-lg" />
-        </div>
-      </div>
-    );
-  }
-
-  if (isError || !incident) {
+  if (isError) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
         <p className="text-sm text-muted-foreground">
@@ -90,11 +74,56 @@ function IncidentDetailPage() {
   }
 
   return (
+    <motion.div
+      className="h-full"
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      transition={pageTransition}
+    >
+    <QueryContent
+      isLoading={isLoading}
+      data={incident}
+      className="h-full"
+      skeleton={
+        <div className="flex h-full flex-col">
+          <div className="border-b px-6 py-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <Skeleton className="mt-2 h-4 w-72" />
+          </div>
+          <div className="flex-1 p-4 space-y-4">
+            <Skeleton className="h-24 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+          </div>
+        </div>
+      }
+      empty={
+        <div className="flex h-full flex-col items-center justify-center gap-4">
+          <p className="text-sm text-muted-foreground">
+            无法加载事件详情
+          </p>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/incidents" />}>
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            返回事件列表
+          </Button>
+        </div>
+      }
+    >
+      {(incident) => (
     <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
       <div className="border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
+            <Link to="/incidents">
+              <Button variant="ghost" size="icon-sm">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
             <h1 className="text-base font-medium truncate">
               {incident.summary_title || incident.description.slice(0, 30) + (incident.description.length > 30 ? "..." : "")}
             </h1>
@@ -107,6 +136,7 @@ function IncidentDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
+                className="hover:text-destructive hover:bg-destructive/10 hover:border-transparent"
                 onClick={() => setStopDialogOpen(true)}
               >
                 <Square className="mr-1 h-3.5 w-3.5" />
@@ -115,7 +145,7 @@ function IncidentDetailPage() {
             )}
           </div>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground truncate">
           {incident.description}
         </p>
       </div>
@@ -162,5 +192,8 @@ function IncidentDetailPage() {
       {/* Input */}
       <UserInputBar incidentId={incidentId} incidentStatus={incident.status} />
     </div>
+      )}
+    </QueryContent>
+    </motion.div>
   );
 }

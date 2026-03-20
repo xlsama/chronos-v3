@@ -33,6 +33,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { QueryContent } from "@/components/query-content";
 
 interface DocumentListProps {
   projectId: string;
@@ -81,114 +82,118 @@ export function DocumentList({ projectId }: DocumentListProps) {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="divide-y rounded-lg border">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 p-3">
-            <Skeleton className="h-4 w-4" />
-            <div className="flex-1 space-y-1.5">
-              <Skeleton className="h-3.5 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
-            <Skeleton className="h-5 w-14 rounded-full" />
-            <Skeleton className="h-8 w-8" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (!documents?.length) {
-    return (
-      <Empty className="pb-[20%]">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <FileText />
-          </EmptyMedia>
-          <EmptyTitle>暂无文档</EmptyTitle>
-          <EmptyDescription>
-            上传或新建文档以开始构建知识库。
-          </EmptyDescription>
-        </EmptyHeader>
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <UploadDocumentButton projectId={projectId} />
-          <CreateDocumentButton projectId={projectId} />
-        </div>
-      </Empty>
-    );
-  }
-
-  const sortedDocuments = [...documents].sort((a, b) => {
-    if (a.doc_type === "agents_config" && b.doc_type !== "agents_config") return -1;
-    if (a.doc_type !== "agents_config" && b.doc_type === "agents_config") return 1;
-    return 0;
-  });
-
   return (
     <>
-      <motion.div className="divide-y rounded-lg border" variants={listVariants} initial="initial" animate="animate">
-        {sortedDocuments.map((doc) => (
-          <motion.div
-            key={doc.id}
-            variants={listItemVariants}
-            className="flex cursor-pointer items-center gap-3 p-3 hover:bg-muted/50"
-            onClick={() =>
-              navigate({
-                to: "/projects/$projectId/documents/$documentId",
-                params: { projectId, documentId: doc.id },
-              })
-            }
-          >
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1">
-              <p className="text-sm font-medium">{doc.filename}</p>
-              <p className="text-xs text-muted-foreground">
-                {doc.doc_type} &middot;{" "}
-                {dayjs(doc.created_at).fromNow()}
-              </p>
+      <QueryContent
+        isLoading={isLoading}
+        data={documents}
+        isEmpty={(d) => !d.length}
+        skeleton={
+          <div className="divide-y rounded-lg border">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3">
+                <Skeleton className="h-4 w-4" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3.5 w-32" />
+                  <Skeleton className="h-3 w-48" />
+                </div>
+                <Skeleton className="h-5 w-14 rounded-full" />
+                <Skeleton className="h-8 w-8" />
+              </div>
+            ))}
+          </div>
+        }
+        empty={
+          <Empty className="pt-[20vh]">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <FileText />
+              </EmptyMedia>
+              <EmptyTitle>暂无文档</EmptyTitle>
+              <EmptyDescription>
+                上传或新建文档以开始构建知识库。
+              </EmptyDescription>
+            </EmptyHeader>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <UploadDocumentButton projectId={projectId} />
+              <CreateDocumentButton projectId={projectId} />
             </div>
-            {doc.doc_type === "agents_config" && (
-              <Badge className="bg-gray-100 text-gray-800 border-transparent">
-                概要
-              </Badge>
-            )}
-            {doc.doc_type !== "agents_config" &&
-              (doc.status === "index_failed" && doc.error_message ? (
-                <Tooltip>
-                  <TooltipTrigger render={<Badge className={statusColors.index_failed} />}>
-                      {statusLabels.index_failed}
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs">
-                    {doc.error_message}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Badge
-                  className={
-                    statusColors[doc.status] ??
-                    "bg-gray-100 text-gray-800 border-transparent"
+          </Empty>
+        }
+      >
+        {(documents) => {
+          const sortedDocuments = [...documents].sort((a, b) => {
+            if (a.doc_type === "agents_config" && b.doc_type !== "agents_config") return -1;
+            if (a.doc_type !== "agents_config" && b.doc_type === "agents_config") return 1;
+            return 0;
+          });
+
+          return (
+            <motion.div className="divide-y rounded-lg border" variants={listVariants} initial="initial" animate="animate">
+              {sortedDocuments.map((doc) => (
+                <motion.div
+                  key={doc.id}
+                  variants={listItemVariants}
+                  className="flex cursor-pointer items-center gap-3 p-3 hover:bg-muted/50"
+                  onClick={() =>
+                    navigate({
+                      to: "/projects/$projectId/documents/$documentId",
+                      params: { projectId, documentId: doc.id },
+                    })
                   }
                 >
-                  {statusLabels[doc.status] ?? doc.status}
-                </Badge>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{doc.filename}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {doc.doc_type} &middot;{" "}
+                      {dayjs(doc.created_at).fromNow()}
+                    </p>
+                  </div>
+                  {doc.doc_type === "agents_config" && (
+                    <Badge className="bg-gray-100 text-gray-800 border-transparent">
+                      概要
+                    </Badge>
+                  )}
+                  {doc.doc_type !== "agents_config" &&
+                    (doc.status === "index_failed" && doc.error_message ? (
+                      <Tooltip>
+                        <TooltipTrigger render={<Badge className={statusColors.index_failed} />}>
+                            {statusLabels.index_failed}
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          {doc.error_message}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <Badge
+                        className={
+                          statusColors[doc.status] ??
+                          "bg-gray-100 text-gray-800 border-transparent"
+                        }
+                      >
+                        {statusLabels[doc.status] ?? doc.status}
+                      </Badge>
+                    ))}
+                  {doc.doc_type !== "agents_config" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget({ id: doc.id, filename: doc.filename });
+                      }}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
+                </motion.div>
               ))}
-            {doc.doc_type !== "agents_config" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDeleteTarget({ id: doc.id, filename: doc.filename });
-                }}
-                disabled={deleteMutation.isPending}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            )}
-          </motion.div>
-        ))}
-      </motion.div>
+            </motion.div>
+          );
+        }}
+      </QueryContent>
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}

@@ -1,10 +1,11 @@
 import asyncio
+import time
 import uuid
 
 from sqlalchemy import select
 
 from src.db.connection import get_session_factory
-from src.db.models import Incident, Message, Server
+from src.db.models import Incident, Message, Server, Service
 from src.lib.logger import logger
 from src.services.post_incident.base import format_db_messages, get_mini_llm
 from src.services.post_incident.agents_md_task import auto_update_agents_md
@@ -50,10 +51,10 @@ def _is_valid_uuid(s: str) -> bool:
 
 
 async def _build_server_map(messages: list[Message], session) -> dict[str, str]:
-    """从 bash tool_call 中提取 server_id，批量查询 Server 表返回 {id: "name (host)"}。"""
+    """从 ssh_bash tool_call 中提取 server_id，批量查询 Server 表返回 {id: "name (host)"}。"""
     server_ids: set[str] = set()
     for msg in messages:
-        if msg.event_type == "tool_call" and msg.content == "bash":
+        if msg.event_type == "tool_call" and msg.content == "ssh_bash":
             args = (msg.metadata_json or {}).get("args", {})
             sid = args.get("server_id", "")
             if sid:
@@ -71,13 +72,37 @@ async def _build_server_map(messages: list[Message], session) -> dict[str, str]:
     return {str(r.id): f"{r.name} ({r.host})" for r in result.all()}
 
 
+async def _build_service_map(messages: list[Message], session) -> dict[str, str]:
+    """从 service_exec tool_call 中提取 service_id，批量查询 Service 表返回 {id: "name (type)"}。"""
+    service_ids: set[str] = set()
+    for msg in messages:
+        if msg.event_type == "tool_call" and msg.content == "service_exec":
+            args = (msg.metadata_json or {}).get("args", {})
+            sid = args.get("service_id", "")
+            if sid:
+                service_ids.add(sid)
+    if not service_ids:
+        return {}
+
+    uuids = [uuid.UUID(s) for s in service_ids if _is_valid_uuid(s)]
+    if not uuids:
+        return {}
+
+    result = await session.execute(
+        select(Service.id, Service.name, Service.service_type).where(Service.id.in_(uuids))
+    )
+    return {str(r.id): f"{r.name} ({r.service_type})" for r in result.all()}
+
+
 async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = None) -> None:
     """后台执行所有事件后任务。从 AgentRunner._post_run() 通过 asyncio.create_task 调用。"""
     sid = incident_id[:8]
     logger.info("[{}] [post_incident] Starting post-incident tasks", sid)
 
     try:
+        t_pipeline = time.monotonic()
         # ① 从 DB 读 Incident + Messages
+        t_step = time.monotonic()
         logger.info("[{}] [post_incident] Step① Loading incident and messages from DB", sid)
         async with get_session_factory()() as session:
             incident = await session.get(Incident, uuid.UUID(incident_id))
@@ -94,34 +119,44 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
             )
             db_messages = list(result.scalars().all())
             server_map = await _build_server_map(db_messages, session)
+            service_map = await _build_service_map(db_messages, session)
 
+        step1_elapsed = time.monotonic() - t_step
         logger.info(
-            "[{}] [post_incident] Step① Loaded: messages={}, description_len={}, "
-            "severity={}, server_map_size={}",
+            "[{}] [post_incident] Step① Loaded in {:.2f}s: messages={}, description_len={}, "
+            "severity={}, server_map_size={}, service_map_size={}",
             sid,
+            step1_elapsed,
             len(db_messages),
             len(description),
             severity,
             len(server_map),
+            len(service_map),
         )
 
         # ② 生成 summary_md（内部变量，不存 Incident 表）
+        t_step = time.monotonic()
         conversation_text = format_db_messages(db_messages, description)
-        conversation_text_topo = format_db_messages(db_messages, description, server_map=server_map)
+        conversation_text_topo = format_db_messages(
+            db_messages, description, server_map=server_map, service_map=service_map
+        )
         logger.info(
             "[{}] [post_incident] Step② Generating summary, conversation_text_len={}",
             sid,
             len(conversation_text),
         )
         summary_md = await _generate_summary(conversation_text, severity, sid)
+        step2_elapsed = time.monotonic() - t_step
         logger.info(
-            "[{}] [post_incident] Step② Summary result: len={}, preview={!r}",
+            "[{}] [post_incident] Step② Summary result in {:.2f}s: len={}, preview={!r}",
             sid,
+            step2_elapsed,
             len(summary_md),
             summary_md[:100],
         )
 
         # ③ 生成 title + severity → 写入 DB
+        t_step = time.monotonic()
         logger.info("[{}] [post_incident] Step③ Generating title and severity", sid)
         summary_title = None
         new_severity = None
@@ -159,7 +194,11 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
                         new_severity,
                     )
 
+        step3_elapsed = time.monotonic() - t_step
+        logger.info("[{}] [post_incident] Step③ completed in {:.2f}s", sid, step3_elapsed)
+
         # ④ 通知
+        t_step = time.monotonic()
         logger.info(
             "[{}] [post_incident] Step④ Sending notification: title={!r}, severity={}",
             sid,
@@ -171,9 +210,11 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
             "resolved", incident_id, summary_title or description[:80],
             severity=severity,
         )
-        logger.info("[{}] [post_incident] Step④ Notification sent", sid)
+        step4_elapsed = time.monotonic() - t_step
+        logger.info("[{}] [post_incident] Step④ Notification sent in {:.2f}s", sid, step4_elapsed)
 
         # ⑤ 三个子任务并行: history / agents_md / skill_evolution
+        t_step = time.monotonic()
         logger.info("[{}] [post_incident] Step⑤ Starting parallel sub-tasks", sid)
         await asyncio.gather(
             _safe_run(auto_save_history(incident_id, summary_md), "history", sid),
@@ -190,8 +231,10 @@ async def run_post_incident_tasks(incident_id: str, kb_project_id: str | None = 
             ), "skill_evolution", sid),
         )
 
-        logger.info("[{}] [post_incident] Step⑤ All parallel sub-tasks completed", sid)
-        logger.info("[{}] [post_incident] All post-incident tasks completed", sid)
+        step5_elapsed = time.monotonic() - t_step
+        logger.info("[{}] [post_incident] Step⑤ All parallel sub-tasks completed in {:.2f}s", sid, step5_elapsed)
+        total_elapsed = time.monotonic() - t_pipeline
+        logger.info("[{}] [post_incident] All post-incident tasks completed in {:.2f}s", sid, total_elapsed)
     except Exception as e:
         logger.opt(exception=True).error(
             "[{}] [post_incident] Post-incident tasks failed: {}: {}",
