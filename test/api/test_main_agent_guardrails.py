@@ -29,10 +29,14 @@ def _make_state(description: str) -> dict:
 
 
 def test_main_prompt_requires_ask_human_for_under_specified_input():
-    assert "不要进入排查工具链，直接调用 ask_human 补充信息" in MAIN_AGENT_SYSTEM_PROMPT
-    assert "当前输入只是问候/泛泛描述" in MAIN_AGENT_SYSTEM_PROMPT
+    assert "可先基于已有上下文做有限排查" in MAIN_AGENT_SYSTEM_PROMPT
+    assert "再调用 ask_human 补充信息" in MAIN_AGENT_SYSTEM_PROMPT
+    assert "信息不足时补关键缺口" in MAIN_AGENT_SYSTEM_PROMPT
     assert "按工具协议传参" in MAIN_AGENT_SYSTEM_PROMPT
     assert "不要把 SQL 关键字、MongoDB 子命令或 HTTP path 当成工具名" in MAIN_AGENT_SYSTEM_PROMPT
+    assert "知识库和历史事件提供参考上下文" in MAIN_AGENT_SYSTEM_PROMPT
+    assert "按 `<available_skills>` 读取技能内容" in MAIN_AGENT_SYSTEM_PROMPT
+    assert "建议使用 Mermaid 图表" in MAIN_AGENT_SYSTEM_PROMPT
 
 
 @pytest.mark.asyncio
