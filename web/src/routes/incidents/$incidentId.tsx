@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { ArrowDown, ArrowLeft, Info, Square } from "lucide-react";
 import { getIncident, stopIncident } from "@/api/incidents";
 import { pageVariants, pageTransition } from "@/lib/motion";
@@ -154,9 +154,19 @@ function IncidentDetailPage() {
                 </span>
               )
             )}
-            <Badge className={statusColors[incident.status]}>
-              {statusLabels[incident.status] ?? incident.status}
-            </Badge>
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={incident.status}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Badge className={statusColors[incident.status]}>
+                  {statusLabels[incident.status] ?? incident.status}
+                </Badge>
+              </motion.span>
+            </AnimatePresence>
             {isActive && (
               <Button
                 variant="outline"
