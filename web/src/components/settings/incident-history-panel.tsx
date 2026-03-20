@@ -65,17 +65,23 @@ export function IncidentHistoryPanel() {
 
   if (!isLoading && !data?.items.length && !debouncedSearch) {
     return (
-      <Empty className="pt-[20vh]">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <History />
-          </EmptyMedia>
-          <EmptyTitle>暂无历史事件</EmptyTitle>
-          <EmptyDescription>
-            事件归档以后会自动保存到这里。
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <>
+        <p className="mb-3 text-xs text-muted-foreground">
+          事件解决后，系统会自动生成结构化排查报告（含根因分析），并通过相似度匹配进行去重
+          —— 相似事件合并归档，全新事件单独保存。
+        </p>
+        <Empty className="pt-[20vh]">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <History />
+            </EmptyMedia>
+            <EmptyTitle>暂无历史事件</EmptyTitle>
+            <EmptyDescription>
+              事件归档以后会自动保存到这里。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </>
     );
   }
 
@@ -83,6 +89,10 @@ export function IncidentHistoryPanel() {
 
   return (
     <>
+      <p className="mb-3 text-xs text-muted-foreground">
+        事件解决后，系统会自动生成结构化排查报告（含根因分析），并通过相似度匹配进行去重
+        —— 相似事件合并归档，全新事件单独保存。
+      </p>
       <div className="relative mb-3">
         <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input

@@ -224,6 +224,12 @@ function DocumentDetailPage() {
           )}
         </div>
       </div>
+      {doc?.doc_type === "agents_config" && (
+        <p className="px-6 py-2 text-xs text-muted-foreground">
+          此文档会在事件解决后自动更新 ——
+          系统从排查对话中提取架构拓扑、服务配置和排查经验等运维知识，增量补充到文档中。
+        </p>
+      )}
       <div className="min-h-0 flex-1">
         <QueryContent
           isLoading={isLoading}
