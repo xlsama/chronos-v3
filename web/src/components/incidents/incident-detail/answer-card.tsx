@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/ui/markdown";
 
@@ -7,6 +9,14 @@ interface AnswerCardProps {
 }
 
 export function AnswerCard({ content, isStreaming }: AnswerCardProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div
       className={cn(
@@ -14,8 +24,18 @@ export function AnswerCard({ content, isStreaming }: AnswerCardProps) {
         isStreaming && "border-l-2 border-l-violet-400",
       )}
     >
-      <div className="mb-1 text-xs font-medium text-muted-foreground">
-        排查结论{isStreaming && "..."}
+      <div className="mb-1 flex items-center justify-between">
+        <div className="text-xs font-medium text-muted-foreground">
+          排查结论{isStreaming && "..."}
+        </div>
+        {!isStreaming && content && (
+          <button
+            onClick={handleCopy}
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+          >
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          </button>
+        )}
       </div>
       <Markdown content={content} streaming={isStreaming} variant="compact" />
     </div>
