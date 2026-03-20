@@ -77,7 +77,7 @@ export function PhaseSection({
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         )}
         <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{title}</span>
+        <span className="text-[13px] font-medium">{title}</span>
         {subtitle && (
           <span className="text-xs text-muted-foreground">&middot; {subtitle}</span>
         )}
