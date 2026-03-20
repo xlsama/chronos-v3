@@ -75,6 +75,11 @@ const typeLabels: Record<string, string> = {
   prometheus: "Prometheus",
   mongodb: "MongoDB",
   elasticsearch: "Elasticsearch",
+  doris: "Apache Doris",
+  starrocks: "StarRocks",
+  jenkins: "Jenkins",
+  kettle: "Kettle (Carte)",
+  hive: "Apache Hive",
 };
 
 export function ServiceItem({ service }: { service: Service }) {

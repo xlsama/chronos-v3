@@ -34,6 +34,8 @@ dependencies = [
     "aiomysql>=0.2.0",
     "motor>=3.6.0",
     "rich>=13.0.0",
+    "pyhive>=0.7.0",
+    "thrift>=0.22.0",
 ]
 
 [project.optional-dependencies]

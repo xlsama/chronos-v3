@@ -395,6 +395,61 @@ def _classify_elasticsearch(command: str) -> CommandType:
     return CommandType.WRITE
 
 
+def _classify_jenkins(command: str) -> CommandType:
+    """Classify a Jenkins HTTP command."""
+    cmd = command.strip()
+    parts = cmd.split(None, 2)
+    if not parts:
+        return CommandType.WRITE
+
+    method = parts[0].upper()
+    path = parts[1] if len(parts) > 1 else ""
+
+    if method in ("GET", "HEAD"):
+        return CommandType.READ
+
+    # POST: build → WRITE, stop/delete → DANGEROUS
+    if method == "POST":
+        if re.search(r"/(stop|delete|doDelete|disable)\b", path, re.IGNORECASE):
+            return CommandType.DANGEROUS
+        return CommandType.WRITE
+
+    if method == "DELETE":
+        return CommandType.DANGEROUS
+
+    return CommandType.WRITE
+
+
+def _classify_kettle(command: str) -> CommandType:
+    """Classify a Kettle (Carte) HTTP command."""
+    cmd = command.strip()
+    parts = cmd.split(None, 2)
+    if not parts:
+        return CommandType.WRITE
+
+    method = parts[0].upper()
+    path = parts[1] if len(parts) > 1 else ""
+
+    if method in ("GET", "HEAD"):
+        # GET status/transStatus/jobStatus are read-only
+        # GET start* is a write operation
+        if re.search(r"/(start|run|execute)", path, re.IGNORECASE):
+            return CommandType.WRITE
+        # GET stop/remove are dangerous
+        if re.search(r"/(stop|remove|clean)", path, re.IGNORECASE):
+            return CommandType.DANGEROUS
+        return CommandType.READ
+
+    if method == "POST":
+        if re.search(r"/(stop|remove|clean)", path, re.IGNORECASE):
+            return CommandType.DANGEROUS
+        if re.search(r"/(start|run|execute)", path, re.IGNORECASE):
+            return CommandType.WRITE
+        return CommandType.WRITE
+
+    return CommandType.WRITE
+
+
 _SERVICE_CLASSIFIERS = {
     "postgresql": _classify_sql,
     "mysql": _classify_sql,
@@ -402,6 +457,11 @@ _SERVICE_CLASSIFIERS = {
     "prometheus": _classify_prometheus,
     "mongodb": _classify_mongodb,
     "elasticsearch": _classify_elasticsearch,
+    "doris": _classify_sql,
+    "starrocks": _classify_sql,
+    "jenkins": _classify_jenkins,
+    "kettle": _classify_kettle,
+    "hive": _classify_sql,
 }
 
 

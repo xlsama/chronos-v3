@@ -36,7 +36,9 @@ function fieldError(errors: unknown[]) {
 
 const SERVICE_GROUPS = {
   database: "数据库",
+  analytics: "分析型数据库",
   monitoring: "监控 & 搜索",
+  devops: "DevOps 工具",
 } as const;
 
 const SERVICE_CONFIGS: Record<
@@ -47,8 +49,13 @@ const SERVICE_CONFIGS: Record<
   postgresql: { label: "PostgreSQL", defaultPort: 5432, group: "database" },
   mongodb: { label: "MongoDB", defaultPort: 27017, group: "database" },
   redis: { label: "Redis", defaultPort: 6379, group: "database" },
+  doris: { label: "Apache Doris", defaultPort: 9030, group: "analytics" },
+  starrocks: { label: "StarRocks", defaultPort: 9030, group: "analytics" },
+  hive: { label: "Apache Hive", defaultPort: 10000, group: "analytics" },
   prometheus: { label: "Prometheus", defaultPort: 9090, group: "monitoring" },
   elasticsearch: { label: "Elasticsearch", defaultPort: 9200, group: "monitoring" },
+  jenkins: { label: "Jenkins", defaultPort: 8080, group: "devops" },
+  kettle: { label: "Kettle (Carte)", defaultPort: 8181, group: "devops" },
 };
 
 type FormValues = {
@@ -187,14 +194,18 @@ export function ServiceForm({
   });
 
   const serviceType = useStore(form.store, (s) => s.values.service_type);
-  const showUsername = ["mysql", "postgresql", "mongodb", "elasticsearch"].includes(serviceType);
+  const showUsername = ["mysql", "postgresql", "mongodb", "elasticsearch", "doris", "starrocks", "jenkins", "kettle", "prometheus", "hive"].includes(serviceType);
   const showDatabase = [
     "mysql",
     "postgresql",
     "mongodb",
     "redis",
+    "doris",
+    "starrocks",
+    "hive",
   ].includes(serviceType);
-  const showPath = serviceType === "prometheus";
+  const showPath = ["prometheus", "jenkins"].includes(serviceType);
+  const showTLS = ["prometheus", "elasticsearch", "jenkins", "kettle"].includes(serviceType);
 
   return (
     <form
@@ -325,7 +336,19 @@ export function ServiceForm({
               <Field>
                 <FieldLabel>用户名</FieldLabel>
                 <Input
-                  placeholder="数据库用户名"
+                  placeholder={
+                    serviceType === "jenkins"
+                      ? "Jenkins 用户名"
+                      : serviceType === "kettle"
+                        ? "Carte 用户名"
+                        : serviceType === "elasticsearch"
+                          ? "Elasticsearch 用户名"
+                          : serviceType === "prometheus"
+                            ? "用户名（可选）"
+                            : serviceType === "hive"
+                              ? "HiveServer2 用户名"
+                              : "数据库用户名"
+                  }
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
@@ -337,7 +360,7 @@ export function ServiceForm({
         <form.Field name="password">
           {(field) => (
             <Field>
-              <FieldLabel>密码</FieldLabel>
+              <FieldLabel>{serviceType === "jenkins" ? "密码 / API Token" : "密码"}</FieldLabel>
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
@@ -393,7 +416,7 @@ export function ServiceForm({
               <Field>
                 <FieldLabel>API 路径</FieldLabel>
                 <Input
-                  placeholder="例如: /prometheus"
+                  placeholder={serviceType === "jenkins" ? "例如: /jenkins" : "例如: /prometheus"}
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
@@ -405,19 +428,21 @@ export function ServiceForm({
           </form.Field>
         )}
 
-        <form.Field name="use_tls">
-          {(field) => (
-            <Field>
-              <div className="flex items-center justify-between">
-                <FieldLabel>启用 TLS</FieldLabel>
-                <Switch
-                  checked={field.state.value}
-                  onCheckedChange={(v) => field.handleChange(v)}
-                />
-              </div>
-            </Field>
-          )}
-        </form.Field>
+        {showTLS && (
+          <form.Field name="use_tls">
+            {(field) => (
+              <Field>
+                <div className="flex items-center justify-between">
+                  <FieldLabel>启用 TLS</FieldLabel>
+                  <Switch
+                    checked={field.state.value}
+                    onCheckedChange={(v) => field.handleChange(v)}
+                  />
+                </div>
+              </Field>
+            )}
+          </form.Field>
+        )}
       </div>
       <DialogFooter className="mt-4">
         <DialogClose render={<Button variant="outline" />}>取消</DialogClose>

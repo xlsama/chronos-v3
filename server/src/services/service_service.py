@@ -15,6 +15,11 @@ _PROBE_COMMANDS: dict[str, str] = {
     "mongodb": '{"ping": 1}',
     "prometheus": "up",
     "elasticsearch": "GET /_cluster/health",
+    "doris": "SELECT 1",
+    "starrocks": "SELECT 1",
+    "jenkins": "GET /api/json",
+    "kettle": "GET /kettle/status",
+    "hive": "SELECT 1",
 }
 
 

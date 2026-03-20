@@ -28,6 +28,11 @@ def _load_connector_map():
     from src.ops_agent.tools.service_connectors.mysql import MySQLConnector
     from src.ops_agent.tools.service_connectors.mongodb import MongoDBConnector
     from src.ops_agent.tools.service_connectors.elasticsearch import ElasticsearchConnector
+    from src.ops_agent.tools.service_connectors.doris import DorisConnector
+    from src.ops_agent.tools.service_connectors.starrocks import StarRocksConnector
+    from src.ops_agent.tools.service_connectors.jenkins import JenkinsConnector
+    from src.ops_agent.tools.service_connectors.kettle import KettleConnector
+    from src.ops_agent.tools.service_connectors.hive import HiveConnector
     CONNECTOR_MAP = {
         "postgresql": PostgreSQLConnector,
         "mysql": MySQLConnector,
@@ -35,6 +40,11 @@ def _load_connector_map():
         "prometheus": PrometheusConnector,
         "mongodb": MongoDBConnector,
         "elasticsearch": ElasticsearchConnector,
+        "doris": DorisConnector,
+        "starrocks": StarRocksConnector,
+        "jenkins": JenkinsConnector,
+        "kettle": KettleConnector,
+        "hive": HiveConnector,
     }
 
 
@@ -180,6 +190,39 @@ def create_connector(
             use_tls=config.get("use_tls", False),
             username=config.get("username"),
             password=password,
+        )
+    elif service_type in ("doris", "starrocks"):
+        return connector_cls(
+            host=host,
+            port=port,
+            username=config.get("username", "root"),
+            password=password,
+            database=config.get("database", ""),
+        )
+    elif service_type == "jenkins":
+        return connector_cls(
+            host=host,
+            port=port,
+            use_tls=config.get("use_tls", False),
+            path=config.get("path", ""),
+            username=config.get("username"),
+            password=password,
+        )
+    elif service_type == "kettle":
+        return connector_cls(
+            host=host,
+            port=port,
+            use_tls=config.get("use_tls", False),
+            username=config.get("username"),
+            password=password,
+        )
+    elif service_type == "hive":
+        return connector_cls(
+            host=host,
+            port=port,
+            username=config.get("username", "hive"),
+            password=password,
+            database=config.get("database", "default"),
         )
     else:
         raise ValueError(f"不支持的服务类型: {service_type}")

@@ -108,6 +108,7 @@ class ServiceCreate(BaseModel):
     service_type: Literal[
         "mysql", "postgresql", "redis", "prometheus",
         "mongodb", "elasticsearch",
+        "doris", "starrocks", "jenkins", "kettle", "hive",
     ]
     host: str
     port: int

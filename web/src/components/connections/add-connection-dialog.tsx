@@ -28,7 +28,7 @@ export function AddConnectionDialog() {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button size="sm" />}>
+        <DropdownMenuTrigger openOnHover delay={0} render={<Button size="sm" />}>
           <Cable className="mr-1 h-4 w-4" />
           添加连接
         </DropdownMenuTrigger>
