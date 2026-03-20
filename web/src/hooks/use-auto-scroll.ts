@@ -58,13 +58,17 @@ export function useAutoScroll(
     if (!scrollEl || !enabled) return;
 
     const observer = new MutationObserver(() => {
-      if (!shouldAutoScroll.current) return;
       if (mutationRafId.current) return;
       mutationRafId.current = requestAnimationFrame(() => {
         mutationRafId.current = 0;
         if (shouldAutoScroll.current) {
           scrollEl.scrollTop = scrollEl.scrollHeight;
         }
+        const atBottom =
+          scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
+          threshold;
+        shouldAutoScroll.current = atBottom;
+        setIsAtBottom(atBottom);
       });
     });
 
@@ -91,13 +95,17 @@ export function useAutoScroll(
     if (!scrollEl || !enabled) return;
 
     const observer = new ResizeObserver(() => {
-      if (!shouldAutoScroll.current) return;
       if (resizeRafId.current) return;
       resizeRafId.current = requestAnimationFrame(() => {
         resizeRafId.current = 0;
         if (shouldAutoScroll.current) {
           scrollEl.scrollTop = scrollEl.scrollHeight;
         }
+        const atBottom =
+          scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
+          threshold;
+        shouldAutoScroll.current = atBottom;
+        setIsAtBottom(atBottom);
       });
     });
 
