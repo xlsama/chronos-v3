@@ -24,6 +24,7 @@ interface IncidentStreamState {
   answerContent: string;
   askHumanStreamContent: string;
   askHumanQuestion: string | null;
+  isWaitingForAgent: boolean;
   resolutionConfirmRequired: boolean;
   resolutionConfirmResolved: boolean;
   decidedApprovals: Record<string, string>;
@@ -41,6 +42,7 @@ interface IncidentStreamState {
   updatePhase: (phase: string) => void;
   setAskHumanQuestion: (question: string | null) => void;
   setResolutionConfirmRequired: (required: boolean) => void;
+  setWaitingForAgent: (waiting: boolean) => void;
   setResolutionConfirmResolved: (resolved: boolean) => void;
   setApprovalDecided: (approvalId: string, decision: string) => void;
   setConnected: (connected: boolean) => void;
@@ -65,6 +67,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   kbAgentState: emptySubAgent(),
   phaseState: initialPhaseState(),
   isConnected: false,
+  isWaitingForAgent: false,
   thinkingContent: "",
   answerContent: "",
   askHumanStreamContent: "",
@@ -165,6 +168,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     }),
 
   setAskHumanQuestion: (question) => set({ askHumanQuestion: question }),
+
+  setWaitingForAgent: (waiting) => set({ isWaitingForAgent: waiting }),
 
   setResolutionConfirmRequired: (required) => set({ resolutionConfirmRequired: required }),
 
@@ -278,6 +283,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       phaseState: derivedPhase,
       decidedApprovals: decided,
       askHumanQuestion: askQuestion,
+      isWaitingForAgent: false,
       resolutionConfirmRequired: resolutionRequired,
       resolutionConfirmResolved: resolutionResolved,
     });
@@ -290,6 +296,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       kbAgentState: emptySubAgent(),
       phaseState: initialPhaseState(),
       isConnected: false,
+      isWaitingForAgent: false,
       thinkingContent: "",
       answerContent: "",
       askHumanStreamContent: "",

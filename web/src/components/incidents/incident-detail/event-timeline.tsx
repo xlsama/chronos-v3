@@ -139,6 +139,35 @@ function SkillReadCard({ skillName, skillContent }: { skillName: string; skillCo
   );
 }
 
+function WaitingIndicator() {
+  const isWaiting = useIncidentStreamStore((s) => s.isWaitingForAgent);
+  return (
+    <AnimatePresence>
+      {isWaiting && (
+        <motion.div
+          key="waiting-indicator"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="flex items-center gap-1.5 px-1 py-2"
+        >
+          <span className="flex gap-1">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-pulse"
+                style={{ animationDelay: `${i * 0.15}s` }}
+              />
+            ))}
+          </span>
+          <span className="text-xs text-muted-foreground">Agent 思考中...</span>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function LiveThinkingSection() {
   const thinkingContent = useIncidentStreamStore((s) => s.thinkingContent);
   return (
@@ -544,6 +573,9 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                 }
               })}
             </AnimatePresence>
+
+            {/* Waiting indicator — shown between tool_result and next LLM output */}
+            <WaitingIndicator />
 
             {/* Live thinking stream — isolated component to avoid re-rendering timeline */}
             <LiveThinkingSection />

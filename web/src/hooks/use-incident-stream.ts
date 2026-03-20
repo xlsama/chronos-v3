@@ -45,6 +45,7 @@ export function useIncidentStream(
     setAskHumanQuestion,
     setResolutionConfirmRequired,
     setResolutionConfirmResolved,
+    setWaitingForAgent,
     setApprovalDecided,
     setConnected,
     reset,
@@ -275,6 +276,7 @@ export function useIncidentStream(
               event.data.decision as string,
             );
           } else if (event.event_type === "done") {
+            setWaitingForAgent(false);
             // Agent completed; invalidate queries + close SSE
             updatePhase("summary_complete");
             setResolutionConfirmResolved(true);
@@ -296,6 +298,7 @@ export function useIncidentStream(
             queryClient.invalidateQueries({ queryKey: ["incidents"] });
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
           } else if (event.event_type === "ask_human") {
+            setWaitingForAgent(false);
             updatePhase("investigation");
             // Flush residual thinking
             const { thinkingContent: thk } = useIncidentStreamStore.getState();
@@ -321,6 +324,7 @@ export function useIncidentStream(
               clearAskHumanStream();
             }
           } else if (event.event_type === "thinking") {
+            setWaitingForAgent(false);
             updatePhase("investigation");
             appendThinking(event.data.content as string);
           } else if (event.event_type === "thinking_done") {
@@ -335,6 +339,7 @@ export function useIncidentStream(
               clearThinking();
             }
           } else if (event.event_type === "answer") {
+            setWaitingForAgent(false);
             updatePhase("investigation");
             // Flush any residual thinking
             const { thinkingContent } = useIncidentStreamStore.getState();
@@ -373,6 +378,7 @@ export function useIncidentStream(
               clearThinking();
             }
             addEvent(event);
+            setWaitingForAgent(event.event_type === "tool_result");
           }
         } catch {
           // ignore unparseable JSON
