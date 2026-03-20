@@ -195,13 +195,13 @@ export function IncidentList({ statusFilter, severityFilter }: IncidentListProps
                           </div>
                         )}
                       </div>
-                      <Badge className={statusColors[incident.status]}>
+                      <Badge className={`w-fit justify-center ${statusColors[incident.status]}`}>
                         {statusLabels[incident.status] ?? incident.status}
                       </Badge>
-                      <Badge className={severityColors[incident.severity]}>
+                      <Badge className={`justify-center ${severityColors[incident.severity]}`}>
                         {incident.severity}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="w-14 shrink-0 text-right text-xs text-muted-foreground">
                         {dayjs(incident.created_at).fromNow()}
                       </span>
                     </Link>
