@@ -277,7 +277,7 @@
 }
 
 .prose-tiny {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   line-height: 1.625;
 
   & > :first-child { margin-top: 0; }
