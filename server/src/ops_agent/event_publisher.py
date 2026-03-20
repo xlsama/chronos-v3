@@ -15,7 +15,7 @@ _EVENT_ROLE = {
     "thinking_done": "assistant",
     "answer": "assistant",
     "answer_done": "assistant",
-    "tool_call": "assistant",
+    "tool_use": "assistant",
     "tool_result": "assistant",
     "skill_read": "assistant",
     "ask_human": "assistant",
@@ -167,7 +167,7 @@ class EventPublisher:
             return data.get("content", "")
         if event_type == "agent_status":
             return data.get("status", "")
-        if event_type == "tool_call":
+        if event_type == "tool_use":
             return data.get("name", "")
         if event_type == "tool_result":
             return data.get("output", "")
@@ -216,7 +216,7 @@ class EventPublisher:
                 "agent": data.get("agent", ""),
                 "status": data.get("status", ""),
             }
-        if event_type == "tool_call":
+        if event_type == "tool_use":
             return {
                 "name": data.get("name", ""),
                 "args": data.get("args", {}),

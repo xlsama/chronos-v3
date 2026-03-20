@@ -131,7 +131,7 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
     ...baseSSEFields,
   }),
   z.object({
-    event_type: z.literal("tool_call"),
+    event_type: z.literal("tool_use"),
     data: z
       .object({ name: z.string(), args: z.record(z.string(), z.unknown()) })
       .passthrough(),

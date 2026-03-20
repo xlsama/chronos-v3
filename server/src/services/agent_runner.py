@@ -479,7 +479,7 @@ class AgentRunner:
             run_id = event.get("run_id", "")
             main_log.info("Tool start", tool=name)
             main_log.debug("Tool input", input=event["data"].get("input", {}))
-            await self.publisher.publish(channel, "tool_call", {
+            await self.publisher.publish(channel, "tool_use", {
                 "name": name,
                 "args": event["data"].get("input", {}),
                 "tool_call_id": run_id,

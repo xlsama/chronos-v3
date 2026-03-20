@@ -16,7 +16,7 @@ async def test_kb_agent_known_project(project_id, event_callback):
     print(f"Result type: {type(result).__name__}")
     print(f"Events captured: {len(event_callback.events)}")
     for et, data in event_callback.events:
-        if et == "tool_call":
+        if et == "tool_use":
             print(f"  Tool call: {data.get('name')}")
     assert isinstance(result, dict)
     assert "summary" in result

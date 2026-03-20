@@ -51,10 +51,10 @@ def _is_valid_uuid(s: str) -> bool:
 
 
 async def _build_server_map(messages: list[Message], session) -> dict[str, str]:
-    """从 ssh_bash tool_call 中提取 server_id，批量查询 Server 表返回 {id: "name (host)"}。"""
+    """从 ssh_bash tool_use 中提取 server_id，批量查询 Server 表返回 {id: "name (host)"}。"""
     server_ids: set[str] = set()
     for msg in messages:
-        if msg.event_type == "tool_call" and msg.content == "ssh_bash":
+        if msg.event_type == "tool_use" and msg.content == "ssh_bash":
             args = (msg.metadata_json or {}).get("args", {})
             sid = args.get("server_id", "")
             if sid:
@@ -73,10 +73,10 @@ async def _build_server_map(messages: list[Message], session) -> dict[str, str]:
 
 
 async def _build_service_map(messages: list[Message], session) -> dict[str, str]:
-    """从 service_exec tool_call 中提取 service_id，批量查询 Service 表返回 {id: "name (type)"}。"""
+    """从 service_exec tool_use 中提取 service_id，批量查询 Service 表返回 {id: "name (type)"}。"""
     service_ids: set[str] = set()
     for msg in messages:
-        if msg.event_type == "tool_call" and msg.content == "service_exec":
+        if msg.event_type == "tool_use" and msg.content == "service_exec":
             args = (msg.metadata_json or {}).get("args", {})
             sid = args.get("service_id", "")
             if sid:

@@ -47,7 +47,7 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
       case "thinking":
         items.push({ type: "thinking", event });
         break;
-      case "tool_call": {
+      case "tool_use": {
         const name = event.data.name as string;
         const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
         const itemIdx = items.length;
@@ -342,7 +342,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
     const base = mainEvents[0].timestamp;
     const last = mainEvents[mainEvents.length - 1].timestamp;
     const dur = formatDuration(base, last);
-    const toolCount = mainEvents.filter((e) => e.event_type === "tool_call").length;
+    const toolCount = mainEvents.filter((e) => e.event_type === "tool_use").length;
 
     const parts: string[] = [];
     if (dur && dur !== "0s") parts.push(dur);

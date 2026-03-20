@@ -58,7 +58,7 @@ function buildSubAgentItems(events: SSEEvent[]): SubAgentItem[] {
   for (const event of events) {
     if (event.event_type === "thinking") {
       items.push({ type: "thinking", event });
-    } else if (event.event_type === "tool_call") {
+    } else if (event.event_type === "tool_use") {
       const name = event.data.name as string;
       items.push({ type: "paired_tool", toolCall: event });
       pendingTools.set(name, items.length - 1);
@@ -162,7 +162,7 @@ export function SubAgentCard({
   const Icon = config.icon;
 
   const { toolCallCount, duration } = useMemo(() => {
-    const count = events.filter((e) => e.event_type === "tool_call").length;
+    const count = events.filter((e) => e.event_type === "tool_use").length;
     let dur = "";
     if (events.length >= 2) {
       dur = formatDuration(events[0].timestamp, events[events.length - 1].timestamp);

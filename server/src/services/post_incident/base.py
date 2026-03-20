@@ -20,7 +20,7 @@ def format_db_messages(
         if role == "user":
             lines.append(f"[用户] {content}")
         elif role == "assistant":
-            if event_type == "tool_call":
+            if event_type == "tool_use":
                 metadata = msg.metadata_json or {}
                 tool_name = content  # msg.content 即工具名
                 args = metadata.get("args", {})

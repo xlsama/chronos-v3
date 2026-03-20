@@ -199,7 +199,7 @@ async def run_kb_agent(
         for tc in full_response.tool_calls:
             tool_name = tc["name"]
             iter_log.info("Tool call", tool=tool_name, args=tc["args"])
-            await event_callback("tool_call", {
+            await event_callback("tool_use", {
                 "name": tool_name,
                 "args": tc["args"],
             })

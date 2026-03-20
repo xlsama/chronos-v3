@@ -16,7 +16,7 @@ async def test_history_agent(event_callback):
     print(f"Result length: {len(result)} chars")
     print(f"Events captured: {len(event_callback.events)}")
     for et, data in event_callback.events:
-        if et == "tool_call":
+        if et == "tool_use":
             print(f"  Tool call: {data.get('name')}")
     assert isinstance(result, str)
     assert len(result) > 0

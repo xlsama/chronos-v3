@@ -84,7 +84,7 @@ async def run_history_agent(
 
         for tc in full_response.tool_calls:
             iter_log.info("Tool call: search_incident_history", query=tc["args"].get("query", ""))
-            await event_callback("tool_call", {
+            await event_callback("tool_use", {
                 "name": "search_incident_history",
                 "args": tc["args"],
             })

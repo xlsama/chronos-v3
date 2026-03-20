@@ -41,13 +41,13 @@ async def auto_save_history(incident_id: str, summary_md: str) -> None:
         return
 
     async with get_session_factory()() as session:
-        # Check tool_call events with ssh_bash/bash/service_exec → agent executed commands
+        # Check tool_use events with ssh_bash/bash/service_exec → agent executed commands
         tool_count = await session.scalar(
             select(func.count())
             .select_from(Message)
             .where(
                 Message.incident_id == uuid.UUID(incident_id),
-                Message.event_type == "tool_call",
+                Message.event_type == "tool_use",
                 Message.content.in_(["ssh_bash", "bash", "service_exec"]),
             )
         )

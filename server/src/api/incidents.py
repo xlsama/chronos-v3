@@ -150,7 +150,7 @@ def _message_to_event(m: Message) -> dict:
 
     if m.event_type == "thinking":
         data = {"content": m.content, **metadata}
-    elif m.event_type == "tool_call":
+    elif m.event_type == "tool_use":
         data = metadata
     elif m.event_type == "tool_result":
         data = {"output": m.content, **metadata}
