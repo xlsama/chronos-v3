@@ -8,9 +8,7 @@ from rich.console import Console
 from rich.rule import Rule
 from rich.style import Style
 
-_env = os.getenv("ENV", "development")
-_default_level = "DEBUG" if _env == "development" else "INFO"
-_log_level = os.getenv("LOG_LEVEL", _default_level)
+_log_level = os.getenv("LOG_LEVEL", "DEBUG")
 
 # Rich Console（用于 Rule 渲染，模块级创建一次）
 _rich_console = Console(file=sys.stderr, force_terminal=True, color_system="truecolor", width=80)
@@ -186,37 +184,22 @@ shared_processors = [
     structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S", utc=False),
 ]
 
-if _env == "development":
-    structlog.configure(
-        processors=[
-            *shared_processors,
-            _lifecycle_rule_processor,
-            _colorize_component,
-            _highlight_values_processor,
-            _prepend_component,
-            _EnhancedConsoleRenderer(colors=True, pad_event=40),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(
-            logging.getLevelName(_log_level.upper())
-        ),
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
-        cache_logger_on_first_use=True,
-    )
-else:
-    structlog.configure(
-        processors=[
-            *shared_processors,
-            structlog.processors.format_exc_info,
-            structlog.processors.JSONRenderer(),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(
-            logging.getLevelName(_log_level.upper())
-        ),
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
-        cache_logger_on_first_use=True,
-    )
+structlog.configure(
+    processors=[
+        *shared_processors,
+        _lifecycle_rule_processor,
+        _colorize_component,
+        _highlight_values_processor,
+        _prepend_component,
+        _EnhancedConsoleRenderer(colors=True, pad_event=40),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(
+        logging.getLevelName(_log_level.upper())
+    ),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+    cache_logger_on_first_use=True,
+)
 
 
 def get_logger(**binds) -> structlog.stdlib.BoundLogger:
