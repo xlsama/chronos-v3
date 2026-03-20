@@ -1,6 +1,6 @@
 from langchain_core.messages import ToolMessage
 
-from src.lib.logger import logger, ac
+from src.lib.logger import get_logger
 from src.ops_agent.state import OpsState
 
 _APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
@@ -15,11 +15,12 @@ async def human_approval_node(state: OpsState) -> dict:
     On resume (after interrupt): checks approval_decision to route accordingly.
     """
     sid = state["incident_id"][:8]
+    log = get_logger(component="approval", sid=sid)
 
     if state.get("needs_approval"):
         # Resume path: check approval decision
         decision = state.get("approval_decision")
-        logger.info(f"[{sid}] {ac('approval')} Resume: decision={decision}")
+        log.info("Resume", decision=decision)
 
         if decision == "rejected":
             # Inject a ToolMessage telling the LLM the command was rejected
@@ -34,7 +35,7 @@ async def human_approval_node(state: OpsState) -> dict:
                                 tool_call_id=tc["id"],
                             )
                         )
-            logger.info(f"[{sid}] {ac('approval')} Rejected: injected {len(tool_messages)} rejection message(s)")
+            log.info("Rejected", injected_messages=len(tool_messages))
             return {
                 "messages": tool_messages,
                 "needs_approval": False,
@@ -57,9 +58,9 @@ async def human_approval_node(state: OpsState) -> dict:
 
     for tc in approval_calls:
         cmd_preview = tc.get("args", {}).get("command", "")[:200]
-        logger.info(f"\n[{sid}] {ac('approval')} Pending tool: {tc['name']}, command={cmd_preview}")
+        log.info("Pending tool", tool=tc["name"], command=cmd_preview)
 
-    logger.info(f"\n[{sid}] {ac('approval')} Initial entry: pending approval_calls={len(approval_calls)}")
+    log.info("Initial entry", pending_approval_calls=len(approval_calls))
 
     return {
         "needs_approval": True,

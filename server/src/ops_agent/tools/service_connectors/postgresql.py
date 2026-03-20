@@ -2,8 +2,10 @@ import re
 
 import asyncpg
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.ops_agent.tools.service_connectors.base import ServiceConnector, ServiceResult, format_as_table
+
+log = get_logger(component="service_exec")
 
 
 class PostgreSQLConnector(ServiceConnector):
@@ -19,7 +21,7 @@ class PostgreSQLConnector(ServiceConnector):
 
     async def _get_pool(self) -> asyncpg.Pool:
         if self._pool is None:
-            logger.info(f"[postgresql] Creating pool: {self._host}:{self._port}/{self._database}")
+            log.info("Creating pool", host=self._host, port=self._port, database=self._database)
             self._pool = await asyncpg.create_pool(
                 host=self._host,
                 port=self._port,
@@ -38,22 +40,22 @@ class PostgreSQLConnector(ServiceConnector):
 
         # Determine if this is a query (returns rows) or a statement
         is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|WITH\s)", upper))
-        logger.info(f"[postgresql] Executing {'query' if is_query else 'statement'}: {cmd[:200]}")
+        log.info("Executing", mode="query" if is_query else "statement", command=cmd[:200])
 
         async with pool.acquire() as conn:
             if is_query:
                 rows = await conn.fetch(cmd)
                 if not rows:
-                    logger.info("[postgresql] Query returned 0 rows")
+                    log.info("Query returned 0 rows")
                     return ServiceResult(success=True, output="(0 rows)", row_count=0)
                 columns = list(rows[0].keys())
                 data = [tuple(row.values()) for row in rows]
                 output = format_as_table(columns, data)
-                logger.info(f"[postgresql] Query returned {len(data)} rows")
+                log.info("Query returned", row_count=len(data))
                 return ServiceResult(success=True, output=output, row_count=len(data))
             else:
                 result = await conn.execute(cmd)
-                logger.info(f"[postgresql] Statement result: {result}")
+                log.info("Statement result", result=result)
                 return ServiceResult(success=True, output=f"执行成功: {result}")
 
     async def close(self) -> None:

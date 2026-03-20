@@ -17,9 +17,11 @@ from src.api.projects import router as projects_router
 from src.api.asr import router as asr_router
 from src.env import get_settings
 from src.lib.errors import AppError
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 from src.services.agent_runner import AgentRunner
+
+log = get_logger()
 
 
 def _run_migrations():
@@ -30,19 +32,19 @@ def _run_migrations():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting Chronos Ops Agent")
+    log.info("Starting Chronos Ops Agent")
 
     # Run database migrations
-    logger.info("Running database migrations...")
+    log.info("Running database migrations...")
     _run_migrations()
-    logger.info("Database migrations completed")
+    log.info("Database migrations completed")
 
     settings = get_settings()
     os.makedirs(settings.upload_dir, exist_ok=True)
     os.makedirs("data/skills", exist_ok=True)
 
     for warning in settings.validate_production_secrets():
-        logger.warning(warning)
+        log.warning(warning)
 
     # Initialize LangGraph checkpointer with PostgreSQL
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -55,12 +57,12 @@ async def lifespan(app: FastAPI):
     publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
     app.state.agent_runner = AgentRunner(publisher=publisher, checkpointer=checkpointer, redis=get_redis())
 
-    logger.info("Agent runner initialized")
+    log.info("Agent runner initialized")
 
     yield
 
     await conn.close()
-    logger.info("Shutting down Chronos Ops Agent")
+    log.info("Shutting down Chronos Ops Agent")
 
 
 app = FastAPI(

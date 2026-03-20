@@ -21,12 +21,14 @@ from src.env import get_settings
 from src.db.connection import get_session, get_session_factory
 from src.db.models import Attachment, Incident, Message
 from src.lib.errors import BadRequestError, NotFoundError
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.services.agent_runner import AgentRunner
 from src.services.incident_service import IncidentService
 from src.services.notification_service import notify_fire_and_forget
+
+log = get_logger(component="api")
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -38,7 +40,7 @@ async def _start_agent_background(
     severity: str,
 ) -> None:
     sid = incident_id[:8]
-    logger.info(f"[{sid}] [api] Background agent task starting")
+    log.info("Background agent task starting", sid=sid)
     try:
         thread_id = await runner.start(
             incident_id=incident_id,
@@ -53,13 +55,13 @@ async def _start_agent_background(
                 incident.thread_id = thread_id
                 incident.status = "investigating"
                 await session.commit()
-                logger.info(f"[{sid}] [api] status -> investigating, thread={thread_id}")
+                log.info("Status updated", sid=sid, status="investigating", thread=thread_id)
                 notify_fire_and_forget(
                     "investigating", incident_id, description[:80],
                     severity=severity,
                 )
     except Exception as e:
-        logger.error(f"Failed to start agent for incident {incident_id}: {e}")
+        log.error("Failed to start agent", incident_id=incident_id, error=str(e))
 
 
 @router.post("", response_model=IncidentResponse)
@@ -73,7 +75,7 @@ async def create_incident(
     incident = await service.create(**body.model_dump())
 
     sid = str(incident.id)[:8]
-    logger.info(f"[{sid}] [api] Incident created: severity={body.severity}")
+    log.info("Incident created", sid=sid, severity=body.severity)
 
     # Start agent in background
     runner: AgentRunner = request.app.state.agent_runner
@@ -308,8 +310,8 @@ async def send_user_message(
     # If agent is waiting for human input (ask_human interrupt), resume the graph
     if incident.thread_id and incident.status == "investigating":
         sid = str(incident.id)[:8]
-        logger.info(f"[{sid}] [api] User message received, resuming agent")
-        logger.debug(f"[{sid}] [api] User message content: {body.content[:200]}")
+        log.info("User message received, resuming agent", sid=sid)
+        log.debug("User message content", sid=sid, content=body.content[:200])
         runner: AgentRunner = request.app.state.agent_runner
         background_tasks.add_task(
             runner.resume_with_human_input,
@@ -343,7 +345,7 @@ async def confirm_resolution(
     # Resume agent with "confirmed" input
     if incident.thread_id:
         sid = str(incident.id)[:8]
-        logger.info(f"[{sid}] [api] Resolution confirmed, resuming agent")
+        log.info("Resolution confirmed, resuming agent", sid=sid)
         background_tasks.add_task(
             runner.resume_with_human_input,
             thread_id=incident.thread_id,
@@ -375,7 +377,7 @@ async def stop_incident(
     await session.commit()
 
     sid = str(incident_id)[:8]
-    logger.info(f"[{sid}] [api] status -> stopped")
+    log.info("Incident stopped", sid=sid)
 
     # Publish SSE event
     runner: AgentRunner = request.app.state.agent_runner
@@ -410,8 +412,7 @@ async def archive_incident(
     await session.commit()
 
     sid = str(incident_id)[:8]
-    logger.info(f"[{sid}] [api] incident archived")
+    log.info("Incident archived", sid=sid)
 
     await session.refresh(incident)
     return incident
-

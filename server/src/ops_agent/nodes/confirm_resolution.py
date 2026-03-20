@@ -1,24 +1,23 @@
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import interrupt
 
-from src.lib.logger import logger, ac
+from src.lib.logger import get_logger
 from src.ops_agent.state import OpsState
 
 
 async def confirm_resolution_node(state: OpsState) -> dict:
     sid = state["incident_id"][:8]
-    logger.info(f"\n[{sid}] {ac('confirm_resolution')} Entered confirm_resolution_node, waiting for user response")
+    log = get_logger(component="confirm_resolution", sid=sid)
+    log.info("Entered confirm_resolution_node, waiting for user response")
     user_response = interrupt({"type": "confirm_resolution"})
 
-    logger.info(f"[{sid}] {ac('confirm_resolution')} User responded: {str(user_response)[:200]}")
+    log.info("User responded", response=str(user_response)[:200])
 
-    # 注意：前端 event-timeline.tsx 中也硬编码发送此值，修改时需同步前端
     if user_response == "confirmed":
-        logger.info(f"[{sid}] {ac('confirm_resolution')} User confirmed resolution")
+        log.info("User confirmed resolution")
         return {"is_complete": True}
 
-    # 用户选择继续排查 → 补全 complete tool call 的 ToolMessage + 用户新消息
-    logger.info(f"[{sid}] {ac('confirm_resolution')} User wants to continue investigation")
+    log.info("User wants to continue investigation")
     new_messages = []
     for msg in reversed(state["messages"]):
         if hasattr(msg, "tool_calls") and msg.tool_calls:
@@ -35,6 +34,7 @@ async def confirm_resolution_node(state: OpsState) -> dict:
 
 def route_after_resolution(state: OpsState) -> str:
     sid = state["incident_id"][:8]
+    log = get_logger(component="confirm_resolution", sid=sid)
     result = "end" if state.get("is_complete") else "main_agent"
-    logger.info(f"[{sid}] {ac('confirm_resolution')} route_after_resolution -> {result}")
+    log.info("route_after_resolution", route=result)
     return result

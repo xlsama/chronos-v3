@@ -2,9 +2,11 @@ import asyncio
 import time
 import uuid
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.ops_agent.tools.tool_permissions import ServiceSafety, CommandType, compress_output
 from src.ops_agent.tools.service_connectors.base import ServiceConnector
+
+log = get_logger(component="service_exec")
 
 # Registry of service connectors with TTL and capacity management
 _connector_registry: dict[str, tuple[ServiceConnector, float]] = {}
@@ -204,22 +206,25 @@ async def service_exec(service_id: str, command: str) -> str:
     if cmd_type == CommandType.BLOCKED:
         return "命令被系统拦截"
 
-    logger.info(
-        f"\n[service_exec] Executing: service={service_id[:8]}..., "
-        f"type={connector.service_type}, cmd_type={cmd_type.name}, command={command[:100]}"
+    log.info(
+        "Executing",
+        service=service_id[:8],
+        type=connector.service_type,
+        cmd_type=cmd_type.name,
+        command=command[:100],
     )
 
     try:
         t0 = time.monotonic()
         result = await asyncio.wait_for(connector.execute(command), timeout=30)
         exec_elapsed = time.monotonic() - t0
-        logger.info(f"[service_exec] Completed in {exec_elapsed:.2f}s")
+        log.info("Completed", elapsed=f"{exec_elapsed:.2f}s")
     except asyncio.TimeoutError:
         actual_elapsed = time.monotonic() - t0
-        logger.warning(f"[service_exec] Timeout after {actual_elapsed:.2f}s (limit=30s)")
+        log.warning("Timeout", elapsed=f"{actual_elapsed:.2f}s", limit="30s")
         return "查询执行超时（30秒），请简化查询或增加限制条件"
     except Exception as e:
-        logger.error(f"[service_exec] Error: {e}")
+        log.error("Error", error=str(e))
         return f"执行异常: {e}"
 
     if not result.success:

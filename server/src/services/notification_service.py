@@ -7,8 +7,10 @@ from src.env import get_settings
 from src.db.connection import get_session_factory
 from src.db.models import NotificationSetting, Project
 from src.lib.feishu import send_feishu_card
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.services.crypto import CryptoService
+
+log = get_logger()
 
 EVENT_TYPE_MAP = {
     "open": ("新事件", "red"),
@@ -112,7 +114,7 @@ async def _send_notification(
         card_title = f"[Chronos] {label}"
         await send_feishu_card(webhook_url, card_title, fields, color, sign_key)
     except Exception:
-        logger.exception(f"Failed to send notification for incident {incident_id}")
+        log.error("Failed to send notification", incident_id=incident_id, exc_info=True)
 
 
 def notify_fire_and_forget(

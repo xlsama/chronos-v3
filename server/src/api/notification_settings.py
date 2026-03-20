@@ -12,8 +12,10 @@ from src.env import get_settings
 from src.db.connection import get_session
 from src.db.models import NotificationSetting
 from src.lib.feishu import send_feishu_message
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.services.crypto import CryptoService
+
+log = get_logger()
 
 router = APIRouter(prefix="/api/notification-settings", tags=["notification-settings"])
 
@@ -28,7 +30,7 @@ async def test_webhook(body: WebhookTestRequest):
         await send_feishu_message(body.webhook_url, "Chronos 测试消息 - 通知配置成功！", body.sign_key)
         return WebhookTestResponse(success=True, message="测试消息发送成功")
     except Exception as e:
-        logger.warning(f"Webhook test failed: {e}")
+        log.warning("Webhook test failed", error=str(e))
         return WebhookTestResponse(success=False, message=str(e))
 
 

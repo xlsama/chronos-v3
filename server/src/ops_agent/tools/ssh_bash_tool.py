@@ -2,9 +2,11 @@ import asyncio
 import time
 import uuid
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.ops_agent.ssh import SSHConnector
 from src.ops_agent.tools.tool_permissions import ShellSafety, CommandType, compress_output
+
+log = get_logger(component="ssh_bash")
 
 # Registry of connectors by server ID with TTL and capacity management
 _connector_registry: dict[str, tuple[SSHConnector, float]] = {}  # server_id -> (connector, last_used_time)
@@ -117,16 +119,16 @@ async def ssh_bash(server_id: str, command: str) -> dict:
     """Execute a shell command on the target server via SSH."""
     cmd_type = ShellSafety.classify(command)
 
-    logger.info(f"\n[ssh_bash] Executing: server={server_id[:8]}..., cmd_type={cmd_type.name}, command={command[:100]}")
+    log.info("Executing", server=server_id[:8], cmd_type=cmd_type.name, command=command[:100])
 
     if cmd_type == CommandType.BLOCKED:
-        logger.warning(f"[ssh_bash] BLOCKED: {command[:100]}")
+        log.warning("BLOCKED", command=command[:100])
         return {"error": "命令被系统拦截：此命令过于危险，禁止执行"}
 
     try:
         connector = await get_connector(server_id)
     except ValueError as e:
-        logger.error(f"[ssh_bash] Connection error: {e}")
+        log.error("Connection error", error=str(e))
         return {"error": str(e)}
 
     try:
@@ -135,7 +137,7 @@ async def ssh_bash(server_id: str, command: str) -> dict:
         exec_elapsed = time.monotonic() - t0
     except (asyncio.TimeoutError, TimeoutError):
         actual_elapsed = time.monotonic() - t0
-        logger.warning(f"[ssh_bash] Timeout after {actual_elapsed:.2f}s (limit={connector.timeout}s)")
+        log.warning("Timeout", elapsed=f"{actual_elapsed:.2f}s", limit=connector.timeout)
         return {
             "exit_code": -1,
             "stdout": "",
@@ -143,17 +145,17 @@ async def ssh_bash(server_id: str, command: str) -> dict:
             "error": None,
         }
     except (OSError, ConnectionError) as e:
-        logger.error(f"[ssh_bash] SSH connection failed: {e}")
+        log.error("SSH connection failed", error=str(e))
         return {"error": f"SSH 连接失败: {e}"}
     except Exception as e:
-        logger.error(f"[ssh_bash] Unexpected error: {e}")
+        log.error("Unexpected error", error=str(e))
         return {"error": f"执行异常: {e}"}
 
     stdout_compressed = compress_output(result.stdout)
-    logger.info(f"[ssh_bash] Result in {exec_elapsed:.2f}s: exit_code={result.exit_code}, stdout_len={len(stdout_compressed)}, stderr_len={len(result.stderr)}")
-    logger.debug(f"[ssh_bash] stdout: {stdout_compressed[:500]}")
+    log.info("Result", elapsed=f"{exec_elapsed:.2f}s", exit_code=result.exit_code, stdout_len=len(stdout_compressed), stderr_len=len(result.stderr))
+    log.debug("stdout", stdout=stdout_compressed[:500])
     if result.stderr:
-        logger.debug(f"[ssh_bash] stderr: {result.stderr[:500]}")
+        log.debug("stderr", stderr=result.stderr[:500])
 
     return {
         "exit_code": result.exit_code,

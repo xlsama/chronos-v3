@@ -5,7 +5,9 @@ import orjson
 import websockets
 
 from src.env import Settings
-from src.lib.logger import logger
+from src.lib.logger import get_logger
+
+log = get_logger()
 
 
 class ASRProxySession:
@@ -47,14 +49,14 @@ class ASRProxySession:
             try:
                 msg = orjson.loads(raw)
             except Exception:
-                logger.warning("ASR: failed to parse upstream message")
+                log.warning("Failed to parse upstream message")
                 continue
 
             msg_type = msg.get("type", "")
 
             if msg_type == "error":
                 error_msg = msg.get("error", {}).get("message", "unknown error")
-                logger.error(f"ASR upstream error: {error_msg}")
+                log.error("ASR upstream error", message=error_msg)
                 yield {"type": "error", "message": error_msg}
                 return
             elif msg_type == "session.created":

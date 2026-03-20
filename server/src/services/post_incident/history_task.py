@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from src.db.connection import get_session_factory
 from src.db.models import Incident, Message
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.services.incident_history_service import IncidentHistoryService
 
 
@@ -25,16 +25,18 @@ def _has_root_cause(summary_md: str) -> bool:
 async def auto_save_history(incident_id: str, summary_md: str) -> None:
     """Auto-save incident history with similarity dedup."""
     sid = incident_id[:8]
-    logger.info(
-        f"[{sid}] [history] auto_save_history called: "
-        f"incident_id={incident_id}, summary_md_len={len(summary_md) if summary_md else 0}"
+    log = get_logger(component="post_incident", sid=sid)
+    log.info(
+        "auto_save_history called",
+        incident_id=incident_id,
+        summary_md_len=len(summary_md) if summary_md else 0,
     )
     if not summary_md:
-        logger.info(f"[{sid}] [history] Check: summary_md is empty, skipping auto-save")
+        log.info("summary_md is empty, skipping auto-save")
         return
 
     has_root = _has_root_cause(summary_md)
-    logger.info(f"[{sid}] [history] Check: has_root_cause={has_root}")
+    log.info("Root cause check", has_root_cause=has_root)
     if not has_root:
         return
 
@@ -49,24 +51,24 @@ async def auto_save_history(incident_id: str, summary_md: str) -> None:
                 Message.content.in_(["ssh_bash", "bash", "service_exec"]),
             )
         )
-        logger.info(f"[{sid}] [history] Check: exec_tool_calls={tool_count}")
+        log.info("Exec tool calls check", exec_tool_calls=tool_count)
         if not tool_count:
             return
 
         incident = await session.get(Incident, uuid.UUID(incident_id))
         if not incident:
             return
-        logger.info(f"[{sid}] [history] Check: saved_to_memory={incident.saved_to_memory}")
+        log.info("Memory check", saved_to_memory=incident.saved_to_memory)
         if incident.saved_to_memory:
             return
 
         service = IncidentHistoryService(session=session)
-        logger.info(f"[{sid}] [history] Calling service.auto_save()")
+        log.info("Calling service.auto_save()")
         t0 = time.monotonic()
         result = await service.auto_save(incident, summary_md)
         save_elapsed = time.monotonic() - t0
-        logger.info(f"[{sid}] [history] service.auto_save() completed in {save_elapsed:.2f}s")
+        log.info("service.auto_save() completed", elapsed=f"{save_elapsed:.2f}s")
         if result is None:
-            logger.warning(f"[{sid}] [history] Auto-save returned None (unexpected)")
+            log.warning("Auto-save returned None (unexpected)")
             return
-        logger.info(f"[{sid}] [history] Auto-save result: {result}")
+        log.info("Auto-save result", result=result)

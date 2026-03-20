@@ -2,7 +2,7 @@
 
 import time
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.services.post_incident.base import get_mini_llm
 from src.services.skill_service import SkillService
 
@@ -134,12 +134,11 @@ async def auto_evolve_skills(
 ) -> str:
     """自动提取排查流程并创建/更新 skill。返回操作描述。"""
     sid = incident_id[:8]
-    logger.info(
-        "[{}] [skill_evolution] auto_evolve_skills called: summary_md_len={}, "
-        "conversation_text_len={}",
-        sid,
-        len(summary_md) if summary_md else 0,
-        len(conversation_text) if conversation_text else 0,
+    log = get_logger(component="post_incident", sid=sid)
+    log.info(
+        "auto_evolve_skills called",
+        summary_md_len=len(summary_md) if summary_md else 0,
+        conversation_text_len=len(conversation_text) if conversation_text else 0,
     )
 
     if not summary_md or not conversation_text:
@@ -151,34 +150,24 @@ async def auto_evolve_skills(
     # Step 1: 提取可复用排查流程
     conversation = conversation_text
     extract_prompt = _EXTRACT_PROMPT.format(conversation=conversation)
-    logger.info(
-        "[{}] [skill_evolution] Step1: calling LLM to extract procedure, prompt_len={}",
-        sid,
-        len(extract_prompt),
-    )
+    log.info("Step 1: calling LLM to extract procedure", prompt_len=len(extract_prompt))
     t_step1 = time.monotonic()
     try:
         extract_resp = await llm.ainvoke(extract_prompt)
         step1_elapsed = time.monotonic() - t_step1
-        logger.info(
-            "[{}] [skill_evolution] Step1: LLM responded in {:.2f}s, len={}, preview={!r}",
-            sid,
-            step1_elapsed,
-            len(extract_resp.content),
-            extract_resp.content[:200],
+        log.info(
+            "Step 1: LLM responded",
+            elapsed=f"{step1_elapsed:.2f}s",
+            resp_len=len(extract_resp.content),
+            preview=extract_resp.content[:200],
         )
-    except Exception as e:
-        logger.opt(exception=True).error(
-            "[{}] [skill_evolution] Step1: LLM call failed: {}: {}",
-            sid,
-            type(e).__name__,
-            e,
-        )
+    except Exception:
+        log.error("Step 1: LLM call failed", exc_info=True)
         raise
     extracted = extract_resp.content.strip()
 
     if "NO_PROCEDURE" in extracted:
-        logger.info("[{}] [skill_evolution] No reusable procedure found", sid)
+        log.info("No reusable procedure found")
         return "skipped: no reusable procedure"
 
     # 解析提取的内容
@@ -203,15 +192,10 @@ async def auto_evolve_skills(
             new_description = fm.get("description", "")
 
     if not new_name:
-        logger.warning("[{}] [skill_evolution] Could not extract name from procedure", sid)
+        log.warning("Could not extract name from procedure")
         return "skipped: invalid extracted content"
 
-    logger.info(
-        "[{}] [skill_evolution] Extracted: name={!r}, description={!r}",
-        sid,
-        new_name,
-        new_description,
-    )
+    log.info("Extracted procedure", name=new_name, description=new_description)
 
     # Step 2: 与现有 skills 匹配
     all_skills = service.list_skills()  # 包含 draft
@@ -225,33 +209,26 @@ async def auto_evolve_skills(
         new_description=new_description,
         skills_list=skills_list,
     )
-    logger.info(
-        "[{}] [skill_evolution] Step2: calling LLM to match skills, prompt_len={}, existing_skills={}",
-        sid,
-        len(match_prompt),
-        len(all_skills),
+    log.info(
+        "Step 2: calling LLM to match skills",
+        prompt_len=len(match_prompt),
+        existing_skills=len(all_skills),
     )
     t_step2 = time.monotonic()
     try:
         match_resp = await llm.ainvoke(match_prompt)
         step2_elapsed = time.monotonic() - t_step2
-        logger.info(
-            "[{}] [skill_evolution] Step2: LLM responded in {:.2f}s, len={}, preview={!r}",
-            sid,
-            step2_elapsed,
-            len(match_resp.content),
-            match_resp.content[:200],
+        log.info(
+            "Step 2: LLM responded",
+            elapsed=f"{step2_elapsed:.2f}s",
+            resp_len=len(match_resp.content),
+            preview=match_resp.content[:200],
         )
-    except Exception as e:
-        logger.opt(exception=True).error(
-            "[{}] [skill_evolution] Step2: LLM call failed: {}: {}",
-            sid,
-            type(e).__name__,
-            e,
-        )
+    except Exception:
+        log.error("Step 2: LLM call failed", exc_info=True)
         raise
     match_result = match_resp.content.strip()
-    logger.info("[{}] [skill_evolution] Match result: {}", sid, match_result)
+    log.info("Match result", result=match_result)
 
     if match_result.startswith("MATCH:"):
         # Step 3: 合并到现有 skill
@@ -259,42 +236,31 @@ async def auto_evolve_skills(
         try:
             meta, existing_raw = service.get_skill(slug)
         except FileNotFoundError:
-            logger.warning("[{}] [skill_evolution] Matched skill {!r} not found", sid, slug)
+            log.warning("Matched skill not found", slug=slug)
             return f"skipped: matched skill '{slug}' not found"
 
         merge_prompt = _MERGE_PROMPT.format(
             existing_content=existing_raw,
             new_content=content,
         )
-        logger.info(
-            "[{}] [skill_evolution] Step3: calling LLM to merge into {!r}, prompt_len={}",
-            sid,
-            slug,
-            len(merge_prompt),
-        )
+        log.info("Step 3: calling LLM to merge", slug=slug, prompt_len=len(merge_prompt))
         t_step3 = time.monotonic()
         try:
             merge_resp = await llm.ainvoke(merge_prompt)
             step3_elapsed = time.monotonic() - t_step3
-            logger.info(
-                "[{}] [skill_evolution] Step3: LLM responded in {:.2f}s, len={}, preview={!r}",
-                sid,
-                step3_elapsed,
-                len(merge_resp.content),
-                merge_resp.content[:200],
+            log.info(
+                "Step 3: LLM responded",
+                elapsed=f"{step3_elapsed:.2f}s",
+                resp_len=len(merge_resp.content),
+                preview=merge_resp.content[:200],
             )
-        except Exception as e:
-            logger.opt(exception=True).error(
-                "[{}] [skill_evolution] Step3: LLM merge call failed: {}: {}",
-                sid,
-                type(e).__name__,
-                e,
-            )
+        except Exception:
+            log.error("Step 3: LLM merge call failed", exc_info=True)
             raise
         merged = merge_resp.content.strip()
 
         if "NO_UPDATE" in merged:
-            logger.info("[{}] [skill_evolution] No update needed for {!r}", sid, slug)
+            log.info("No update needed for skill", slug=slug)
             return f"skipped: no update needed for '{slug}'"
 
         # Clean up merged content
@@ -307,12 +273,7 @@ async def auto_evolve_skills(
             merged_content = merged_content[:-4]
 
         # Update first, then save new content as version
-        logger.info(
-            "[{}] [skill_evolution] Updating existing skill {!r}, content_len={}",
-            sid,
-            slug,
-            len(merged_content),
-        )
+        log.info("Updating existing skill", slug=slug, content_len=len(merged_content))
         service.update_skill(slug, merged_content)
 
         from src.db.connection import get_session_factory
@@ -324,7 +285,7 @@ async def auto_evolve_skills(
                 content=merged_content, change_source="auto",
             )
             await vs_session.commit()
-        logger.info("[{}] [skill_evolution] Updated existing skill {!r}", sid, slug)
+        log.info("Updated existing skill", slug=slug)
         return f"updated: {slug}"
 
     elif match_result.startswith("NEW:"):
@@ -349,16 +310,11 @@ async def auto_evolve_skills(
         if "draft: true" not in content:
             content = content.replace("---\n", "---\ndraft: true\n", 1)
 
-        logger.info(
-            "[{}] [skill_evolution] Writing content to new skill {!r}, content_len={}",
-            sid,
-            slug,
-            len(content),
-        )
+        log.info("Writing content to new skill", slug=slug, content_len=len(content))
         service.update_skill(slug, content)
-        logger.info("[{}] [skill_evolution] Created new draft skill {!r}", sid, slug)
+        log.info("Created new draft skill", slug=slug)
         return f"created: {slug} (draft)"
 
     else:
-        logger.warning("[{}] [skill_evolution] Unexpected match result: {}", sid, match_result)
+        log.warning("Unexpected match result", result=match_result)
         return "skipped: unexpected match result"

@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI
 
 from src.ops_agent.prompts.history_agent import HISTORY_AGENT_SYSTEM_PROMPT
 from src.env import get_settings
-from src.lib.logger import logger, ac
+from src.lib.logger import get_logger
 from src.ops_agent.tools.history_tools import search_incident_history as _search_incident_history
 
 EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
@@ -36,6 +36,7 @@ async def run_history_agent(
 
     Returns a summary string of historical context (or "暂无相似历史事件").
     """
+    log = get_logger(component="history_agent")
     s = get_settings()
     llm = ChatOpenAI(
         model=s.main_model,
@@ -47,7 +48,7 @@ async def run_history_agent(
     search_tool, last_sources = _build_search_tool()
     llm_with_tools = llm.bind_tools([search_tool])
 
-    logger.info(f"\n{ac('history_agent')} Started, description='{description[:50]}...'")
+    log.info("Started", description=description[:50])
 
     messages = [
         SystemMessage(content=HISTORY_AGENT_SYSTEM_PROMPT),
@@ -56,7 +57,7 @@ async def run_history_agent(
 
     max_iterations = 5
     for i in range(max_iterations):
-        # Stream LLM response
+        iter_log = log.bind(iteration=i + 1)
         full_content = ""
         full_response: AIMessage | None = None
 
@@ -72,18 +73,16 @@ async def run_history_agent(
         await event_callback("thinking_done", {})
         messages.append(full_response)
 
-        logger.info(f"\n{ac('history_agent')} [iter {i+1}] LLM responded in {llm_elapsed:.2f}s, content_len={len(full_content)}")
+        iter_log.info("LLM responded", elapsed=f"{llm_elapsed:.2f}s", content_len=len(full_content))
         if full_content:
-            logger.info(f"\n{ac('history_agent')} [iter {i+1}] LLM content:\n{full_content}\n")
+            iter_log.info("LLM content", content=full_content)
 
-        # Check for tool calls
         if not full_response.tool_calls:
-            logger.info(f"{ac('history_agent')} [iter {i+1}] Completed, output_len={len(full_content)}")
+            iter_log.info("Completed", output_len=len(full_content))
             return full_content
 
-        # Execute tool calls
         for tc in full_response.tool_calls:
-            logger.info(f"\n{ac('history_agent')} [iter {i+1}] Tool call: search_incident_history(query='{tc['args'].get('query', '')}')")
+            iter_log.info("Tool call: search_incident_history", query=tc["args"].get("query", ""))
             await event_callback("tool_call", {
                 "name": "search_incident_history",
                 "args": tc["args"],
@@ -94,7 +93,7 @@ async def run_history_agent(
             tool_elapsed = time.monotonic() - t_tool
 
             result_str = str(result)
-            logger.info(f"{ac('history_agent')} [iter {i+1}] Tool result in {tool_elapsed:.2f}s: {len(result_str)} chars, {len(last_sources)} sources")
+            iter_log.info("Tool result", elapsed=f"{tool_elapsed:.2f}s", chars=len(result_str), sources=len(last_sources))
 
             await event_callback("tool_result", {
                 "name": "search_incident_history",
@@ -105,7 +104,6 @@ async def run_history_agent(
             from langchain_core.messages import ToolMessage
             messages.append(ToolMessage(content=result_str, tool_call_id=tc["id"]))
 
-    # Final response after tool use
     full_content = ""
     t_llm = time.monotonic()
     async for chunk in llm_with_tools.astream(messages):
@@ -115,5 +113,5 @@ async def run_history_agent(
     llm_elapsed = time.monotonic() - t_llm
 
     await event_callback("thinking_done", {})
-    logger.info(f"\n{ac('history_agent')} Final LLM response in {llm_elapsed:.2f}s, output_len={len(full_content)}")
+    log.info("Final LLM response", elapsed=f"{llm_elapsed:.2f}s", output_len=len(full_content))
     return full_content or "暂无相似历史事件"

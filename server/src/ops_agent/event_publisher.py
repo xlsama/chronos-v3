@@ -5,7 +5,9 @@ import orjson
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
+
+log = get_logger()
 
 # Map event_type to Message role
 _EVENT_ROLE = {
@@ -141,7 +143,7 @@ class EventPublisher:
                 session.add(msg)
                 await session.commit()
         except Exception as e:
-            logger.error(f"Failed to persist event {event_type}: {e}")
+            log.error("Failed to persist event", event_type=event_type, error=str(e))
 
     async def _publish_sse(self, channel: str, event_type: str, data: dict, ts: datetime) -> None:
         payload = orjson.dumps({

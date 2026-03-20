@@ -5,7 +5,6 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,9 +13,12 @@ from src.db.models import DocumentChunk, ProjectDocument
 from src.lib.chunker import ChunkWithMetadata, chunk_segments, chunk_text
 from src.lib.embedder import Embedder
 from src.lib.file_parsers import ParsedSegment, is_image, parse_file_segments
+from src.lib.logger import get_logger
 
 if TYPE_CHECKING:
     from src.lib.image_describer import ImageDescriber
+
+log = get_logger()
 
 
 async def _index_document_background(
@@ -32,14 +34,14 @@ async def _index_document_background(
         try:
             doc = await session.get(ProjectDocument, document_id)
             if not doc:
-                logger.error(f"Document {document_id} not found for indexing")
+                log.error("Document not found for indexing", document_id=str(document_id))
                 return
 
             # Skip indexing if content is empty
             if (not content or not content.strip()) and not segments:
                 doc.status = "indexed"
                 await session.commit()
-                logger.info(f"Document {document_id} has no content, skipped indexing")
+                log.info("Document has no content, skipped indexing", document_id=str(document_id))
                 return
 
             doc.status = "indexing"
@@ -77,7 +79,7 @@ async def _index_document_background(
             doc.status = "indexed"
             doc.error_message = None
             await session.commit()
-            logger.info(f"Document {document_id} indexed successfully ({len(chunk_models)} chunks)")
+            log.info("Document indexed successfully", document_id=str(document_id), chunks=len(chunk_models))
         except Exception as e:
             await session.rollback()
             async with factory() as err_session:
@@ -86,7 +88,7 @@ async def _index_document_background(
                     doc.status = "index_failed"
                     doc.error_message = str(e)[:500]
                     await err_session.commit()
-            logger.error(f"Failed to index document {document_id}: {e}")
+            log.error("Failed to index document", document_id=str(document_id), error=str(e))
 
 
 class DocumentService:

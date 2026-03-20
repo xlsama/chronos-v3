@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from src.ops_agent.prompts.kb_agent import KB_AGENT_SYSTEM_PROMPT
 from src.env import get_settings
-from src.lib.logger import logger, ac
+from src.lib.logger import get_logger
 from src.ops_agent.tools.knowledge_tools import (
     list_projects_for_matching as _list_projects,
     search_knowledge_base as _search_knowledge_base,
@@ -55,8 +55,6 @@ def _build_tools():
 
 
 def _extract_agents_md_section(search_result: str) -> str:
-    """从 search_knowledge_base 返回文本中提取 AGENTS.md 部分。"""
-    # 格式: ### AGENTS.md\n{content}\n\n---\n\n### 相关文档
     match = re.search(
         r"### AGENTS\.md\n(.*?)(?:\n\n---\n\n### |$)",
         search_result,
@@ -68,7 +66,6 @@ def _extract_agents_md_section(search_result: str) -> str:
 
 
 def _extract_business_context(search_result: str) -> str:
-    """从 search_knowledge_base 返回文本中提取相关文档部分。"""
     match = re.search(
         r"### 相关文档\n\n(.*?)$",
         search_result,
@@ -87,6 +84,7 @@ async def run_kb_agent(
 
     Returns structured KBAgentOutput with project info and knowledge base content.
     """
+    log = get_logger(component="kb_agent")
     s = get_settings()
     llm = ChatOpenAI(
         model=s.main_model,
@@ -98,20 +96,20 @@ async def run_kb_agent(
     tools, kb_sources = _build_tools()
     llm_with_tools = llm.bind_tools(tools)
 
-    logger.info(f"\n{ac('kb_agent')} Started, description='{description[:50]}...'")
+    log.info("Started", description=description[:50])
 
     messages = [
         SystemMessage(content=KB_AGENT_SYSTEM_PROMPT),
         HumanMessage(content=f"当前事件描述: {description}"),
     ]
 
-    # Track tool results programmatically
     projects_json: list[dict] = []
     last_search_project_id: str = ""
     last_search_result: str = ""
 
     max_iterations = 5
     for i in range(max_iterations):
+        iter_log = log.bind(iteration=i + 1)
         full_content = ""
         full_response: AIMessage | None = None
 
@@ -127,16 +125,16 @@ async def run_kb_agent(
         await event_callback("thinking_done", {})
         messages.append(full_response)
 
-        logger.info(f"\n{ac('kb_agent')} [iter {i+1}] LLM responded in {llm_elapsed:.2f}s, content_len={len(full_content)}")
+        iter_log.info("LLM responded", elapsed=f"{llm_elapsed:.2f}s", content_len=len(full_content))
         if full_content:
-            logger.info(f"\n{ac('kb_agent')} [iter {i+1}] LLM content:\n{full_content}\n")
+            iter_log.info("LLM content", content=full_content)
 
         if not full_response.tool_calls:
             break
 
         for tc in full_response.tool_calls:
             tool_name = tc["name"]
-            logger.info(f"\n{ac('kb_agent')} [iter {i+1}] Tool call: {tool_name}({tc['args']})")
+            iter_log.info("Tool call", tool=tool_name, args=tc["args"])
             await event_callback("tool_call", {
                 "name": tool_name,
                 "args": tc["args"],
@@ -148,7 +146,7 @@ async def run_kb_agent(
             tool_elapsed = time.monotonic() - t_tool
             result_str = str(result)
 
-            logger.info(f"{ac('kb_agent')} [iter {i+1}] Tool result in {tool_elapsed:.2f}s: {len(result_str)} chars")
+            iter_log.info("Tool result", elapsed=f"{tool_elapsed:.2f}s", chars=len(result_str))
 
             event_data: dict[str, Any] = {
                 "name": tool_name,
@@ -158,7 +156,6 @@ async def run_kb_agent(
                 event_data["sources"] = list(kb_sources)
             await event_callback("tool_result", event_data)
 
-            # Programmatically track tool results
             if tool_name == "list_projects":
                 try:
                     projects_json = orjson.loads(result_str)
@@ -171,7 +168,6 @@ async def run_kb_agent(
 
             messages.append(ToolMessage(content=result_str, tool_call_id=tc["id"]))
     else:
-        # Max iterations reached, get final response
         full_content = ""
         async for chunk in llm_with_tools.astream(messages):
             if chunk.content:
@@ -179,7 +175,6 @@ async def run_kb_agent(
                 await event_callback("thinking", {"content": chunk.content})
         await event_callback("thinking_done", {})
 
-    # Build structured output from tracked tool results
     project_info = next(
         (p for p in projects_json if p.get("project_id") == last_search_project_id),
         {},
@@ -196,7 +191,7 @@ async def run_kb_agent(
         no_match=not last_search_project_id,
     )
 
-    logger.info(f"\n{ac('kb_agent')} Completed: project_id={output.project_id}, project_name={output.project_name}, "
-                f"agents_md_empty={output.agents_md_empty}, no_match={output.no_match}")
+    log.info("Completed", project_id=output.project_id, project_name=output.project_name,
+             agents_md_empty=output.agents_md_empty, no_match=output.no_match)
 
     return output

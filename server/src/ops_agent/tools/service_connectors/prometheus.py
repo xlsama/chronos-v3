@@ -1,7 +1,9 @@
 import httpx
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.ops_agent.tools.service_connectors.base import ServiceConnector, ServiceResult
+
+log = get_logger(component="service_exec")
 
 
 def _format_prometheus_result(data: dict) -> str:
@@ -70,7 +72,7 @@ class PrometheusConnector(ServiceConnector):
         expr = command.strip()
         url = f"{self._base_url}/api/v1/query"
         params = {"query": expr}
-        logger.info(f"[prometheus] Executing PromQL: {expr[:200]}")
+        log.info("Executing PromQL", expr=expr[:200])
 
         async with httpx.AsyncClient(timeout=30, verify=False) as client:
             kwargs: dict = {"params": params}
@@ -79,7 +81,7 @@ class PrometheusConnector(ServiceConnector):
             resp = await client.get(url, **kwargs)
 
         if resp.status_code != 200:
-            logger.info(f"[prometheus] Error: HTTP {resp.status_code}")
+            log.info("Error", status_code=resp.status_code)
             return ServiceResult(
                 success=False,
                 output="",
@@ -97,7 +99,7 @@ class PrometheusConnector(ServiceConnector):
         data = body.get("data", {})
         result_count = len(data.get("result", []))
         output = _format_prometheus_result(data)
-        logger.info(f"[prometheus] Result: {result_count} series")
+        log.info("Result", series_count=result_count)
         return ServiceResult(success=True, output=output)
 
     async def close(self) -> None:

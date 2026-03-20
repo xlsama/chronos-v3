@@ -8,9 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Incident, IncidentHistory
 from src.lib.embedder import Embedder
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.lib.reranker import Reranker
 from src.services.version_service import VersionService
+
+log = get_logger()
 
 
 async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
@@ -21,9 +23,10 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
     from src.services.post_incident.base import get_mini_llm
 
     llm = get_mini_llm()
-    logger.info(
-        f"[history_service] _generate_title_and_severity: calling LLM, "
-        f"summary_md_len={len(summary_md)}, input_len={min(len(summary_md), 3000)}"
+    log.info(
+        "Generating title and severity",
+        summary_md_len=len(summary_md),
+        input_len=min(len(summary_md), 3000),
     )
     resp = await llm.ainvoke([
         SystemMessage(content=(
@@ -39,21 +42,20 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
         HumanMessage(content=summary_md[:3000]),
     ])
     raw = resp.content.strip()
-    logger.info(
-        f"[history_service] _generate_title_and_severity: LLM raw response: "
-        f"type={type(resp.content).__name__}, len={len(resp.content) if resp.content else 0}, "
-        f"raw={raw!r}"
+    log.info(
+        "LLM raw response for title/severity",
+        resp_type=type(resp.content).__name__,
+        resp_len=len(resp.content) if resp.content else 0,
+        raw=raw,
     )
     # 尝试解析 JSON
     try:
         data = json.loads(raw)
-        logger.info(f"[history_service] _generate_title_and_severity: JSON parsed: {data}")
+        log.info("JSON parsed for title/severity", data=data)
         title = str(data.get("title", "")).strip().strip("\"'《》")
         severity = str(data.get("severity", "P3")).strip().upper()
     except (json.JSONDecodeError, AttributeError) as e:
-        logger.warning(
-            f"[history_service] _generate_title_and_severity: JSON parse failed: {e}, raw={raw!r}"
-        )
+        log.warning("JSON parse failed for title/severity", error=str(e), raw=raw)
         title = raw.strip().strip("\"'《》")
         severity = "P3"
 
@@ -62,7 +64,7 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
     if severity not in ("P0", "P1", "P2", "P3"):
         severity = "P3"
 
-    logger.info(f"[history_service] _generate_title_and_severity: result title={title!r}, severity={severity}")
+    log.info("Title and severity result", title=title, severity=severity)
     return title, severity
 
 
@@ -72,7 +74,7 @@ async def _generate_filename(title: str) -> str:
     from src.services.post_incident.base import get_mini_llm
 
     llm = get_mini_llm()
-    logger.info(f"[history_service] _generate_filename: calling LLM, title={title!r}")
+    log.info("Generating filename", title=title)
     resp = await llm.ainvoke([
         SystemMessage(content=(
             "将以下中文标题翻译为英文文件名，使用 kebab-case 格式，3-8 个单词，"
@@ -80,12 +82,12 @@ async def _generate_filename(title: str) -> str:
         )),
         HumanMessage(content=title),
     ])
-    logger.info(f"[history_service] _generate_filename: LLM raw response: {resp.content!r}")
+    log.info("LLM raw response for filename", raw=resp.content)
     name = resp.content.strip().strip("\"'").lower()
     name = re.sub(r"[^a-z0-9-]", "-", name)
     name = re.sub(r"-+", "-", name).strip("-")
     result = name if name and len(name) <= 80 else "incident"
-    logger.info(f"[history_service] _generate_filename: result={result!r}")
+    log.info("Filename result", filename=result)
     return result
 
 
@@ -95,10 +97,7 @@ async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
     from src.services.post_incident.base import get_mini_llm
 
     llm = get_mini_llm()
-    logger.info(
-        f"[history_service] _merge_summaries: calling LLM, "
-        f"existing_len={len(existing_md)}, new_len={len(new_md)}"
-    )
+    log.info("Merging summaries", existing_len=len(existing_md), new_len=len(new_md))
     resp = await llm.ainvoke([
         SystemMessage(content=(
             "你是一个事件记录合并助手。你需要对比两份事件排查报告，将新报告中有价值的信息补充到已有报告中。\n\n"
@@ -113,14 +112,11 @@ async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
         HumanMessage(content=f"## 已有报告\n\n{existing_md}\n\n## 新报告\n\n{new_md}"),
     ])
     result = resp.content.strip()
-    logger.info(
-        f"[history_service] _merge_summaries: LLM responded, "
-        f"len={len(result)}, preview={result[:200]!r}"
-    )
+    log.info("LLM responded for merge", resp_len=len(result), preview=result[:200])
     if result == "NO_CHANGE":
-        logger.info("[history_service] _merge_summaries: result=NO_CHANGE")
+        log.info("Merge result: NO_CHANGE")
         return None
-    logger.info(f"[history_service] _merge_summaries: merged content len={len(result)}")
+    log.info("Merged content", content_len=len(result))
     return result
 
 
@@ -140,10 +136,10 @@ def _write_md_file(title: str, summary_md: str, record_id: uuid.UUID | None = No
         filename = f"{prefix}_{_sanitize_filename(title)}.md"
         file_path = dir_path / filename
         file_path.write_text(summary_md, encoding="utf-8")
-        logger.info(f"Wrote incident history to {file_path}")
+        log.info("Wrote incident history file", path=str(file_path))
         return file_path
     except Exception as e:
-        logger.error(f"Failed to write incident history file: {e}")
+        log.error("Failed to write incident history file", error=str(e))
         return None
 
 
@@ -152,7 +148,7 @@ def _delete_md_file(record_id: uuid.UUID) -> None:
     prefix = record_id.hex[:8]
     for f in dir_path.glob(f"{prefix}_*.md"):
         f.unlink()
-        logger.info(f"Deleted incident history file: {f}")
+        log.info("Deleted incident history file", path=str(f))
 
 
 def _rewrite_md_file(record_id: uuid.UUID, summary_md: str) -> None:
@@ -161,7 +157,7 @@ def _rewrite_md_file(record_id: uuid.UUID, summary_md: str) -> None:
     matches = list(dir_path.glob(f"{prefix}_*.md"))
     if matches:
         matches[0].write_text(summary_md, encoding="utf-8")
-        logger.info(f"Rewrote incident history file: {matches[0]}")
+        log.info("Rewrote incident history file", path=str(matches[0]))
 
 
 class IncidentHistoryService:
@@ -220,22 +216,27 @@ class IncidentHistoryService:
     async def auto_save(self, incident: Incident, summary_md: str) -> dict:
         """Auto-save with similarity dedup. Returns {"action": "created|updated|skipped"}."""
         embedding = await self.embedder.embed_text(summary_md)
-        logger.info("[history_service] Embedding computed")
+        log.info("Embedding computed")
 
         similar = await self.find_similar(embedding)
 
         if similar:
             for rec, dist in similar:
-                logger.info(f"[history_service] Similar: id={str(rec.id)[:8]}, title='{rec.title}', distance={dist:.4f}")
+                log.info(
+                    "Similar record found",
+                    id=str(rec.id)[:8],
+                    title=rec.title,
+                    distance=f"{dist:.4f}",
+                )
 
             best, distance = similar[0]
             # distance < 0.08 → similarity > 0.92 → skip
             if distance < 0.08:
-                logger.info(f"[history_service] Decision: SKIP (distance={distance:.4f} < 0.08)")
+                log.info("Decision: SKIP", distance=f"{distance:.4f}")
                 return {"action": "skipped"}
             # distance 0.08~0.15 → similarity 0.85~0.92 → merge & update occurrence
             if distance < 0.15:
-                logger.info(f"[history_service] Decision: MERGE (distance={distance:.4f}, 0.08~0.15)")
+                log.info("Decision: MERGE", distance=f"{distance:.4f}")
                 merged = await _merge_summaries(best.summary_md, summary_md)
                 if merged:
                     # Update first, then save new content as version
@@ -248,9 +249,9 @@ class IncidentHistoryService:
                         entity_type="incident_history", entity_id=str(best.id),
                         content=merged, change_source="auto",
                     )
-                    logger.info(f"[history_service] Merge result: content updated")
+                    log.info("Merge result: content updated")
                 else:
-                    logger.info(f"[history_service] Merge result: NO_CHANGE")
+                    log.info("Merge result: NO_CHANGE")
                 best.occurrence_count += 1
                 best.last_seen_at = datetime.now(timezone.utc)
                 incident.saved_to_memory = True
@@ -258,7 +259,7 @@ class IncidentHistoryService:
                 return {"action": "updated", "history_id": str(best.id)}
 
         # No match → create new
-        logger.info("[history_service] Decision: CREATE NEW")
+        log.info("Decision: CREATE NEW")
         title = incident.summary_title or incident.description[:80]
 
         record = IncidentHistory(
@@ -282,7 +283,7 @@ class IncidentHistoryService:
         except Exception:
             filename = title
         _write_md_file(filename, summary_md, record_id=record.id)
-        logger.info(f"[history_service] Created: id={str(record.id)[:8]}, title='{title}'")
+        log.info("Created new incident history", id=str(record.id)[:8], title=title)
         return {"action": "created", "history_id": str(record.id)}
 
     async def list_all(

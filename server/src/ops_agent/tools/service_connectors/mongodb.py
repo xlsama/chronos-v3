@@ -3,8 +3,10 @@ import re
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.ops_agent.tools.service_connectors.base import ServiceConnector, ServiceResult
+
+log = get_logger(component="service_exec")
 
 
 class MongoDBConnector(ServiceConnector):
@@ -25,7 +27,7 @@ class MongoDBConnector(ServiceConnector):
         if self._client is None:
             # Mask password in URI for logging
             safe_uri = re.sub(r"://[^:]+:[^@]+@", "://***:***@", self._uri) if "@" in self._uri else self._uri
-            logger.info(f"[mongodb] Creating client: {safe_uri}")
+            log.info("Creating client", uri=safe_uri)
             self._client = AsyncIOMotorClient(self._uri, serverSelectionTimeoutMS=5000)
         return self._client
 
@@ -34,12 +36,12 @@ class MongoDBConnector(ServiceConnector):
         if not isinstance(cmd_doc, dict) or not cmd_doc:
             return ServiceResult(success=False, output="", error="命令必须是非空 JSON 对象")
 
-        logger.info(f"[mongodb] Executing command: {str(cmd_doc)[:200]}")
+        log.info("Executing command", command=str(cmd_doc)[:200])
         client = self._get_client()
         db = client[self._database]
         result = await db.command(cmd_doc)
         output = json.dumps(result, indent=2, default=str, ensure_ascii=False)
-        logger.info(f"[mongodb] Command result: {len(output)} chars")
+        log.info("Command result", output_len=len(output))
         return ServiceResult(success=True, output=output)
 
     async def close(self) -> None:

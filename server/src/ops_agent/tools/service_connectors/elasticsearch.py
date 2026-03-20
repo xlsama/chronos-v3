@@ -3,8 +3,10 @@ import re
 
 import httpx
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.ops_agent.tools.service_connectors.base import ServiceConnector, ServiceResult
+
+log = get_logger(component="service_exec")
 
 
 def _parse_es_command(command: str) -> tuple[str, str, dict | None]:
@@ -51,7 +53,7 @@ class ElasticsearchConnector(ServiceConnector):
         method, path, body = _parse_es_command(command)
         url = f"{self._base_url}{path}"
         body_preview = str(body)[:200] if body else ""
-        logger.info(f"[elasticsearch] Executing: {method} {path} {body_preview}")
+        log.info("Executing", method=method, path=path, body_preview=body_preview)
 
         async with httpx.AsyncClient(timeout=30, verify=False) as client:
             kwargs: dict = {}
@@ -63,7 +65,7 @@ class ElasticsearchConnector(ServiceConnector):
             resp = await client.request(method, url, **kwargs)
 
         if resp.status_code >= 400:
-            logger.info(f"[elasticsearch] Error: HTTP {resp.status_code}")
+            log.info("Error", status_code=resp.status_code)
             return ServiceResult(
                 success=False,
                 output="",
@@ -80,7 +82,7 @@ class ElasticsearchConnector(ServiceConnector):
         else:
             output = resp.text
 
-        logger.info(f"[elasticsearch] Result: HTTP {resp.status_code}, {len(output)} chars")
+        log.info("Result", status_code=resp.status_code, output_len=len(output))
         return ServiceResult(success=True, output=output)
 
     async def close(self) -> None:

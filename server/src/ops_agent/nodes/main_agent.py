@@ -8,7 +8,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import OpsState
 from src.env import get_settings
-from src.ops_agent.context_guardrails import build_context_request_question
 from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash, list_servers as _list_servers
 from src.ops_agent.tools.bash_tool import local_bash as _local_bash
 from src.ops_agent.tools.service_exec_tool import (
@@ -17,7 +16,7 @@ from src.ops_agent.tools.service_exec_tool import (
 )
 from src.ops_agent.tools.tool_permissions import ShellSafety, ServiceSafety, CommandType
 from src.services.skill_service import SkillService
-from src.lib.logger import logger, ac
+from src.lib.logger import get_logger
 
 
 def build_tools():
@@ -87,13 +86,14 @@ def build_tools():
         - "mysql-oom" → SKILL.md 内容 + 文件目录
         - "mysql-oom/scripts/check.sh" → 脚本内容
         """
+        skill_log = get_logger(component="skill")
         service = SkillService()
         if path.strip() == "?":
             available = service.get_available_skills()
             if not available:
-                logger.info(f"{ac('skill')} read_skill: path=?, no skills available")
+                skill_log.info("read_skill: no skills available", path=path)
                 return "当前没有可用技能。"
-            logger.info(f"{ac('skill')} read_skill: path=?, returning {len(available)} skills")
+            skill_log.info("read_skill: listing skills", path=path, count=len(available))
             lines = ["所有可用技能:"]
             for s in available:
                 lines.append(f"- {s['slug']}: {s['description']}")
@@ -103,11 +103,11 @@ def build_tools():
         rel_path = parts[1] if len(parts) > 1 else None
         try:
             content = service.read_file(slug, rel_path)
-            logger.info(f"{ac('skill')} read_skill: slug={slug}, rel_path={rel_path}, content_len={len(content)}")
-            logger.debug(f"{ac('skill')} read_skill content:\n{content}")
+            skill_log.info("read_skill", slug=slug, rel_path=rel_path, content_len=len(content))
+            skill_log.debug("read_skill content", content=content)
             return content
         except FileNotFoundError:
-            logger.warning(f"{ac('skill')} read_skill: not found, path={path}")
+            skill_log.warning("read_skill: not found", path=path)
             return f"未找到: {path}"
 
     @tool
@@ -127,7 +127,7 @@ def build_tools():
     ]
 
 
-_COMPACT_THRESHOLD = 10  # >10 个 skill 使用 compact 格式
+_COMPACT_THRESHOLD = 10
 
 
 def _build_skills_context(
@@ -142,15 +142,16 @@ def _build_skills_context(
     - Full format (≤10): <skill><name>...</name><description>...</description></skill>
     - Compact format (>10): <skill name="slug">description</skill> 单行
     """
+    skill_log = get_logger(component="skill")
     available = skill_service.get_available_skills()
 
     if not available:
-        logger.info(f"{ac('skill')} _build_skills_context: no available skills")
+        skill_log.info("No available skills")
         return ""
 
     slugs = [s["slug"] for s in available]
     fmt = "compact" if len(available) > _COMPACT_THRESHOLD else "full"
-    logger.info(f"{ac('skill')} _build_skills_context: {len(available)} skills ({fmt}), slugs={slugs}")
+    skill_log.info("_build_skills_context", count=len(available), format=fmt, slugs=slugs)
 
     xml_lines = [
         "\n<available_skills>",
@@ -186,13 +187,19 @@ def get_llm():
     )
 
 
+def _log_retry(retry_state):
+    get_logger(component="main").warning(
+        "LLM call failed, retrying",
+        attempt=retry_state.attempt_number,
+        error=str(retry_state.outcome.exception()),
+    )
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=30),
     retry=retry_if_exception_type((TimeoutError, ConnectionError, OSError)),
-    before_sleep=lambda retry_state: logger.warning(
-        f"LLM call failed (attempt {retry_state.attempt_number}), retrying: {retry_state.outcome.exception()}"
-    ),
+    before_sleep=_log_retry,
 )
 async def _invoke_llm_with_retry(llm, messages):
     """Invoke LLM with retry and timeout."""
@@ -200,7 +207,10 @@ async def _invoke_llm_with_retry(llm, messages):
 
 
 def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> AIMessage:
-    """Fallback to ask_human when the model hallucinates an unknown tool."""
+    """Strip invalid tool_calls when the model hallucinates an unknown tool.
+
+    Keeps original content so the retry mechanism can handle it uniformly.
+    """
     tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
     unknown_tools = sorted(
         {
@@ -212,12 +222,13 @@ def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> A
     if not unknown_tools:
         return response
 
-    logger.warning(f"{ac('main')} LLM returned unknown tool(s): {unknown_tools}")
-    return AIMessage(content=build_context_request_question(unknown_tools))
+    get_logger(component="main").warning("LLM returned unknown tool(s), stripping invalid calls", tools=unknown_tools)
+    return AIMessage(content=response.content or "")
 
 
 async def main_agent_node(state: OpsState) -> dict:
     sid = state["incident_id"][:8]
+    log = get_logger(component="main", sid=sid)
     tools = build_tools()
     llm = get_llm().bind_tools(tools)
 
@@ -240,7 +251,6 @@ async def main_agent_node(state: OpsState) -> dict:
     else:
         kb_context = ""
 
-    # Build skills context
     skill_service = SkillService()
     skills_context = _build_skills_context(
         skill_service,
@@ -259,28 +269,27 @@ async def main_agent_node(state: OpsState) -> dict:
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
 
     tool_names = [t.name for t in tools]
-    logger.info(
-        f"\n[{sid}] {ac('main')} main_agent_node invoked, history={'yes' if history_summary else 'no'}, kb={'yes' if kb_summary else 'no'}, "
-        f"messages={len(messages)}, tools={tool_names}"
+    log.info(
+        "main_agent_node invoked",
+        history="yes" if history_summary else "no",
+        kb="yes" if kb_summary else "no",
+        messages=len(messages),
+        tools=tool_names,
     )
-    logger.debug(
-        f"[{sid}] {ac('main')} System prompt ({len(system_prompt)} chars):\n{system_prompt[:2000]}"
-    )
+    log.debug("System prompt", chars=len(system_prompt), preview=system_prompt[:2000])
 
     t0 = time.monotonic()
     response = await _invoke_llm_with_retry(llm, messages)
     llm_elapsed = time.monotonic() - t0
-    logger.info(f"\n[{sid}] {ac('main')} LLM responded in {llm_elapsed:.2f}s")
+    log.info("LLM responded", elapsed=f"{llm_elapsed:.2f}s")
 
     content_text = response.content if hasattr(response, "content") else ""
     tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
-    logger.info(
-        f"\n[{sid}] {ac('main')} LLM response: content_len={len(content_text)}, tool_calls={len(tool_calls)}"
-    )
+    log.info("LLM response", content_len=len(content_text), tool_calls=len(tool_calls))
     if content_text:
-        logger.info(f"\n[{sid}] {ac('main')} LLM content:\n{content_text}\n")
+        log.info("LLM content", content=content_text)
     for tc in tool_calls:
-        logger.info(f"\n[{sid}] {ac('main')} LLM tool_call: {tc['name']}({tc.get('args', {})})")
+        log.info("LLM tool_call", name=tc["name"], args=tc.get("args", {}))
 
     safe_response = _sanitize_llm_response(response, set(tool_names))
     return {"messages": [safe_response]}
@@ -305,31 +314,37 @@ async def _get_service_type(service_id: str) -> str:
 
 async def route_decision(state: OpsState) -> str:
     sid = state["incident_id"][:8]
+    log = get_logger(component="main", sid=sid)
     last_message = state["messages"][-1]
     valid_tool_names = {tool.name for tool in build_tools()}
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-        # Check ask_human count to prevent infinite loops
         if state.get("ask_human_count", 0) >= 5:
-            logger.warning(f"[{sid}] {ac('main')} ask_human count exceeded limit, forcing complete")
+            log.warning("ask_human count exceeded limit, forcing complete")
             return "complete"
-        logger.info(f"[{sid}] {ac('main')} route_decision: no tool_calls -> ask_human")
-        return "ask_human"
+
+        max_retries = get_settings().tool_call_max_retries
+        retry_count = state.get("tool_call_retry_count", 0)
+        if retry_count >= max_retries:
+            log.info("route_decision: no tool_calls after retries -> ask_human (fallback)", retries=retry_count)
+            return "ask_human"
+
+        log.info("route_decision: no tool_calls -> retry_tool_call", attempt=f"{retry_count + 1}/{max_retries}")
+        return "retry_tool_call"
 
     for tool_call in last_message.tool_calls:
         name = tool_call["name"]
         if name not in valid_tool_names:
-            logger.warning(f"[{sid}] {ac('main')} route_decision: unknown tool '{name}' -> ask_human")
+            log.warning("route_decision: unknown tool -> ask_human", tool=name)
             return "ask_human"
         if name == "complete":
-            logger.info(f"[{sid}] {ac('main')} route_decision: tool=complete -> complete")
+            log.info("route_decision: tool=complete -> complete")
             return "complete"
         if name == "ask_human":
-            # Check ask_human count
             if state.get("ask_human_count", 0) >= 5:
-                logger.warning(f"[{sid}] {ac('main')} ask_human count exceeded limit, forcing complete")
+                log.warning("ask_human count exceeded limit, forcing complete")
                 return "complete"
-            logger.info(f"[{sid}] {ac('main')} route_decision: tool=ask_human -> ask_human")
+            log.info("route_decision: tool=ask_human -> ask_human")
             return "ask_human"
         if name in ("ssh_bash", "bash"):
             cmd_type = ShellSafety.classify(
@@ -337,18 +352,14 @@ async def route_decision(state: OpsState) -> str:
                 local=(name == "bash"),
             )
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
-                logger.info(
-                    f"[{sid}] {ac('main')} route_decision: need_approval (tool={name}, cmd_type={cmd_type.name})"
-                )
+                log.info("route_decision: need_approval", tool=name, cmd_type=cmd_type.name)
                 return "need_approval"
         if name == "service_exec":
             service_type = await _get_service_type(tool_call["args"].get("service_id", ""))
             cmd_type = ServiceSafety.classify(service_type, tool_call["args"].get("command", ""))
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
-                logger.info(
-                    f"[{sid}] {ac('main')} route_decision: need_approval (tool=service_exec, cmd_type={cmd_type.name})"
-                )
+                log.info("route_decision: need_approval", tool="service_exec", cmd_type=cmd_type.name)
                 return "need_approval"
 
-    logger.info(f"[{sid}] {ac('main')} route_decision: -> continue")
+    log.info("route_decision: -> continue")
     return "continue"

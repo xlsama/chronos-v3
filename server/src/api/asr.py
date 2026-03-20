@@ -4,8 +4,10 @@ import orjson
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from src.env import get_settings
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.services.asr_service import ASRProxySession
+
+log = get_logger()
 
 router = APIRouter(prefix="/api/asr", tags=["asr"])
 
@@ -20,7 +22,7 @@ async def asr_stream(ws: WebSocket):
     try:
         await asyncio.wait_for(session.connect(), timeout=10)
     except Exception as e:
-        logger.error(f"ASR: failed to connect upstream: {e}")
+        log.error("ASR: failed to connect upstream", error=str(e))
         await ws.send_json({"type": "error", "message": "ASR 服务连接失败"})
         await ws.close()
         return
@@ -48,7 +50,7 @@ async def asr_stream(ws: WebSocket):
             async for result in session.receive_results():
                 await ws.send_json(result)
         except Exception as e:
-            logger.error(f"ASR: upstream receive error: {e}")
+            log.error("ASR: upstream receive error", error=str(e))
             try:
                 await ws.send_json({"type": "error", "message": str(e)})
             except Exception:
@@ -73,7 +75,7 @@ async def asr_stream(ws: WebSocket):
                 except asyncio.CancelledError:
                     pass
     except Exception as e:
-        logger.error(f"ASR: session error: {e}")
+        log.error("ASR: session error", error=str(e))
         audio_task.cancel()
         results_task.cancel()
     finally:

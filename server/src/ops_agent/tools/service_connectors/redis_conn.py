@@ -2,8 +2,10 @@ import shlex
 
 import redis.asyncio as aioredis
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
 from src.ops_agent.tools.service_connectors.base import ServiceConnector, ServiceResult
+
+log = get_logger(component="service_exec")
 
 
 def _format_redis_result(result) -> str:
@@ -45,7 +47,7 @@ class RedisConnector(ServiceConnector):
 
     def _get_client(self) -> aioredis.Redis:
         if self._client is None:
-            logger.info(f"[redis] Creating client: {self._host}:{self._port}/db{self._db}")
+            log.info("Creating client", host=self._host, port=self._port, db=self._db)
             self._client = aioredis.Redis(
                 host=self._host,
                 port=self._port,
@@ -61,10 +63,10 @@ class RedisConnector(ServiceConnector):
         if not parts:
             return ServiceResult(success=False, output="", error="空命令")
 
-        logger.info(f"[redis] Executing: {parts[0]} {' '.join(parts[1:])[:200]}")
+        log.info("Executing", command=parts[0], args=" ".join(parts[1:])[:200])
         result = await client.execute_command(*parts)
         output = _format_redis_result(result)
-        logger.info(f"[redis] Result: {len(output)} chars")
+        log.info("Result", output_len=len(output))
         return ServiceResult(success=True, output=output)
 
     async def close(self) -> None:

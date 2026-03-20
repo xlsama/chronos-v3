@@ -13,3 +13,4 @@ class OpsState(MessagesState):
     kb_summary: str | None
     kb_project_id: str | None
     ask_human_count: int
+    tool_call_retry_count: int

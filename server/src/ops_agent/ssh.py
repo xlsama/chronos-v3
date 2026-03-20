@@ -3,7 +3,9 @@ from dataclasses import dataclass
 
 import asyncssh
 
-from src.lib.logger import logger
+from src.lib.logger import get_logger
+
+log = get_logger(component="ssh")
 
 
 @dataclass
@@ -62,11 +64,11 @@ class SSHConnector:
         return opts
 
     async def execute(self, command: str) -> SSHResult:
-        logger.info(f"[ssh] Executing on {self.host}: {command}")
+        log.info("Executing", host=self.host, command=command)
 
         async def _run() -> SSHResult:
             if self.bastion_host:
-                logger.info(f"[ssh] Connecting via bastion {self.bastion_host}:{self.bastion_port} -> {self.host}:{self.port}")
+                log.info("Connecting via bastion", bastion_host=self.bastion_host, bastion_port=self.bastion_port, target_host=self.host, target_port=self.port)
                 bastion_opts = self._build_connect_opts(
                     host=self.bastion_host,
                     port=self.bastion_port,
@@ -96,7 +98,7 @@ class SSHConnector:
                             stderr=result.stderr or "",
                         )
             else:
-                logger.info(f"[ssh] Direct connect to {self.host}:{self.port}")
+                log.info("Direct connect", host=self.host, port=self.port)
                 target_opts = self._build_connect_opts(
                     host=self.host,
                     port=self.port,
@@ -119,5 +121,5 @@ class SSHConnector:
             result = await self.execute("echo ok")
             return result.exit_code == 0
         except Exception as e:
-            logger.warning(f"SSH connection test failed for {self.host}: {e}")
+            log.warning("SSH connection test failed", host=self.host, error=str(e))
             return False
