@@ -166,6 +166,7 @@ class IncidentResponse(BaseModel):
     summary_title: str | None
     thread_id: str | None
     saved_to_memory: bool
+    is_archived: bool
     attachments: list[AttachmentResponse] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

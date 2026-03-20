@@ -57,3 +57,9 @@ export function stopIncident(incidentId: string) {
     method: "POST",
   });
 }
+
+export function archiveIncident(incidentId: string) {
+  return request<Incident>(`/incidents/${incidentId}/archive`, {
+    method: "POST",
+  });
+}

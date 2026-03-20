@@ -2,6 +2,7 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import interrupt
 
 from src.lib.logger import logger
+from src.ops_agent.context_guardrails import build_context_request_question
 from src.ops_agent.state import OpsState
 
 
@@ -29,6 +30,24 @@ async def ask_human_node(state: OpsState) -> dict:
                     "messages": [ToolMessage(content=str(user_response), tool_call_id=tc["id"])],
                     "ask_human_count": current_count + 1,
                 }
+
+        unknown_tools = sorted(
+            {
+                str(tc.get("name", "")).strip()
+                for tc in last_msg.tool_calls
+                if str(tc.get("name", "")).strip()
+            }
+        )
+        question = build_context_request_question(unknown_tools)
+        logger.warning(
+            f"[{sid}] [ask_human] Interrupt (fallback unknown tools): {unknown_tools}"
+        )
+        user_response = interrupt({"question": question})
+        logger.info(f"[{sid}] [ask_human] Resume: response_len={len(str(user_response))}")
+        return {
+            "messages": [HumanMessage(content=str(user_response))],
+            "ask_human_count": current_count + 1,
+        }
 
     # Case 2: plain text response (no tool calls) — agent is sharing analysis or asking implicitly
     question = last_msg.content if hasattr(last_msg, "content") else ""

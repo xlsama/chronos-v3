@@ -31,6 +31,7 @@ export interface Incident {
   summary_title: string | null;
   thread_id: string | null;
   saved_to_memory: boolean;
+  is_archived: boolean;
   attachments?: Attachment[];
   created_at: string;
   updated_at: string;

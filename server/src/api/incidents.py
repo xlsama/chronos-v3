@@ -100,12 +100,12 @@ async def list_incidents(
     page_size: int = 20,
     session: AsyncSession = Depends(get_session),
 ):
-    count_query = select(func.count()).select_from(Incident)
+    count_query = select(func.count()).select_from(Incident).where(Incident.is_archived == False)
     if status:
         count_query = count_query.where(Incident.status == status)
     total = await session.scalar(count_query) or 0
 
-    query = select(Incident).options(selectinload(Incident.attachments)).order_by(Incident.created_at.desc())
+    query = select(Incident).options(selectinload(Incident.attachments)).where(Incident.is_archived == False).order_by(Incident.created_at.desc())
     if status:
         query = query.where(Incident.status == status)
     query = query.offset((page - 1) * page_size).limit(page_size)
@@ -392,4 +392,26 @@ async def stop_incident(
         select(Incident).options(selectinload(Incident.attachments)).where(Incident.id == incident_id)
     )
     return result.scalar_one()
+
+
+@router.post("/{incident_id}/archive", response_model=IncidentResponse)
+async def archive_incident(
+    incident_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(Incident).options(selectinload(Incident.attachments)).where(Incident.id == incident_id)
+    )
+    incident = result.scalar_one_or_none()
+    if not incident:
+        raise NotFoundError("Incident not found")
+
+    incident.is_archived = True
+    await session.commit()
+
+    sid = str(incident_id)[:8]
+    logger.info(f"[{sid}] [api] incident archived")
+
+    await session.refresh(incident)
+    return incident
 

@@ -104,6 +104,24 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   return items;
 }
 
+function formatErrorMessage(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return "排查流程执行失败，请查看后端日志并补充更多事件信息后重试。";
+  }
+
+  const normalized = trimmed.replace(/^['"]+|['"]+$/g, "");
+  if (normalized === "find") {
+    return "Agent 调用了未注册的工具 `find`。当前信息不足，无法直接开始排查，请补充具体故障现象、受影响服务和发生时间后重试。";
+  }
+
+  if (/^[a-z_]+$/i.test(normalized)) {
+    return `Agent 调用了未注册的工具 \`${normalized}\`。当前信息不足，请补充具体故障现象、受影响服务和发生时间。`;
+  }
+
+  return trimmed;
+}
+
 function SkillReadCard({ skillName, skillContent }: { skillName: string; skillContent: string }) {
   const [open, setOpen] = useState(false);
   return (
@@ -498,7 +516,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
                       <motion.div key={i} variants={itemVariants} initial="hidden" animate="visible" layout>
                         <div className="rounded-md border border-destructive bg-destructive/10 p-3">
                           <Markdown
-                            content={item.event.data.message as string}
+                            content={formatErrorMessage(item.event.data.message as string)}
                             variant="compact"
                             className="card-markdown card-markdown--destructive"
                           />

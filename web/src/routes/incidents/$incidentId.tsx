@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { motion } from "motion/react";
-import { ArrowDown, ArrowLeft, Square } from "lucide-react";
+import { ArrowDown, ArrowLeft, Info, Square } from "lucide-react";
 import { getIncident, stopIncident } from "@/api/incidents";
 import { pageVariants, pageTransition } from "@/lib/motion";
 import { useIncidentStream } from "@/hooks/use-incident-stream";
@@ -12,6 +12,7 @@ import { UserInputBar } from "@/components/incidents/incident-detail/user-input-
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { QueryContent } from "@/components/query-content";
 import {
   AlertDialog,
@@ -88,11 +89,12 @@ function IncidentDetailPage() {
       skeleton={
         <div className="flex h-full flex-col">
           <div className="border-b px-6 py-4">
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-5 w-48" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-5 w-48" />
+              </div>
               <Skeleton className="h-5 w-16 rounded-full" />
             </div>
-            <Skeleton className="mt-2 h-4 w-72" />
           </div>
           <div className="flex-1 p-4 space-y-4">
             <Skeleton className="h-24 w-full rounded-lg" />
@@ -127,11 +129,21 @@ function IncidentDetailPage() {
             <h1 className="text-base font-medium truncate">
               {incident.summary_title || incident.description.slice(0, 30) + (incident.description.length > 30 ? "..." : "")}
             </h1>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon-sm">
+                  <Info className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent side="bottom" align="start" className="max-w-sm">
+                <p className="text-sm whitespace-pre-wrap">{incident.description}</p>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             <Badge className={statusColors[incident.status]}>
               {statusLabels[incident.status] ?? incident.status}
             </Badge>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
             {isActive && (
               <Button
                 variant="outline"
@@ -145,9 +157,6 @@ function IncidentDetailPage() {
             )}
           </div>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground truncate">
-          {incident.description}
-        </p>
       </div>
 
       {/* Stop Dialog */}

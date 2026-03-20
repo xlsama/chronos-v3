@@ -38,6 +38,18 @@ class AgentRunner:
         # Thinking content log buffer
         self._thinking_content_log_buffer = ""
 
+    @staticmethod
+    def _format_agent_error(exc: Exception) -> str:
+        """Normalize runtime errors into user-readable messages."""
+        if isinstance(exc, KeyError):
+            missing = str(exc).strip("'\" ")
+            if missing:
+                return (
+                    f"Agent 调用了未注册的工具 `{missing}`。"
+                    "当前信息不足，无法继续排查，请补充具体故障现象、受影响服务和发生时间。"
+                )
+        return str(exc)
+
     async def _check_cancelled(self, incident_id: str) -> str | None:
         """Check if this incident has been cancelled. Returns cancel reason or None."""
         if not self.redis:
@@ -91,7 +103,7 @@ class AgentRunner:
                 await self._process_event(channel, event)
         except Exception as e:
             logger.error(f"[{sid}] [main] Agent error: {e}")
-            await self.publisher.publish(channel, "error", {"message": str(e)})
+            await self.publisher.publish(channel, "error", {"message": self._format_agent_error(e)})
             raise
 
         await self.publisher.flush_remaining(channel)
@@ -134,7 +146,7 @@ class AgentRunner:
                 await self._process_event(channel, event)
         except Exception as e:
             logger.error(f"Agent resume (human input) error for incident {incident_id}: {e}")
-            await self.publisher.publish(channel, "error", {"message": str(e)})
+            await self.publisher.publish(channel, "error", {"message": self._format_agent_error(e)})
             raise
 
         await self.publisher.flush_remaining(channel)
@@ -167,7 +179,7 @@ class AgentRunner:
                 await self._process_event(channel, event)
         except Exception as e:
             logger.error(f"Agent resume error for incident {incident_id}: {e}")
-            await self.publisher.publish(channel, "error", {"message": str(e)})
+            await self.publisher.publish(channel, "error", {"message": self._format_agent_error(e)})
             raise
 
         await self.publisher.flush_remaining(channel)

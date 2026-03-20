@@ -92,6 +92,7 @@ class Incident(Base):
     summary_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     thread_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     saved_to_memory: Mapped[bool] = mapped_column(default=False)
+    is_archived: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

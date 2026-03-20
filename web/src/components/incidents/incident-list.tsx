@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { AlertCircle, ChevronLeft, ChevronRight, FileText, Square } from "lucide-react";
+import { AlertCircle, Archive, ChevronLeft, ChevronRight, EllipsisVertical, FileText, Square } from "lucide-react";
 import { listVariants, listItemVariants } from "@/lib/motion";
 import dayjs from "@/lib/dayjs";
-import { getIncidents, stopIncident } from "@/api/incidents";
+import { archiveIncident, getIncidents, stopIncident } from "@/api/incidents";
 import { getAttachmentUrl } from "@/api/attachments";
 import type { Attachment } from "@/lib/types";
 import { isImageType } from "@/lib/file-utils";
@@ -22,6 +22,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Empty,
   EmptyDescription,
@@ -49,12 +55,21 @@ export function IncidentList() {
   const totalPages = Math.ceil(total / pageSize);
 
   const [stopDialogId, setStopDialogId] = useState<string | null>(null);
+  const [archiveDialogId, setArchiveDialogId] = useState<string | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
   const stopMutation = useMutation({
     mutationFn: (id: string) => stopIncident(id),
     onSuccess: () => {
       setStopDialogId(null);
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) => archiveIncident(id),
+    onSuccess: () => {
+      setArchiveDialogId(null);
       queryClient.invalidateQueries({ queryKey: ["incidents"] });
     },
   });
@@ -101,74 +116,84 @@ export function IncidentList() {
                   key={incident.id}
                   variants={listItemVariants}
                 >
-                  <Link
-                    to="/incidents/$incidentId"
-                    params={{ incidentId: incident.id }}
-                    className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
-                  >
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium">{incident.summary_title || incident.description.slice(0, 80) + (incident.description.length > 80 ? "..." : "")}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {incident.description}
-                      </p>
-                      {incident.attachments && incident.attachments.length > 0 && (
-                        <div className="mt-1.5 flex items-center gap-1.5">
-                          {incident.attachments.slice(0, 4).map((att) => (
-                            <button
-                              key={att.id}
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setPreviewAttachment(att);
-                              }}
-                              className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
+                  <div className="group relative">
+                    <Link
+                      to="/incidents/$incidentId"
+                      params={{ incidentId: incident.id }}
+                      className="flex items-center gap-4 p-4 pr-12 transition-colors hover:bg-muted/50"
+                    >
+                      <div className="flex-1 space-y-1">
+                        <p className="text-sm font-medium">{incident.summary_title || incident.description.slice(0, 80) + (incident.description.length > 80 ? "..." : "")}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {incident.description}
+                        </p>
+                        {incident.attachments && incident.attachments.length > 0 && (
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            {incident.attachments.slice(0, 4).map((att) => (
+                              <button
+                                key={att.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setPreviewAttachment(att);
+                                }}
+                                className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
+                              >
+                                {isImageType(att.content_type) ? (
+                                  <img
+                                    src={getAttachmentUrl(att.id)}
+                                    alt={att.filename}
+                                    className="size-8 rounded object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex size-8 items-center justify-center bg-muted text-muted-foreground">
+                                    <FileText className="size-3.5" />
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                            {incident.attachments.length > 4 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{incident.attachments.length - 4}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <Badge className={statusColors[incident.status]}>
+                        {statusLabels[incident.status] ?? incident.status}
+                      </Badge>
+                      <Badge className={severityColors[incident.severity]}>
+                        {incident.severity}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {dayjs(incident.created_at).fromNow()}
+                      </span>
+                    </Link>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                          <EllipsisVertical className="h-4 w-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setArchiveDialogId(incident.id)}>
+                            <Archive className="mr-2 h-4 w-4" />
+                            归档
+                          </DropdownMenuItem>
+                          {isActive(incident.status) && (
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setStopDialogId(incident.id)}
                             >
-                              {isImageType(att.content_type) ? (
-                                <img
-                                  src={getAttachmentUrl(att.id)}
-                                  alt={att.filename}
-                                  className="size-8 rounded object-cover"
-                                />
-                              ) : (
-                                <div className="flex size-8 items-center justify-center bg-muted text-muted-foreground">
-                                  <FileText className="size-3.5" />
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                          {incident.attachments.length > 4 && (
-                            <span className="text-xs text-muted-foreground">
-                              +{incident.attachments.length - 4}
-                            </span>
+                              <Square className="mr-2 h-4 w-4" />
+                              终止
+                            </DropdownMenuItem>
                           )}
-                        </div>
-                      )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    <Badge className={statusColors[incident.status]}>
-                      {statusLabels[incident.status] ?? incident.status}
-                    </Badge>
-                    <Badge className={severityColors[incident.severity]}>
-                      {incident.severity}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {dayjs(incident.created_at).fromNow()}
-                    </span>
-                    {isActive(incident.status) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setStopDialogId(incident.id);
-                        }}
-                      >
-                        <Square className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </Link>
+                  </div>
                 </motion.div>
               ))}
             </motion.div>
@@ -220,6 +245,26 @@ export function IncidentList() {
               disabled={stopMutation.isPending}
             >
               确认停止
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!archiveDialogId} onOpenChange={(open) => !open && setArchiveDialogId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认归档</AlertDialogTitle>
+            <AlertDialogDescription>
+              归档后事件将从列表中移除。确定要归档吗？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => archiveDialogId && archiveMutation.mutate(archiveDialogId)}
+              disabled={archiveMutation.isPending}
+            >
+              确认归档
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

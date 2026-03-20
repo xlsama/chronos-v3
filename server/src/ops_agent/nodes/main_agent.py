@@ -1,13 +1,14 @@
 import asyncio
 import time
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import OpsState
 from src.env import get_settings
+from src.ops_agent.context_guardrails import build_context_request_question
 from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash, list_servers as _list_servers
 from src.ops_agent.tools.bash_tool import local_bash as _local_bash
 from src.ops_agent.tools.service_exec_tool import (
@@ -197,6 +198,23 @@ async def _invoke_llm_with_retry(llm, messages):
     return await asyncio.wait_for(llm.ainvoke(messages), timeout=120)
 
 
+def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> AIMessage:
+    """Fallback to ask_human when the model hallucinates an unknown tool."""
+    tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
+    unknown_tools = sorted(
+        {
+            str(tc.get("name", "")).strip()
+            for tc in tool_calls
+            if str(tc.get("name", "")).strip() not in valid_tool_names
+        }
+    )
+    if not unknown_tools:
+        return response
+
+    logger.warning(f"[main] LLM returned unknown tool(s): {unknown_tools}")
+    return AIMessage(content=build_context_request_question(unknown_tools))
+
+
 async def main_agent_node(state: OpsState) -> dict:
     sid = state["incident_id"][:8]
     tools = build_tools()
@@ -263,7 +281,8 @@ async def main_agent_node(state: OpsState) -> dict:
     for tc in tool_calls:
         logger.info(f"\n[{sid}] [main] LLM tool_call: {tc['name']}({tc.get('args', {})})")
 
-    return {"messages": [response]}
+    safe_response = _sanitize_llm_response(response, set(tool_names))
+    return {"messages": [safe_response]}
 
 
 async def _get_service_type(service_id: str) -> str:
@@ -286,6 +305,7 @@ async def _get_service_type(service_id: str) -> str:
 async def route_decision(state: OpsState) -> str:
     sid = state["incident_id"][:8]
     last_message = state["messages"][-1]
+    valid_tool_names = {tool.name for tool in build_tools()}
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
         # Check ask_human count to prevent infinite loops
@@ -297,6 +317,9 @@ async def route_decision(state: OpsState) -> str:
 
     for tool_call in last_message.tool_calls:
         name = tool_call["name"]
+        if name not in valid_tool_names:
+            logger.warning(f"[{sid}] [main] route_decision: unknown tool '{name}' -> ask_human")
+            return "ask_human"
         if name == "complete":
             logger.info(f"[{sid}] [main] route_decision: tool=complete -> complete")
             return "complete"
