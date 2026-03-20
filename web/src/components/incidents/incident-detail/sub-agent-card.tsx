@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "motion/react";
+
 import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -13,6 +13,7 @@ import {
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 import { cn, formatDuration } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import {
   Dialog,
@@ -240,16 +241,18 @@ export function SubAgentCard({
         </div>
       )}
 
-      <AnimatePresence initial={false}>
-        {expanded && hasEvents && (
-        <motion.div
+      {expanded && (hasEvents || status === "started") && (
+        <div
           className="mt-2 flex-1 min-h-0 overflow-y-auto space-y-2 pl-6 text-sm text-blue-900/80"
           ref={scrollContainerRef}
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.2 }}
         >
+          {status === "started" && !hasEvents && (
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-4/5 bg-blue-200/50" />
+              <Skeleton className="h-3 w-3/5 bg-blue-200/50" />
+              <Skeleton className="h-3 w-2/3 bg-blue-200/50" />
+            </div>
+          )}
           {subAgentItems.map((item, i) => {
             if (item.type === "thinking") {
               return (
@@ -266,9 +269,8 @@ export function SubAgentCard({
               <Markdown content={streamingContent} streaming variant="compact" />
             </div>
           )}
-        </motion.div>
+        </div>
       )}
-      </AnimatePresence>
 
       {/* Preview dialogs */}
       {previewSource?.type === "incident_history" && (
