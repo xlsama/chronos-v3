@@ -354,6 +354,14 @@
   display: block;
 }
 
+.prose-default [data-streamdown="mermaid"] > :first-child {
+  max-height: 500px;
+}
+
+.prose-default [data-streamdown="mermaid"] > :first-child > [role="application"] {
+  zoom: 0.75;
+}
+
 /* streamdown 表格字体大小覆盖 */
 [data-streamdown="table"] {
   font-size: 0.8125rem;
