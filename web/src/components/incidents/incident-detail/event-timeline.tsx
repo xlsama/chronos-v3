@@ -398,6 +398,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           subtitle={contextSubtitle}
           status={phaseState.contextGathering}
           icon={Search}
+          defaultExpanded={phaseState.investigation === "pending" || undefined}
           contentClassName={cn(
             shouldUseFixedContextLayout && [
               "overflow-hidden",
