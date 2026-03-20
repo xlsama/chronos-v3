@@ -107,7 +107,7 @@ async def run_kb_agent(
     last_search_project_id: str = ""
     last_search_result: str = ""
 
-    max_iterations = 5
+    max_iterations = 10
     for i in range(max_iterations):
         iter_log = log.bind(iteration=i + 1)
         full_content = ""
