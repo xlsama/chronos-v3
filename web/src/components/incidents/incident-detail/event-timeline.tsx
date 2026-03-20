@@ -359,6 +359,18 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   const mainEvents = events.filter((e) => e.event_type !== "done");
   const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
 
+  // Transitional state: both sub-agents done but investigation phase hasn't started yet
+  // (2-5s gap while main LLM processes context before emitting first token)
+  const bothSubAgentsDone =
+    (historyAgentState.status === "completed" || historyAgentState.status === "failed" || historyAgentState.status === "idle") &&
+    (kbAgentState.status === "completed" || kbAgentState.status === "failed" || kbAgentState.status === "idle") &&
+    (historyAgentState.status !== "idle" || kbAgentState.status !== "idle");
+  const isTransitioningToInvestigation =
+    isActiveIncident &&
+    phaseState.contextGathering === "active" &&
+    phaseState.investigation === "pending" &&
+    bothSubAgentsDone;
+
   // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(mainEvents), [mainEvents]);
 
@@ -442,11 +454,11 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
       )}
 
       {/* Phase 2: Investigation */}
-      {(hasInvestigation || phaseState.investigation !== "pending") && (
+      {(hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation) && (
         <PhaseSection
           title="排查处置"
           subtitle={phaseSubtitle}
-          status={phaseState.investigation}
+          status={isTransitioningToInvestigation ? "active" : phaseState.investigation}
           icon={Brain}
           defaultExpanded
         >
@@ -572,6 +584,13 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                 }
               })}
             </AnimatePresence>
+
+            {/* Transitional indicator — waiting for first investigation event after context gathering */}
+            {isTransitioningToInvestigation && timelineItems.length === 0 && !hasThinking && (
+              <div className="px-1 py-2">
+                <span className="text-xs text-muted-foreground animate-pulse">Agent 思考中...</span>
+              </div>
+            )}
 
             {/* Waiting indicator — shown between tool_result and next LLM output */}
             <WaitingIndicator />
