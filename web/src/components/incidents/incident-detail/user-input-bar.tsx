@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { uploadFiles } from "@/api/attachments";
 import { sendIncidentMessage } from "@/api/incidents";
 import { PromptComposer } from "@/components/prompt-composer";
@@ -62,6 +63,9 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["incidents", incidentId] });
+    },
+    onError: () => {
+      toast.error("消息发送失败，请重试");
     },
   });
 

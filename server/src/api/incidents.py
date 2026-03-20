@@ -62,6 +62,25 @@ async def _start_agent_background(
                 )
     except Exception as e:
         log.error("Failed to start agent", incident_id=incident_id, error=str(e))
+        # Publish error event to SSE channel
+        try:
+            channel = EventPublisher.channel_for_incident(incident_id)
+            publisher = EventPublisher(get_redis())
+            await publisher.publish(channel, "error", {
+                "message": AgentRunner._format_agent_error(e),
+            })
+        except Exception:
+            log.error("Failed to publish error event", incident_id=incident_id)
+        # Update incident status to error
+        try:
+            factory = get_session_factory()
+            async with factory() as err_session:
+                incident = await err_session.get(Incident, uuid.UUID(incident_id))
+                if incident:
+                    incident.status = "error"
+                    await err_session.commit()
+        except Exception:
+            log.error("Failed to update incident status to error", incident_id=incident_id)
 
 
 @router.post("", response_model=IncidentResponse)
@@ -98,6 +117,7 @@ async def create_incident(
 @router.get("", response_model=PaginatedResponse[IncidentResponse])
 async def list_incidents(
     status: str | None = None,
+    severity: str | None = None,
     page: int = 1,
     page_size: int = 20,
     session: AsyncSession = Depends(get_session),
@@ -105,11 +125,15 @@ async def list_incidents(
     count_query = select(func.count()).select_from(Incident).where(Incident.is_archived == False)
     if status:
         count_query = count_query.where(Incident.status == status)
+    if severity:
+        count_query = count_query.where(Incident.severity == severity)
     total = await session.scalar(count_query) or 0
 
     query = select(Incident).options(selectinload(Incident.attachments)).where(Incident.is_archived == False).order_by(Incident.created_at.desc())
     if status:
         query = query.where(Incident.status == status)
+    if severity:
+        query = query.where(Incident.severity == severity)
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await session.execute(query)
     items = list(result.scalars().all())

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown, ChevronRight, Check, type LucideIcon } from "lucide-react";
 import type { PhaseStatus } from "@/stores/incident-stream";
@@ -43,6 +43,8 @@ export function PhaseSection({
   contentClassName,
 }: PhaseSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? status === "active");
+  const [justCompleted, setJustCompleted] = useState(false);
+  const prevStatusRef = useRef(status);
 
   // Auto-collapse when completed, auto-expand when active
   useEffect(() => {
@@ -50,8 +52,21 @@ export function PhaseSection({
     if (status === "completed" && !defaultExpanded) setExpanded(false);
   }, [status, defaultExpanded]);
 
+  // Flash green ring when transitioning active → completed
+  useEffect(() => {
+    if (prevStatusRef.current === "active" && status === "completed") {
+      setJustCompleted(true);
+      const timer = setTimeout(() => setJustCompleted(false), 800);
+      return () => clearTimeout(timer);
+    }
+    prevStatusRef.current = status;
+  }, [status]);
+
   return (
-    <div className="rounded-lg border bg-card" data-testid="phase-section">
+    <div className={cn(
+      "rounded-lg border bg-card transition-shadow duration-500",
+      justCompleted && "ring-2 ring-emerald-400/50",
+    )} data-testid="phase-section">
       <button
         className="flex w-full items-center gap-3 px-4 py-3 text-left"
         onClick={() => setExpanded(!expanded)}

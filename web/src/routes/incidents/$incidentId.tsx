@@ -6,6 +6,7 @@ import { ArrowDown, ArrowLeft, Info, Square } from "lucide-react";
 import { getIncident, stopIncident } from "@/api/incidents";
 import { pageVariants, pageTransition } from "@/lib/motion";
 import { useIncidentStream } from "@/hooks/use-incident-stream";
+import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import { EventTimeline } from "@/components/incidents/incident-detail/event-timeline";
 import { UserInputBar } from "@/components/incidents/incident-detail/user-input-bar";
@@ -41,6 +42,7 @@ function IncidentDetailPage() {
 
   useIncidentStream(incidentId, incident?.status);
 
+  const isConnected = useIncidentStreamStore((s) => s.isConnected);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
 
   const isActive = incident?.status === "open" || incident?.status === "investigating";
@@ -139,6 +141,19 @@ function IncidentDetailPage() {
             </Popover>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {isActive && (
+              isConnected ? (
+                <span className="h-2 w-2 rounded-full bg-green-500" title="已连接" />
+              ) : (
+                <span className="flex items-center gap-1.5" title="连接中断">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                  </span>
+                  <span className="text-xs text-amber-600">连接中断</span>
+                </span>
+              )
+            )}
             <Badge className={statusColors[incident.status]}>
               {statusLabels[incident.status] ?? incident.status}
             </Badge>

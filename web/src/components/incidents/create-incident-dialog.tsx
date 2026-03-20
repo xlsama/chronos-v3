@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { uploadFiles } from "@/api/attachments";
 import { createIncident } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,9 @@ export function CreateIncidentDialog() {
         to: "/incidents/$incidentId",
         params: { incidentId: incident.id },
       });
+    },
+    onError: () => {
+      toast.error("事件创建失败，请重试");
     },
   });
 

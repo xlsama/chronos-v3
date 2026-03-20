@@ -15,10 +15,18 @@ export function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
       )}
       data-testid="thinking-bubble"
     >
-      <div className="mb-1 text-xs font-medium text-muted-foreground">
+      <div className={cn(
+        "mb-1 text-xs font-medium text-muted-foreground",
+        isStreaming && "animate-pulse",
+      )}>
         Agent 思考中{isStreaming && "..."}
       </div>
-      <Markdown content={content} streaming={isStreaming} variant="compact" />
+      <div className="relative">
+        <Markdown content={content} streaming={isStreaming} variant="compact" />
+        {isStreaming && (
+          <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary/60" />
+        )}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
+import { ServiceIcon } from "@/lib/service-icons";
 import { createService, updateService } from "@/api/services";
 import { serviceSchema } from "@/lib/schemas";
 import type { Service } from "@/lib/types";
@@ -233,6 +234,7 @@ export function ServiceForm({
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="选择服务类型">
+                    <ServiceIcon serviceType={field.state.value} className="h-4 w-4" />
                     {SERVICE_CONFIGS[field.state.value]?.label ?? field.state.value}
                   </SelectValue>
                 </SelectTrigger>
@@ -244,6 +246,7 @@ export function ServiceForm({
                         .filter(([, cfg]) => cfg.group === groupKey)
                         .map(([key, cfg]) => (
                           <SelectItem key={key} value={key}>
+                            <ServiceIcon serviceType={key} className="h-4 w-4" />
                             {cfg.label}
                           </SelectItem>
                         ))}

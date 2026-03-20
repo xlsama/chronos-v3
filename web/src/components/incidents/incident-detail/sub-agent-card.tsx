@@ -206,7 +206,10 @@ export function SubAgentCard({
     <div
       data-expanded={expanded || undefined}
       className={cn(
-        "flex min-h-0 flex-col rounded-lg border border-blue-200 bg-blue-50/50 p-3",
+        "flex min-h-0 flex-col rounded-lg border p-3",
+        status === "failed"
+          ? "border-red-200 bg-red-50/30"
+          : "border-blue-200 bg-blue-50/50",
         fixedLayout && expanded && "flex-1 overflow-hidden",
         className,
       )}
@@ -228,7 +231,12 @@ export function SubAgentCard({
             {config.subAgentName}
           </span>
         )}
-        <span className="ml-auto text-xs text-blue-600">{statusText}</span>
+        <span className="ml-auto flex items-center gap-1.5 text-xs text-blue-600">
+          {status === "started" && (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          )}
+          {statusText}
+        </span>
       </button>
 
       {/* Sources row */}

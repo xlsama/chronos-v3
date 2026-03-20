@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
@@ -39,14 +39,48 @@ import { QueryContent } from "@/components/query-content";
 import { AttachmentPreviewDialog } from "@/components/incidents/attachment-preview-dialog";
 import { severityColors, statusColors, statusLabels } from "@/lib/incident-constants";
 
-export function IncidentList() {
+export const STATUS_OPTIONS = [
+  { value: "all", label: "全部" },
+  { value: "open", label: "待处理" },
+  { value: "investigating", label: "调查中" },
+  { value: "resolved", label: "已解决" },
+  { value: "stopped", label: "已停止" },
+] as const;
+
+export const SEVERITY_OPTIONS = [
+  { value: "all", label: "全部" },
+  { value: "P0", label: "P0" },
+  { value: "P1", label: "P1" },
+  { value: "P2", label: "P2" },
+  { value: "P3", label: "P3" },
+] as const;
+
+export const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.label])) as Record<string, string>;
+export const SEVERITY_LABELS = Object.fromEntries(SEVERITY_OPTIONS.map((o) => [o.value, o.label])) as Record<string, string>;
+
+interface IncidentListProps {
+  statusFilter: string;
+  severityFilter: string;
+}
+
+export function IncidentList({ statusFilter, severityFilter }: IncidentListProps) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, severityFilter]);
+
   const { data, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ["incidents", page],
-    queryFn: () => getIncidents({ page, page_size: pageSize }),
+    queryKey: ["incidents", statusFilter, severityFilter, page],
+    queryFn: () =>
+      getIncidents({
+        status: statusFilter === "all" ? undefined : statusFilter,
+        severity: severityFilter === "all" ? undefined : severityFilter,
+        page,
+        page_size: pageSize,
+      }),
     placeholderData: keepPreviousData,
   });
 

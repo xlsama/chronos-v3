@@ -41,6 +41,14 @@ class AgentRunner:
     @staticmethod
     def _format_agent_error(exc: Exception) -> str:
         """Normalize runtime errors into user-readable messages."""
+        from langgraph.errors import GraphRecursionError
+
+        if isinstance(exc, GraphRecursionError):
+            return "Agent 排查步骤超出上限，问题可能过于复杂。请补充更具体的信息后重试。"
+        if isinstance(exc, TimeoutError):
+            return "Agent 调用 LLM 超时，请稍后重试。"
+        if isinstance(exc, (ConnectionError, OSError)):
+            return "Agent 网络连接异常，请检查后端服务状态。"
         if isinstance(exc, KeyError):
             missing = str(exc).strip("'\" ")
             if missing:
@@ -48,7 +56,10 @@ class AgentRunner:
                     f"Agent 调用了未注册的工具 `{missing}`。"
                     "当前信息不足，无法继续排查，请补充具体故障现象、受影响服务和发生时间。"
                 )
-        return str(exc)
+        msg = str(exc)
+        if len(msg) > 200:
+            msg = msg[:200] + "..."
+        return f"Agent 执行异常: {msg}" if msg else "Agent 执行异常"
 
     async def _check_cancelled(self, incident_id: str) -> str | None:
         """Check if this incident has been cancelled. Returns cancel reason or None."""

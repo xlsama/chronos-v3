@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { deleteService, getServices, testService } from "@/api/services";
 import { cn } from "@/lib/utils";
+import { ServiceIcon } from "@/lib/service-icons";
 import type { Service } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -115,7 +116,7 @@ export function ServiceItem({ service }: { service: Service }) {
     <>
       <div className="border-b last:border-b-0">
         <div className="flex items-center gap-3 p-4">
-          <Database className="h-5 w-5 text-muted-foreground" />
+          <ServiceIcon serviceType={service.service_type} className="h-5 w-5" />
           <StatusIcon className={cn("h-4 w-4", status.color)} />
           <div className="flex-1 space-y-0.5">
             <p className="font-medium">{service.name}</p>

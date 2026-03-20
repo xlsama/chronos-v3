@@ -8,6 +8,7 @@ import type { SSEEvent } from "@/lib/types";
 const BASE_DELAY = 1000;
 const MAX_BACKOFF = 30_000;
 const HEARTBEAT_TIMEOUT = 45_000;
+const MAX_RETRIES = 15;
 
 export function useIncidentStream(
   incidentId: string | undefined,
@@ -391,7 +392,12 @@ export function useIncidentStream(
         setConnected(false);
         clearTimeout(heartbeatTimerRef.current);
 
-        // Always reconnect with exponential backoff capped at MAX_BACKOFF
+        // Stop retrying after MAX_RETRIES
+        if (retriesRef.current >= MAX_RETRIES) {
+          return;
+        }
+
+        // Reconnect with exponential backoff capped at MAX_BACKOFF
         const delay = Math.min(BASE_DELAY * Math.pow(2, retriesRef.current), MAX_BACKOFF);
         retriesRef.current++;
         retryTimerRef.current = setTimeout(connect, delay);

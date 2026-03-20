@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ShieldAlert, AlertTriangle } from "lucide-react";
+import { ShieldAlert, AlertTriangle, Loader2 } from "lucide-react";
 import { decideApproval } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,7 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
         setApprovalDecided(approvalId!, decision);
         return;
       }
-      toast.error("Failed to decide approval");
+      toast.error("审批操作失败");
     },
   });
 
@@ -121,6 +121,9 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
             disabled={decideMutation.isPending}
             data-testid="approve-button"
           >
+            {decideMutation.isPending && decideMutation.variables === "approved" && (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            )}
             批准
           </Button>
           <Button
@@ -130,6 +133,9 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
             disabled={decideMutation.isPending}
             data-testid="reject-button"
           >
+            {decideMutation.isPending && decideMutation.variables === "rejected" && (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            )}
             拒绝
           </Button>
         </div>

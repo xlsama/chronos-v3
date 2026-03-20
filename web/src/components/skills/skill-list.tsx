@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { motion } from "motion/react";
@@ -122,17 +122,27 @@ function SkillItem({ skill, onSelect }: SkillItemProps) {
   );
 }
 
-export function SkillList() {
+interface SkillListProps {
+  filter?: "published" | "draft";
+}
+
+export function SkillList({ filter }: SkillListProps) {
   const navigate = useNavigate();
   const { data: skills, isLoading } = useQuery({
     queryKey: ["skills"],
     queryFn: getSkills,
   });
 
+  const filteredSkills = useMemo(() => {
+    if (!skills) return undefined;
+    if (!filter) return skills;
+    return skills.filter((s) => (filter === "draft" ? s.draft : !s.draft));
+  }, [skills, filter]);
+
   return (
     <QueryContent
       isLoading={isLoading}
-      data={skills}
+      data={filteredSkills}
       isEmpty={(d) => !d.length}
       skeleton={
         <div className="divide-y">
