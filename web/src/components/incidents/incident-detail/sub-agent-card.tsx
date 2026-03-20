@@ -266,34 +266,13 @@ export function SubAgentCard({
           ref={scrollContainerRef}
         >
           {status === "started" && !hasEvents && (
-            <div className="space-y-3">
-              {/* 思考文本骨架 */}
-              <div className="space-y-1.5">
-                <Skeleton className="h-3 w-11/12 bg-blue-200/50" />
-                <Skeleton className="h-3 w-4/5 bg-blue-200/50" />
-                <Skeleton className="h-3 w-2/3 bg-blue-200/50" />
-              </div>
-              {/* 工具调用块骨架 */}
-              <div className="rounded-lg border border-blue-200/60 bg-white/40 p-2 space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <Skeleton className="h-3 w-3 rounded bg-blue-200/50" />
-                  <Skeleton className="h-3 w-32 bg-blue-200/50" />
-                </div>
-                <Skeleton className="ml-[18px] h-16 w-full rounded bg-blue-200/30" />
-              </div>
-              {/* 思考文本骨架 */}
-              <div className="space-y-1.5">
-                <Skeleton className="h-3 w-3/4 bg-blue-200/50" />
-                <Skeleton className="h-3 w-5/6 bg-blue-200/50" />
-              </div>
-              {/* 工具调用块骨架 */}
-              <div className="rounded-lg border border-blue-200/60 bg-white/40 p-2 space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <Skeleton className="h-3 w-3 rounded bg-blue-200/50" />
-                  <Skeleton className="h-3 w-24 bg-blue-200/50" />
-                </div>
-                <Skeleton className="ml-[18px] h-12 w-full rounded bg-blue-200/30" />
-              </div>
+            <div className="space-y-4">
+              <Skeleton className="h-3 w-11/12 bg-blue-200/50" />
+              <Skeleton className="h-3 w-3/5 bg-blue-200/50" />
+              <Skeleton className="h-3 w-4/5 bg-blue-200/50" />
+              <Skeleton className="h-3 w-2/3 bg-blue-200/50" />
+              <Skeleton className="h-3 w-5/6 bg-blue-200/50" />
+              <Skeleton className="h-3 w-1/2 bg-blue-200/50" />
             </div>
           )}
           {subAgentItems.map((item, i) => {

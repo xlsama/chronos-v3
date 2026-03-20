@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, Brain, MessageCircleQuestion, Square, Sparkles, CheckCircle, ChevronRight } from "lucide-react";
+import { Search, Brain, MessageCircleQuestion, Square, Sparkles, CheckCircle } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
@@ -19,7 +19,7 @@ import { ApprovalCard } from "./approval-card";
 import { SubAgentCard } from "./sub-agent-card";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogTrigger } from "@/components/ui/dialog";
 
 interface EventTimelineProps {
   incidentId: string;
@@ -120,23 +120,24 @@ function formatErrorMessage(message: string): string {
 }
 
 function SkillReadCard({ skillName, skillContent }: { skillName: string; skillContent: string }) {
-  const [open, setOpen] = useState(false);
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Dialog>
       <div className="flex items-center gap-2 text-sm text-indigo-700">
         <Sparkles className="h-4 w-4" />
         <span>读取技能：</span>
-        <CollapsibleTrigger className="inline-flex items-center gap-1 cursor-pointer underline decoration-dotted hover:text-indigo-900">
-          <ChevronRight className={cn("h-3 w-3 transition-transform", open && "rotate-90")} />
+        <DialogTrigger className="cursor-pointer underline decoration-dotted hover:text-indigo-900">
           {skillName}
-        </CollapsibleTrigger>
+        </DialogTrigger>
       </div>
-      <CollapsibleContent>
-        <div className="mt-2 ml-6 rounded-md border border-indigo-100 bg-indigo-50/30 p-3 max-h-80 overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{skillName}</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
           <Markdown content={skillContent} variant="compact" className="card-markdown card-markdown--indigo" />
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 
