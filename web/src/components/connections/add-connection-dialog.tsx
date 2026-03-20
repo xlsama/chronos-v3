@@ -35,18 +35,6 @@ export function AddConnectionDialog() {
         <DropdownMenuContent align="end" className="w-64">
           <DropdownMenuItem
             className="flex items-start gap-3 p-3"
-            onClick={() => setStep("server")}
-          >
-            <Server className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium">添加服务器</span>
-              <span className="text-xs text-muted-foreground">
-                通过 SSH 连接远程服务器
-              </span>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="flex items-start gap-3 p-3"
             onClick={() => setStep("service")}
           >
             <Database className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
@@ -54,6 +42,18 @@ export function AddConnectionDialog() {
               <span className="text-sm font-medium">添加服务</span>
               <span className="text-xs text-muted-foreground">
                 MySQL, Redis, Prometheus 等
+              </span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="flex items-start gap-3 p-3"
+            onClick={() => setStep("server")}
+          >
+            <Server className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">添加服务器</span>
+              <span className="text-xs text-muted-foreground">
+                通过 SSH 连接远程服务器
               </span>
             </div>
           </DropdownMenuItem>

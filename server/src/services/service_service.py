@@ -7,6 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.models import Service
 from src.services.crypto import CryptoService
 
+# Probe commands for each service type
+_PROBE_COMMANDS: dict[str, str] = {
+    "postgresql": "SELECT 1",
+    "mysql": "SELECT 1",
+    "redis": "PING",
+    "mongodb": '{"ping": 1}',
+    "prometheus": "up",
+    "elasticsearch": "GET /_cluster/health",
+}
+
 
 class ServiceService:
     def __init__(self, session: AsyncSession, crypto: CryptoService):
@@ -78,47 +88,63 @@ class ServiceService:
         await invalidate_service_connector(service_id)
 
     async def test_connection(self, service: Service) -> tuple[bool, str]:
-        """Test connectivity to the service. Uses TCP socket for DB services, HTTP for web services."""
+        """Test connectivity using real protocol-level probe (not just TCP port check)."""
+        from src.ops_agent.tools.service_exec_tool import create_connector
+
+        password = self.crypto.decrypt(service.encrypted_password) if service.encrypted_password else None
+        config = service.config or {}
+
         try:
-            if service.service_type in ("prometheus", "elasticsearch"):
-                return await self._test_http(service)
-            else:
-                return await self._test_tcp(service)
-        except Exception as e:
+            connector = create_connector(
+                service_type=service.service_type,
+                host=service.host,
+                port=service.port,
+                password=password,
+                config=config,
+            )
+        except ValueError as e:
             return False, str(e)
 
-    async def _test_tcp(self, service: Service) -> tuple[bool, str]:
+        probe = _PROBE_COMMANDS.get(service.service_type, "SELECT 1")
         try:
-            _, writer = await asyncio.wait_for(
-                asyncio.open_connection(service.host, service.port),
-                timeout=5,
-            )
-            writer.close()
-            await writer.wait_closed()
-            return True, f"TCP 连接 {service.host}:{service.port} 成功"
+            result = await asyncio.wait_for(connector.execute(probe), timeout=10)
+            if result.success:
+                return True, f"{service.service_type} 连接测试成功"
+            return False, f"探测命令失败: {result.error}"
         except asyncio.TimeoutError:
-            return False, f"连接 {service.host}:{service.port} 超时"
-        except OSError as e:
-            return False, f"连接 {service.host}:{service.port} 失败: {e}"
-
-    async def _test_http(self, service: Service) -> tuple[bool, str]:
-        import httpx
-
-        scheme = "https" if service.config.get("use_tls") else "http"
-        path = service.config.get("path", "/")
-        if service.service_type == "prometheus":
-            path = service.config.get("path", "/-/healthy")
-        elif service.service_type == "elasticsearch":
-            path = "/_cluster/health"
-
-        url = f"{scheme}://{service.host}:{service.port}{path}"
-        try:
-            async with httpx.AsyncClient(timeout=5, verify=False) as client:
-                resp = await client.get(url)
-                if resp.status_code < 500:
-                    return True, f"HTTP {resp.status_code} from {url}"
-                return False, f"HTTP {resp.status_code} from {url}"
-        except httpx.TimeoutException:
-            return False, f"HTTP 请求 {url} 超时"
+            return False, f"连接 {service.host}:{service.port} 超时（10秒）"
         except Exception as e:
-            return False, f"HTTP 请求 {url} 失败: {e}"
+            return False, _friendly_error(service.service_type, e)
+        finally:
+            try:
+                await connector.close()
+            except Exception:
+                pass
+
+
+def _friendly_error(service_type: str, exc: Exception) -> str:
+    """Translate driver-level exceptions into user-friendly Chinese messages."""
+    msg = str(exc).lower()
+
+    # Authentication failures
+    if any(kw in msg for kw in ("password authentication failed", "auth", "access denied", "authentication failed")):
+        return "认证失败：用户名或密码错误"
+
+    # Database does not exist
+    if any(kw in msg for kw in ("does not exist", "unknown database", "no such database")):
+        return "数据库不存在"
+
+    # Connection refused
+    if "connection refused" in msg or "connect call failed" in msg:
+        return f"连接被拒绝：{service_type} 服务未启动或地址/端口错误"
+
+    # DNS / hostname resolution
+    if any(kw in msg for kw in ("nodename nor servname", "name or service not known", "getaddrinfo", "resolve")):
+        return "主机名无法解析，请检查 host 配置"
+
+    # Timeout
+    if "timeout" in msg or "timed out" in msg:
+        return "连接超时，请检查网络和防火墙设置"
+
+    # Fallback: return original error
+    return f"连接失败: {exc}"

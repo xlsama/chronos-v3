@@ -82,8 +82,6 @@ async def get_service_connector(service_id: str) -> ServiceConnector:
     from src.db.models import Service
     from src.services.crypto import CryptoService
 
-    _load_connector_map()
-
     factory = get_session_factory()
     async with factory() as session:
         try:
@@ -97,76 +95,94 @@ async def get_service_connector(service_id: str) -> ServiceConnector:
         if not service:
             raise ValueError(f"Service not found: {service_id}")
 
-        stype = service.service_type
-        connector_cls = CONNECTOR_MAP.get(stype)
-        if connector_cls is None:
-            supported = ", ".join(CONNECTOR_MAP.keys())
-            raise ValueError(f"不支持的服务类型: {stype}，当前支持: {supported}")
-
         crypto = CryptoService(key=get_settings().encryption_key)
         password = crypto.decrypt(service.encrypted_password) if service.encrypted_password else None
         config = service.config or {}
 
-        if stype == "postgresql":
-            connector = connector_cls(
-                host=service.host,
-                port=service.port,
-                username=config.get("username", "postgres"),
-                password=password,
-                database=config.get("database", "postgres"),
-            )
-        elif stype == "mysql":
-            connector = connector_cls(
-                host=service.host,
-                port=service.port,
-                username=config.get("username", "root"),
-                password=password,
-                database=config.get("database", "mysql"),
-            )
-        elif stype == "redis":
-            db = 0
-            db_str = config.get("database", "0")
-            try:
-                db = int(db_str) if db_str else 0
-            except (ValueError, TypeError):
-                db = 0
-            connector = connector_cls(
-                host=service.host,
-                port=service.port,
-                password=password,
-                db=db,
-            )
-        elif stype == "prometheus":
-            connector = connector_cls(
-                host=service.host,
-                port=service.port,
-                use_tls=config.get("use_tls", False),
-                path=config.get("path", ""),
-                username=config.get("username"),
-                password=password,
-            )
-        elif stype == "mongodb":
-            connector = connector_cls(
-                host=service.host,
-                port=service.port,
-                username=config.get("username"),
-                password=password,
-                database=config.get("database", "admin"),
-            )
-        elif stype == "elasticsearch":
-            connector = connector_cls(
-                host=service.host,
-                port=service.port,
-                use_tls=config.get("use_tls", False),
-                username=config.get("username"),
-                password=password,
-            )
-        else:
-            raise ValueError(f"不支持的服务类型: {stype}")
+        connector = create_connector(
+            service_type=service.service_type,
+            host=service.host,
+            port=service.port,
+            password=password,
+            config=config,
+        )
 
         async with _registry_lock:
             _connector_registry[service_id] = (connector, time.monotonic())
         return connector
+
+
+def create_connector(
+    service_type: str,
+    host: str,
+    port: int,
+    password: str | None,
+    config: dict,
+) -> ServiceConnector:
+    """Create a ServiceConnector instance by service type and connection params."""
+    _load_connector_map()
+
+    connector_cls = CONNECTOR_MAP.get(service_type)
+    if connector_cls is None:
+        supported = ", ".join(CONNECTOR_MAP.keys())
+        raise ValueError(f"不支持的服务类型: {service_type}，当前支持: {supported}")
+
+    if service_type == "postgresql":
+        return connector_cls(
+            host=host,
+            port=port,
+            username=config.get("username", "postgres"),
+            password=password,
+            database=config.get("database", "postgres"),
+        )
+    elif service_type == "mysql":
+        return connector_cls(
+            host=host,
+            port=port,
+            username=config.get("username", "root"),
+            password=password,
+            database=config.get("database", "mysql"),
+        )
+    elif service_type == "redis":
+        db = 0
+        db_str = config.get("database", "0")
+        try:
+            db = int(db_str) if db_str else 0
+        except (ValueError, TypeError):
+            db = 0
+        return connector_cls(
+            host=host,
+            port=port,
+            password=password,
+            db=db,
+        )
+    elif service_type == "prometheus":
+        return connector_cls(
+            host=host,
+            port=port,
+            use_tls=config.get("use_tls", False),
+            path=config.get("path", ""),
+            username=config.get("username"),
+            password=password,
+        )
+    elif service_type == "mongodb":
+        return connector_cls(
+            host=host,
+            port=port,
+            username=config.get("username"),
+            password=password,
+            database=config.get("database", "admin"),
+        )
+    elif service_type == "elasticsearch":
+        return connector_cls(
+            host=host,
+            port=port,
+            use_tls=config.get("use_tls", False),
+            username=config.get("username"),
+            password=password,
+        )
+    else:
+        raise ValueError(f"不支持的服务类型: {service_type}")
 
 
 async def list_services() -> list[dict]:
