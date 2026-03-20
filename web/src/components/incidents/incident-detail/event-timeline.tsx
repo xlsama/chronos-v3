@@ -23,6 +23,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 
 interface EventTimelineProps {
   incidentId: string;
+  incidentStatus?: string;
 }
 
 type TimelineItem =
@@ -238,16 +239,22 @@ function LiveAnswerSection() {
   );
 }
 
-function ResolutionConfirmCard({ incidentId }: { incidentId: string }) {
+function ResolutionConfirmCard({ incidentId, incidentStatus }: { incidentId: string; incidentStatus?: string }) {
   const resolutionConfirmRequired = useIncidentStreamStore((s) => s.resolutionConfirmRequired);
   const resolutionConfirmResolved = useIncidentStreamStore((s) => s.resolutionConfirmResolved);
   const setResolutionConfirmResolved = useIncidentStreamStore((s) => s.setResolutionConfirmResolved);
+
+  const TERMINAL = ["resolved", "stopped"];
+  const isTerminal = !!incidentStatus && TERMINAL.includes(incidentStatus);
 
   const queryClient = useQueryClient();
   const confirmMutation = useMutation({
     mutationFn: () => confirmResolution(incidentId),
     onMutate: () => {
       setResolutionConfirmResolved(true);
+    },
+    onError: () => {
+      setResolutionConfirmResolved(false);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
@@ -257,7 +264,7 @@ function ResolutionConfirmCard({ incidentId }: { incidentId: string }) {
 
   if (!resolutionConfirmRequired) return null;
 
-  const resolved = resolutionConfirmResolved;
+  const resolved = resolutionConfirmResolved || isTerminal;
 
   return (
     <div
@@ -293,7 +300,7 @@ function ResolutionConfirmCard({ incidentId }: { incidentId: string }) {
   );
 }
 
-export function EventTimeline({ incidentId }: EventTimelineProps) {
+export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps) {
   const events = useIncidentStreamStore((s) => s.events);
   const historyAgentState = useIncidentStreamStore((s) => s.historyAgentState);
   const kbAgentState = useIncidentStreamStore((s) => s.kbAgentState);
@@ -587,7 +594,7 @@ export function EventTimeline({ incidentId }: EventTimelineProps) {
             <LiveAnswerSection />
 
             {/* Resolution confirm card */}
-            <ResolutionConfirmCard incidentId={incidentId} />
+            <ResolutionConfirmCard incidentId={incidentId} incidentStatus={incidentStatus} />
           </div>
         </PhaseSection>
       )}

@@ -290,6 +290,7 @@ export function useIncidentStream(
             setResolutionConfirmResolved(true);
           } else if (event.event_type === "incident_stopped") {
             addEvent(event);
+            setResolutionConfirmResolved(true);
             // Close SSE and invalidate queries to refresh status
             es.close();
             eventSourceRef.current = null;

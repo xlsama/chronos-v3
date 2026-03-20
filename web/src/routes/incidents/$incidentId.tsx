@@ -198,7 +198,7 @@ function IncidentDetailPage() {
         ref={scrollRef}
         className="relative flex-1 min-h-0 overflow-auto"
       >
-        <EventTimeline incidentId={incidentId} />
+        <EventTimeline incidentId={incidentId} incidentStatus={incident.status} />
         <div ref={bottomRef} />
 
         {!isAtBottom && (
