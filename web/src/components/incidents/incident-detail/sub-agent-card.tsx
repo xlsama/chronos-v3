@@ -206,7 +206,7 @@ export function SubAgentCard({
     <div
       data-expanded={expanded || undefined}
       className={cn(
-        "flex min-h-0 flex-col rounded-lg border p-3",
+        "flex min-h-0 flex-col rounded-lg border",
         status === "failed"
           ? "border-red-200 bg-red-50/30"
           : "border-blue-200 bg-blue-50/50",
@@ -216,7 +216,7 @@ export function SubAgentCard({
       data-testid="sub-agent-card"
     >
       <button
-        className="flex w-full items-center gap-2 text-left text-sm font-medium text-blue-800"
+        className="flex w-full items-center gap-2 p-3 text-left text-sm font-medium text-blue-800"
         onClick={() => setLocalExpanded(!localExpanded)}
       >
         {expanded ? (
@@ -241,7 +241,7 @@ export function SubAgentCard({
 
       {/* Sources row */}
       {status !== "started" && sources.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1 pl-6 text-xs text-blue-700">
+        <div className="flex flex-wrap items-center gap-1 px-3 pb-2 pl-9 text-xs text-blue-700">
           <FileText className="h-3 w-3 shrink-0 opacity-60" />
           {sources.map((s, i) => (
             <span key={s.id} className="inline-flex items-center">
@@ -262,7 +262,7 @@ export function SubAgentCard({
 
       {expanded && (hasEvents || status === "started") && (
         <div
-          className="mt-2 flex-1 min-h-0 overflow-y-auto space-y-2 pl-6 text-sm text-blue-900/80"
+          className="flex-1 min-h-0 overflow-y-auto space-y-2 px-3 pb-3 pl-9 text-sm text-blue-900/80"
           ref={scrollContainerRef}
         >
           {status === "started" && !hasEvents && (
