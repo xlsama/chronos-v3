@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Search, Brain, MessageCircleQuestion, Square, Sparkles, CheckCircle } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +7,7 @@ import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
 import { getServices } from "@/api/services";
+import { SkillViewer } from "@/components/skills/skill-viewer";
 import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
 import { timelineItemVariants } from "@/lib/motion";
 import type { SSEEvent } from "@/lib/types";
@@ -19,7 +20,6 @@ import { ApprovalCard } from "./approval-card";
 import { SubAgentCard } from "./sub-agent-card";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogTrigger } from "@/components/ui/dialog";
 
 interface EventTimelineProps {
   incidentId: string;
@@ -119,25 +119,23 @@ function formatErrorMessage(message: string): string {
   return trimmed;
 }
 
-function SkillReadCard({ skillName, skillContent }: { skillName: string; skillContent: string }) {
+function SkillReadCard({ skillName, skillSlug }: { skillName: string; skillSlug: string }) {
+  const [viewingSlug, setViewingSlug] = useState<string | null>(null);
+
   return (
-    <Dialog>
-      <div className="flex items-center gap-2 text-sm text-indigo-700">
-        <Sparkles className="h-4 w-4" />
+    <>
+      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Sparkles className="h-3.5 w-3.5 text-blue-400" />
         <span>读取技能：</span>
-        <DialogTrigger className="cursor-pointer underline decoration-dotted hover:text-indigo-900">
+        <button
+          className="cursor-pointer font-medium text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-900"
+          onClick={() => setViewingSlug(skillSlug)}
+        >
           {skillName}
-        </DialogTrigger>
+        </button>
       </div>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{skillName}</DialogTitle>
-        </DialogHeader>
-        <DialogBody>
-          <Markdown content={skillContent} variant="compact" className="card-markdown card-markdown--indigo" />
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
+      <SkillViewer skillSlug={viewingSlug} onClose={() => setViewingSlug(null)} readOnly />
+    </>
   );
 }
 
@@ -555,10 +553,10 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                     );
                   case "skill_read": {
                     const skillName = (item.event.data.skill_name as string) || (item.event.data.skill_slug as string);
-                    const skillContent = item.event.data.content as string;
+                    const skillSlug = item.event.data.skill_slug as string;
                     return (
                       <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
-                        <SkillReadCard skillName={skillName} skillContent={skillContent} />
+                        <SkillReadCard skillName={skillName} skillSlug={skillSlug} />
                       </motion.div>
                     );
                   }

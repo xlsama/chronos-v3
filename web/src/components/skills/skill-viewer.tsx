@@ -22,9 +22,10 @@ interface SkillViewerProps {
   skillSlug: string | null;
   onClose: () => void;
   autoEdit?: boolean;
+  readOnly?: boolean;
 }
 
-export function SkillViewer({ skillSlug, onClose, autoEdit }: SkillViewerProps) {
+export function SkillViewer({ skillSlug, onClose, autoEdit, readOnly }: SkillViewerProps) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -81,7 +82,7 @@ export function SkillViewer({ skillSlug, onClose, autoEdit }: SkillViewerProps) 
             )}
           </div>
           <div className="mr-6 flex items-center gap-2">
-            {!editing && (
+            {!readOnly && !editing && (
               <Button variant="outline" size="sm" onClick={startEditing}>
                 <Pencil className="mr-1.5 h-3.5 w-3.5" />
                 编辑

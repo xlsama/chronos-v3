@@ -42,24 +42,32 @@ async def _start_agent_background(
     sid = incident_id[:8]
     log.info("Background agent task starting", sid=sid)
     try:
+        # Set status to investigating BEFORE starting agent
+        # so the frontend sees the correct status on first query invalidation
+        factory = get_session_factory()
+        async with factory() as session:
+            incident = await session.get(Incident, uuid.UUID(incident_id))
+            if incident:
+                incident.status = "investigating"
+                await session.commit()
+                log.info("Status updated", sid=sid, status="investigating")
+                notify_fire_and_forget(
+                    "investigating", incident_id, description[:80],
+                    severity=severity,
+                )
+
         thread_id = await runner.start(
             incident_id=incident_id,
             description=description,
             severity=severity,
         )
-        # Write thread_id back + set status to investigating
-        factory = get_session_factory()
+        # Write thread_id back after agent completes
         async with factory() as session:
             incident = await session.get(Incident, uuid.UUID(incident_id))
             if incident:
                 incident.thread_id = thread_id
-                incident.status = "investigating"
                 await session.commit()
-                log.info("Status updated", sid=sid, status="investigating", thread=thread_id)
-                notify_fire_and_forget(
-                    "investigating", incident_id, description[:80],
-                    severity=severity,
-                )
+                log.info("Thread ID saved", sid=sid, thread=thread_id)
     except Exception as e:
         log.error("Failed to start agent", incident_id=incident_id, error=str(e))
         # Publish error event to SSE channel

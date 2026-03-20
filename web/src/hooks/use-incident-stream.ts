@@ -248,9 +248,12 @@ export function useIncidentStream(
 
           // Invalidate incident query once on first real-time event
           // so the status badge updates (e.g. open → investigating)
+          // Delay 500ms to ensure backend DB commit has completed
           if (!hasInvalidatedIncidentRef.current) {
             hasInvalidatedIncidentRef.current = true;
-            queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
+            }, 500);
           }
 
           // Real-time events
