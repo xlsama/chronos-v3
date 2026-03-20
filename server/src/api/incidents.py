@@ -242,6 +242,9 @@ async def stream_incident(incident_id: uuid.UUID, since: str | None = None):
         await pubsub.subscribe(channel)  # Subscribe first to avoid gap
         last_ts = since or ""
         try:
+            # 立即发送初始 keepalive，让客户端 onopen 即时触发
+            yield {"comment": "connected"}
+
             # Replay events from DB that occurred after `since`
             if since:
                 from datetime import datetime

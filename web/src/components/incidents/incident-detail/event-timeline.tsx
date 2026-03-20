@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, Brain, MessageCircleQuestion, Loader2, Square, Sparkles, CheckCircle, ChevronRight } from "lucide-react";
+import { Search, Brain, MessageCircleQuestion, Square, Sparkles, CheckCircle, ChevronRight } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
@@ -343,6 +343,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     return map;
   }, [servicesData]);
 
+  const isActiveIncident = incidentStatus === "open" || incidentStatus === "investigating";
   const contextActive = phaseState.contextGathering === "active";
 
   const hasHistory = contextActive ||
@@ -401,7 +402,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   return (
     <div className="space-y-3 p-4" data-testid="event-timeline">
       {/* Phase 1: Context Gathering */}
-      {(hasGatherContext || phaseState.contextGathering !== "pending") && (
+      {(hasGatherContext || phaseState.contextGathering !== "pending" || isActiveIncident) && (
         <PhaseSection
           title="上下文收集"
           subtitle={contextSubtitle}
@@ -425,7 +426,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
             )}
             data-testid="context-subagent-layout"
           >
-            {hasHistory && (
+            {(hasHistory || isActiveIncident) && (
               <SubAgentCard
                 agentName="history"
                 events={historyAgentState.events}
@@ -435,7 +436,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                 fixedLayout={shouldUseFixedContextLayout}
               />
             )}
-            {hasKB && (
+            {(hasKB || isActiveIncident) && (
               <SubAgentCard
                 agentName="kb"
                 events={kbAgentState.events}
@@ -599,16 +600,6 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
         </PhaseSection>
       )}
 
-      {/* Empty state: nothing rendered yet */}
-      {!hasGatherContext &&
-        phaseState.contextGathering === "pending" &&
-        !hasInvestigation &&
-        phaseState.investigation === "pending" && (
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <Loader2 className="h-6 w-6 animate-spin mb-3" />
-          <p className="text-sm">正在连接，等待 Agent 开始处理...</p>
-        </div>
-      )}
     </div>
   );
 }
