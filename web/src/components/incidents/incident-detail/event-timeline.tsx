@@ -151,18 +151,9 @@ function WaitingIndicator() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="flex items-center gap-1.5 px-1 py-2"
+          className="px-1 py-2"
         >
-          <span className="flex gap-1">
-            {[0, 1, 2].map((i) => (
-              <span
-                key={i}
-                className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-pulse"
-                style={{ animationDelay: `${i * 0.15}s` }}
-              />
-            ))}
-          </span>
-          <span className="text-xs text-muted-foreground">Agent 思考中...</span>
+          <span className="text-xs text-muted-foreground animate-pulse">Agent 思考中...</span>
         </motion.div>
       )}
     </AnimatePresence>

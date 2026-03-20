@@ -269,7 +269,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     // Derive phase state from loaded events
     const hasDone = mainEvents.some((e) => e.event_type === "done");
     const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
-    const hasMain = mainEvents.some((e) => e.event_type !== "done" && e.event_type !== "ask_human" && e.event_type !== "answer");
+    const hasMain = mainEvents.some((e) => e.event_type !== "done");
 
     const derivedPhase: PhaseState = {
       contextGathering: hasContext ? (hasMain || hasDone ? "completed" : "active") : "pending",
