@@ -314,6 +314,7 @@ class ExtractedService(BaseModel):
     service_type: str | None = None
     host: str | None = None
     port: int | None = None
+    password: str | None = None
     config: dict = Field(default_factory=dict)
 
 

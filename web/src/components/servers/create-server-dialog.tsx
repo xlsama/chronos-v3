@@ -138,6 +138,21 @@ export function ServerForm({
   const form = useForm({
     defaultValues,
     onSubmit: ({ value }) => {
+      // onSubmitOverride 优先（用于导入编辑等场景）
+      if (onSubmitOverride) {
+        onSubmitOverride({
+          name: value.name,
+          description: value.description || undefined,
+          host: value.host,
+          port: parseInt(value.port),
+          username: value.username,
+          password: value.auth_method === "password" ? value.password || undefined : undefined,
+          private_key: value.auth_method === "private_key" ? value.private_key || undefined : undefined,
+        });
+        onSuccess();
+        return;
+      }
+
       if (isEdit) {
         const data: Record<string, unknown> = {};
         if (value.name !== server!.name) data.name = value.name;
@@ -207,20 +222,6 @@ export function ServerForm({
             }
           : {}),
       };
-
-      if (onSubmitOverride) {
-        onSubmitOverride({
-          name: value.name,
-          description: value.description || undefined,
-          host: value.host,
-          port: parseInt(value.port),
-          username: value.username,
-          password: value.auth_method === "password" ? value.password || undefined : undefined,
-          private_key: value.auth_method === "private_key" ? value.private_key || undefined : undefined,
-        });
-        onSuccess();
-        return;
-      }
 
       const result = serverSchema.safeParse(payload);
       if (!result.success) {

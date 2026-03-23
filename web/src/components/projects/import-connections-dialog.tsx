@@ -173,6 +173,7 @@ export function ImportConnectionsButton({
           service_type: s.service_type!,
           host: s.host!,
           port: s.port!,
+          password: s.password ?? undefined,
           config: s.config ?? {},
         };
       });
@@ -270,6 +271,7 @@ export function ImportConnectionsButton({
         service_type: data.service_type,
         host: data.host,
         port: data.port,
+        password: data.password ?? null,
         config: data.config ?? {},
       };
       setExtractedData(updated);
@@ -444,6 +446,12 @@ export function ImportConnectionsButton({
                                   <div className="mt-1 flex items-center gap-1 text-xs text-amber-600">
                                     <AlertCircle className="h-3 w-3" />
                                     信息不完整，请点击编辑补充
+                                  </div>
+                                )}
+                                {complete && !svc.password && (
+                                  <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                    <AlertCircle className="h-3 w-3" />
+                                    未检测到密码，可点击编辑补充
                                   </div>
                                 )}
                               </div>
@@ -658,7 +666,7 @@ function EditServiceView({
     host: service.host ?? "",
     port: service.port ?? 3306,
     config: service.config ?? {},
-    has_password: false,
+    has_password: !!service.password,
     status: "unknown",
     created_at: "",
     updated_at: "",
@@ -670,6 +678,7 @@ function EditServiceView({
       service={tempService}
       onSuccess={onBack}
       onSubmitOverride={onSubmit}
+      initialPassword={service.password ?? undefined}
     />
   );
 }

@@ -78,6 +78,7 @@ export function ServiceForm({
   service,
   onSuccess,
   onSubmitOverride,
+  initialPassword,
 }: {
   mode: "create" | "edit";
   service?: Service;
@@ -91,6 +92,7 @@ export function ServiceForm({
     password?: string;
     config?: Record<string, unknown>;
   }) => void;
+  initialPassword?: string;
 }) {
   const queryClient = useQueryClient();
   const isEdit = mode === "edit";
@@ -125,7 +127,7 @@ export function ServiceForm({
           service_type: service.service_type,
           host: service.host,
           port: String(service.port),
-          password: "",
+          password: initialPassword ?? "",
           username: (service.config.username as string) ?? "",
           database: (service.config.database as string) ?? "",
           use_tls: (service.config.use_tls as boolean) ?? false,
@@ -152,6 +154,22 @@ export function ServiceForm({
       if (value.database) config.database = value.database;
       if (value.use_tls) config.use_tls = value.use_tls;
       if (value.path) config.path = value.path;
+
+      // onSubmitOverride 优先（用于导入编辑等场景）
+      if (onSubmitOverride) {
+        const payload = {
+          name: value.name,
+          description: value.description || undefined,
+          service_type: value.service_type,
+          host: value.host,
+          port: parseInt(value.port),
+          password: value.password || undefined,
+          config,
+        };
+        onSubmitOverride(payload);
+        onSuccess();
+        return;
+      }
 
       if (isEdit) {
         const data: Record<string, unknown> = {};
@@ -182,12 +200,6 @@ export function ServiceForm({
         password: value.password || undefined,
         config,
       };
-
-      if (onSubmitOverride) {
-        onSubmitOverride(payload);
-        onSuccess();
-        return;
-      }
 
       const result = serviceSchema.safeParse(payload);
       if (!result.success) {

@@ -26,6 +26,7 @@ SYSTEM_PROMPT = """\
       "service_type": "类型",
       "host": "主机地址",
       "port": 端口号,
+      "password": "密码",
       "config": {"username": "用户名", "database": "数据库名"}
     }
   ],
@@ -47,6 +48,7 @@ SYSTEM_PROMPT = """\
 4. 不要凭空捏造文档中未提及的连接信息
 5. 如果某个字段在文档中无法确定，设为 null
 6. config 对象中可包含 username（数据库用户名）、database（数据库名）、path（API 路径）、use_tls（是否启用 TLS）等附加信息
+9. password 字段：如果文档中明确提及了密码则提取，否则设为 null
 7. name 应该是有意义的标识名，如果文档中有明确名称就用文档中的，否则根据用途和地址生成
 8. 如果文档中没有任何服务或服务器信息，对应数组返回空 []
 """

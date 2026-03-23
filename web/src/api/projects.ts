@@ -39,6 +39,7 @@ export interface ExtractedService {
   service_type?: string | null;
   host?: string | null;
   port?: number | null;
+  password?: string | null;
   config?: Record<string, unknown>;
 }
 
