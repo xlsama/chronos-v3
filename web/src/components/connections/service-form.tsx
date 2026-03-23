@@ -77,10 +77,20 @@ export function ServiceForm({
   mode,
   service,
   onSuccess,
+  onSubmitOverride,
 }: {
   mode: "create" | "edit";
   service?: Service;
   onSuccess: () => void;
+  onSubmitOverride?: (data: {
+    name: string;
+    description?: string;
+    service_type: string;
+    host: string;
+    port: number;
+    password?: string;
+    config?: Record<string, unknown>;
+  }) => void;
 }) {
   const queryClient = useQueryClient();
   const isEdit = mode === "edit";
@@ -172,6 +182,12 @@ export function ServiceForm({
         password: value.password || undefined,
         config,
       };
+
+      if (onSubmitOverride) {
+        onSubmitOverride(payload);
+        onSuccess();
+        return;
+      }
 
       const result = serviceSchema.safeParse(payload);
       if (!result.success) {

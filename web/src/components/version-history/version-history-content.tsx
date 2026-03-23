@@ -91,14 +91,10 @@ export function VersionHistoryContent({
                           </Badge>
                         )}
                         <Badge
-                          variant={
-                            v.change_source === "auto"
-                              ? "secondary"
-                              : "outline"
-                          }
+                          variant="outline"
                           className="ml-auto h-4 px-1 text-[10px]"
                         >
-                          {v.change_source === "auto" ? "自动" : v.change_source === "init" ? "初始" : "手动"}
+                          {{ init: "初始", seed: "内置", seed_update: "内置更新", manual: "手动", auto: "自动" }[v.change_source] ?? v.change_source}
                         </Badge>
                       </div>
                       <span className="text-xs text-muted-foreground">

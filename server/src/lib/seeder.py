@@ -28,6 +28,24 @@ async def _save_seed_version(session: AsyncSession, slug: str, content: str, cha
     )
 
 
+async def _ensure_seed_version(session_factory: async_sessionmaker[AsyncSession], slug: str, content: str) -> None:
+    """确保 seed 技能至少有一条版本记录，没有则补建"""
+    from src.services.version_service import VersionService
+
+    async with session_factory() as session:
+        vs = VersionService(session)
+        existing = await vs.list_versions("skill", slug)
+        if not existing:
+            await vs.save_version(
+                entity_type="skill",
+                entity_id=slug,
+                content=content,
+                change_source="seed",
+            )
+            await session.commit()
+            log.info("Backfilled seed version record", slug=slug)
+
+
 async def seed_skills(session_factory: async_sessionmaker[AsyncSession]) -> None:
     """启动时将 seeds/skills/ 复制到 data/skills/（若不存在或需更新）"""
     seeds = seeds_skills_dir()
@@ -66,7 +84,10 @@ async def seed_skills(session_factory: async_sessionmaker[AsyncSession]) -> None
             # 之前已 seed 过，检查是否有更新
             old_seed_hash = marker_file.read_text().strip()
             if seed_hash == old_seed_hash:
-                continue  # seed 未变化，跳过
+                # seed 未变化，但确保版本记录存在（应对 DB 重建或历史遗留）
+                content = target_file.read_text(encoding="utf-8")
+                await _ensure_seed_version(session_factory, slug, content)
+                continue
 
             # seed 有更新，检查用户是否修改过运行时副本
             if target_file.exists():

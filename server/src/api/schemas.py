@@ -308,6 +308,42 @@ class ContentVersionDetailResponse(ContentVersionResponse):
     content: str
 
 
+class ExtractedService(BaseModel):
+    name: str
+    description: str | None = None
+    service_type: str | None = None
+    host: str | None = None
+    port: int | None = None
+    config: dict = Field(default_factory=dict)
+
+
+class ExtractedServer(BaseModel):
+    name: str
+    description: str | None = None
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+
+
+class ExtractedConnections(BaseModel):
+    services: list[ExtractedService]
+    servers: list[ExtractedServer]
+
+
+class BatchServiceCreate(BaseModel):
+    items: list[ServiceCreate]
+
+
+class BatchServerCreate(BaseModel):
+    items: list[ServerCreate]
+
+
+class BatchCreateResult(BaseModel):
+    created: int
+    skipped: int
+    errors: list[str]
+
+
 class SkillCreate(BaseModel):
     slug: str
 

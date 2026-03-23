@@ -60,3 +60,18 @@ export function testService(id: string) {
     { method: "POST" },
   );
 }
+
+export interface BatchCreateResult {
+  created: number;
+  skipped: number;
+  errors: string[];
+}
+
+export function batchCreateServices(
+  items: Parameters<typeof createService>[0][],
+) {
+  return request<BatchCreateResult>("/services/batch", {
+    method: "POST",
+    body: { items },
+  });
+}

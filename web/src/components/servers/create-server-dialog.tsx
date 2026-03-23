@@ -60,10 +60,20 @@ export function ServerForm({
   mode,
   server,
   onSuccess,
+  onSubmitOverride,
 }: {
   mode: "create" | "edit";
   server?: Server;
   onSuccess: () => void;
+  onSubmitOverride?: (data: {
+    name: string;
+    description?: string;
+    host: string;
+    port?: number;
+    username?: string;
+    password?: string;
+    private_key?: string;
+  }) => void;
 }) {
   const queryClient = useQueryClient();
   const isEdit = mode === "edit";
@@ -197,6 +207,20 @@ export function ServerForm({
             }
           : {}),
       };
+
+      if (onSubmitOverride) {
+        onSubmitOverride({
+          name: value.name,
+          description: value.description || undefined,
+          host: value.host,
+          port: parseInt(value.port),
+          username: value.username,
+          password: value.auth_method === "password" ? value.password || undefined : undefined,
+          private_key: value.auth_method === "private_key" ? value.private_key || undefined : undefined,
+        });
+        onSuccess();
+        return;
+      }
 
       const result = serverSchema.safeParse(payload);
       if (!result.success) {

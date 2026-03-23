@@ -64,3 +64,18 @@ export function testServer(id: string) {
     { method: "POST" },
   );
 }
+
+export interface BatchCreateResult {
+  created: number;
+  skipped: number;
+  errors: string[];
+}
+
+export function batchCreateServers(
+  items: Parameters<typeof createServer>[0][],
+) {
+  return request<BatchCreateResult>("/servers/batch", {
+    method: "POST",
+    body: { items },
+  });
+}

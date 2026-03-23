@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { pageVariants, pageTransition } from "@/lib/motion";
-import { EllipsisVertical, Trash2 } from "lucide-react";
+import { ArrowLeft, EllipsisVertical, Trash2 } from "lucide-react";
 import { deleteProject, getProject } from "@/api/projects";
 import { CreateDocumentButton, UploadDocumentButton } from "@/components/projects/document-upload";
+import { ImportConnectionsButton } from "@/components/projects/import-connections-dialog";
 import { DocumentList } from "@/components/projects/document-list";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -74,14 +75,21 @@ function ProjectDetailPage() {
     >
       {(project) => (
     <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between border-b px-6 py-4">
-        <div>
-          <h1 className="text-base font-medium">{project.name}</h1>
+      <div className="flex items-center justify-between border-b px-6 py-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link to="/projects">
+            <Button variant="ghost" size="icon-sm">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div className="min-w-0">
+          <h1 className="text-base font-medium truncate">{project.name}</h1>
           {project.description && (
             <p className="mt-1 text-sm text-muted-foreground">
               {project.description}
             </p>
           )}
+          </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
@@ -103,6 +111,7 @@ function ProjectDetailPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">文档</h2>
           <div className="flex items-center gap-2">
+            <ImportConnectionsButton projectId={projectId} />
             <UploadDocumentButton projectId={projectId} />
             <CreateDocumentButton projectId={projectId} />
           </div>

@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import (
+    ExtractedConnections,
     PaginatedResponse,
     ProjectCreate,
     ProjectResponse,
@@ -17,6 +18,7 @@ from src.lib.errors import NotFoundError
 from src.lib.paths import knowledge_dir
 from src.services.project_service import ProjectService
 from src.services.agents_md import ensure_agents_md
+from src.services.import_connections_service import ImportConnectionsService
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -76,6 +78,20 @@ async def update_project(
         project = await service.update(project, **data)
 
     return project
+
+
+@router.post("/{project_id}/import-connections", response_model=ExtractedConnections)
+async def import_connections(
+    project_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    project_service = ProjectService(session=session)
+    project = await project_service.get(project_id)
+    if not project:
+        raise NotFoundError("Project not found")
+
+    service = ImportConnectionsService(session=session)
+    return await service.extract(project_id)
 
 
 @router.delete("/{project_id}", status_code=204)

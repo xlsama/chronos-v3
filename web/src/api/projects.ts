@@ -32,3 +32,32 @@ export function updateProject(
 export function deleteProject(id: string) {
   return request(`/projects/${id}`, { method: "DELETE" });
 }
+
+export interface ExtractedService {
+  name: string;
+  description?: string | null;
+  service_type?: string | null;
+  host?: string | null;
+  port?: number | null;
+  config?: Record<string, unknown>;
+}
+
+export interface ExtractedServer {
+  name: string;
+  description?: string | null;
+  host?: string | null;
+  port?: number | null;
+  username?: string | null;
+}
+
+export interface ExtractedConnections {
+  services: ExtractedService[];
+  servers: ExtractedServer[];
+}
+
+export function importConnections(projectId: string) {
+  return request<ExtractedConnections>(
+    `/projects/${projectId}/import-connections`,
+    { method: "POST" },
+  );
+}

@@ -5,6 +5,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import (
+    BatchCreateResult,
+    BatchServerCreate,
     PaginatedResponse,
     ServerCreate,
     ServerResponse,
@@ -35,6 +37,30 @@ async def create_server(
     service = ServerService(session=session, crypto=crypto)
     server = await service.create(**body.model_dump())
     return server
+
+
+@router.post("/batch", response_model=BatchCreateResult)
+async def batch_create_servers(
+    body: BatchServerCreate,
+    session: AsyncSession = Depends(get_session),
+    crypto: CryptoService = Depends(get_crypto),
+):
+    service = ServerService(session=session, crypto=crypto)
+    created = 0
+    skipped = 0
+    errors: list[str] = []
+    for item in body.items:
+        try:
+            await service.create(**item.model_dump())
+            created += 1
+        except Exception as e:
+            await session.rollback()
+            msg = str(e).lower()
+            if "already exists" in msg or "unique" in msg or "duplicate" in msg:
+                skipped += 1
+            else:
+                errors.append(f"{item.name}: {e}")
+    return BatchCreateResult(created=created, skipped=skipped, errors=errors)
 
 
 @router.get("", response_model=PaginatedResponse[ServerResponse])
