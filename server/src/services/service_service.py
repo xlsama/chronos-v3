@@ -20,6 +20,7 @@ _PROBE_COMMANDS: dict[str, str] = {
     "jenkins": "GET /api/json",
     "kettle": "GET /kettle/status",
     "hive": "SELECT 1",
+    "kubernetes": "kubectl cluster-info",
 }
 
 
@@ -130,6 +131,14 @@ class ServiceService:
 def _friendly_error(service_type: str, exc: Exception) -> str:
     """Translate driver-level exceptions into user-friendly Chinese messages."""
     msg = str(exc).lower()
+
+    # kubectl / Kubernetes errors
+    if "unable to connect to the server" in msg:
+        return "无法连接 K8s API Server，请检查 kubeconfig 和网络"
+    if "unauthorized" in msg or ("forbidden" in msg and service_type == "kubernetes"):
+        return "K8s 认证失败：kubeconfig 中的凭证无效或已过期"
+    if "the server has asked for the client to provide credentials" in msg:
+        return "K8s 认证失败：kubeconfig 中的凭证无效"
 
     # Authentication failures
     if any(kw in msg for kw in ("password authentication failed", "auth", "access denied", "authentication failed")):

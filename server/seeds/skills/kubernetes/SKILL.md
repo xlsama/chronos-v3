@@ -11,18 +11,21 @@ metadata:
 
 你是一个远程运维 Agent，不在目标服务器上运行。所有操作通过以下工具完成：
 
-- **`ssh_bash(server_id, command)`** — 在**远程目标服务器**上执行 shell 命令（首选，kubectl 命令通过此方式执行）
-- **`service_exec(service_id, command)`** — 直连已注册的数据库/缓存/监控服务（无需 CLI 工具）
+- **`service_exec(service_id, "kubectl ...")`** — 直连已注册的 Kubernetes 集群（`service_type: kubernetes`），**首选方式**
+- **`ssh_bash(server_id, command)`** — 在远程目标服务器上执行 shell 命令（备选：当没有注册 K8s 服务时，通过有 kubeconfig 的管理机执行 kubectl）
 - **`bash(command)`** — 仅用于本地文本处理、curl 等辅助操作
 
-> kubectl 需要在有 kubeconfig 的服务器上执行。通常是 master 节点或有集群访问权限的管理机。
+> 两种 kubectl 执行路径：
+> - **直连模式**（推荐）：系统中注册了 `kubernetes` 类型的服务，通过 `service_exec` 直接执行 kubectl 命令
+> - **SSH 模式**（备选）：通过 `ssh_bash` 在有 kubeconfig 的管理服务器上执行 kubectl 命令
 
 ## 第零步：定位目标（必须执行）
 
-1. 调用 `list_servers()` 获取可用服务器列表
-2. 调用 `list_services()` 获取已注册服务
-3. 确定哪台服务器可以执行 kubectl（有 kubeconfig 的节点）
-4. 结合事件描述，确定目标 namespace 和工作负载
+1. 调用 `list_services()` 获取已注册服务
+2. 检查是否有 `service_type: kubernetes` 的服务：
+   - **有** → 记录 `service_id`，后续所有 kubectl 命令通过 `service_exec(service_id, "kubectl ...")` 执行
+   - **没有** → 调用 `list_servers()` 找一台有 kubeconfig 的管理服务器，通过 `ssh_bash(server_id, "kubectl ...")` 执行
+3. 结合事件描述，确定目标 namespace 和工作负载
 
 ## 第一步：集群概览
 

@@ -450,6 +450,85 @@ def _classify_kettle(command: str) -> CommandType:
     return CommandType.WRITE
 
 
+_K8S_READ_SUBCOMMANDS = {
+    "get", "describe", "logs", "top", "explain",
+    "api-resources", "api-versions", "cluster-info",
+    "version", "auth",
+}
+
+_K8S_DANGEROUS_SUBCOMMANDS = {
+    "delete", "drain", "cordon", "taint",
+}
+
+_K8S_WRITE_SUBCOMMANDS = {
+    "apply", "create", "patch", "replace", "set",
+    "scale", "autoscale", "rollout",
+    "label", "annotate", "uncordon",
+    "edit", "expose", "run", "cp", "exec",
+}
+
+_K8S_BLOCKED_SUBCOMMANDS = {
+    "proxy",
+}
+
+
+def _k8s_get_subcommand(rest: str) -> str | None:
+    """Extract the first non-flag token from the command string after 'kubectl'."""
+    for part in rest.split():
+        if not part.startswith("-"):
+            return part.lower()
+    return None
+
+
+def _classify_kubernetes(command: str) -> CommandType:
+    """Classify a kubectl command."""
+    cmd = command.strip()
+
+    if cmd.startswith("kubectl "):
+        rest = cmd[len("kubectl "):]
+    elif cmd == "kubectl":
+        return CommandType.READ
+    else:
+        return CommandType.WRITE
+
+    subcommand = _k8s_get_subcommand(rest)
+    if subcommand is None:
+        return CommandType.WRITE
+
+    if subcommand in _K8S_BLOCKED_SUBCOMMANDS:
+        return CommandType.BLOCKED
+
+    if subcommand in _K8S_DANGEROUS_SUBCOMMANDS:
+        return CommandType.DANGEROUS
+
+    # rollout: status/history → READ, undo/restart → DANGEROUS, others → WRITE
+    if subcommand == "rollout":
+        # Find the sub-subcommand after "rollout"
+        found_rollout = False
+        for part in rest.split():
+            if part.startswith("-"):
+                continue
+            if not found_rollout:
+                if part.lower() == "rollout":
+                    found_rollout = True
+                continue
+            sub_sub = part.lower()
+            if sub_sub in ("undo", "restart"):
+                return CommandType.DANGEROUS
+            if sub_sub in ("status", "history"):
+                return CommandType.READ
+            return CommandType.WRITE
+        return CommandType.WRITE
+
+    if subcommand in _K8S_READ_SUBCOMMANDS:
+        return CommandType.READ
+
+    if subcommand in _K8S_WRITE_SUBCOMMANDS:
+        return CommandType.WRITE
+
+    return CommandType.WRITE
+
+
 _SERVICE_CLASSIFIERS = {
     "postgresql": _classify_sql,
     "mysql": _classify_sql,
@@ -462,6 +541,7 @@ _SERVICE_CLASSIFIERS = {
     "jenkins": _classify_jenkins,
     "kettle": _classify_kettle,
     "hive": _classify_sql,
+    "kubernetes": _classify_kubernetes,
 }
 
 

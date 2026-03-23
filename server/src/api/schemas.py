@@ -109,6 +109,7 @@ class ServiceCreate(BaseModel):
         "mysql", "postgresql", "redis", "prometheus",
         "mongodb", "elasticsearch",
         "doris", "starrocks", "jenkins", "kettle", "hive",
+        "kubernetes",
     ]
     host: str
     port: int

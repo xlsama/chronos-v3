@@ -33,6 +33,7 @@ def _load_connector_map():
     from src.ops_agent.tools.service_connectors.jenkins import JenkinsConnector
     from src.ops_agent.tools.service_connectors.kettle import KettleConnector
     from src.ops_agent.tools.service_connectors.hive import HiveConnector
+    from src.ops_agent.tools.service_connectors.kubernetes import KubernetesConnector
     CONNECTOR_MAP = {
         "postgresql": PostgreSQLConnector,
         "mysql": MySQLConnector,
@@ -45,6 +46,7 @@ def _load_connector_map():
         "jenkins": JenkinsConnector,
         "kettle": KettleConnector,
         "hive": HiveConnector,
+        "kubernetes": KubernetesConnector,
     }
 
 
@@ -223,6 +225,16 @@ def create_connector(
             username=config.get("username", "hive"),
             password=password,
             database=config.get("database", "default"),
+        )
+    elif service_type == "kubernetes":
+        if not password:
+            raise ValueError("Kubernetes 服务需要提供 kubeconfig 内容")
+        return connector_cls(
+            host=host,
+            port=port,
+            kubeconfig=password,
+            default_namespace=config.get("default_namespace", "default"),
+            context=config.get("context"),
         )
     else:
         raise ValueError(f"不支持的服务类型: {service_type}")

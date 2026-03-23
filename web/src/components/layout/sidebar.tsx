@@ -102,7 +102,7 @@ export function AppSidebar() {
           <SidebarGroupContent>{renderGroup(mainItems)}</SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>上下文</SidebarGroupLabel>
+          <SidebarGroupLabel>资源</SidebarGroupLabel>
           <SidebarGroupContent>{renderGroup(contextItems)}</SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
