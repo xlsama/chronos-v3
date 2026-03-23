@@ -17,8 +17,11 @@ from src.env import get_settings
 from src.db.connection import get_session
 from src.db.models import Service
 from src.lib.errors import NotFoundError
+from src.lib.logger import get_logger
 from src.services.crypto import CryptoService
 from src.services.service_service import ServiceService
+
+log = get_logger()
 
 router = APIRouter(prefix="/api/services", tags=["services"])
 
@@ -43,21 +46,38 @@ async def batch_create_services(
     body: BatchServiceCreate,
     session: AsyncSession = Depends(get_session),
 ):
+    log.info("批量创建服务: 开始", total_items=len(body.items))
     svc = _get_service_service(session)
     created = 0
     skipped = 0
     errors: list[str] = []
-    for item in body.items:
+    for i, item in enumerate(body.items):
         try:
             await svc.create(**item.model_dump())
             created += 1
+            log.info(
+                "批量创建服务: 成功",
+                index=i,
+                name=item.name,
+                service_type=item.service_type,
+                host=item.host,
+                port=item.port,
+            )
         except Exception as e:
             await session.rollback()
             msg = str(e).lower()
             if "already exists" in msg or "unique" in msg or "duplicate" in msg:
                 skipped += 1
+                log.warning("批量创建服务: 跳过(已存在)", index=i, name=item.name)
             else:
                 errors.append(f"{item.name}: {e}")
+                log.error("批量创建服务: 失败", index=i, name=item.name, error=str(e))
+    log.info(
+        "批量创建服务: 完成",
+        created=created,
+        skipped=skipped,
+        errors=len(errors),
+    )
     return BatchCreateResult(created=created, skipped=skipped, errors=errors)
 
 

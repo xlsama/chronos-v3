@@ -18,8 +18,11 @@ from src.ops_agent.ssh import SSHConnector
 from src.db.connection import get_session
 from src.db.models import Server
 from src.lib.errors import NotFoundError
+from src.lib.logger import get_logger
 from src.services.server_service import ServerService
 from src.services.crypto import CryptoService
+
+log = get_logger()
 
 router = APIRouter(prefix="/api/servers", tags=["servers"])
 
@@ -45,21 +48,38 @@ async def batch_create_servers(
     session: AsyncSession = Depends(get_session),
     crypto: CryptoService = Depends(get_crypto),
 ):
+    log.info("批量创建服务器: 开始", total_items=len(body.items))
     service = ServerService(session=session, crypto=crypto)
     created = 0
     skipped = 0
     errors: list[str] = []
-    for item in body.items:
+    for i, item in enumerate(body.items):
         try:
             await service.create(**item.model_dump())
             created += 1
+            log.info(
+                "批量创建服务器: 成功",
+                index=i,
+                name=item.name,
+                host=item.host,
+                port=item.port,
+                username=item.username,
+            )
         except Exception as e:
             await session.rollback()
             msg = str(e).lower()
             if "already exists" in msg or "unique" in msg or "duplicate" in msg:
                 skipped += 1
+                log.warning("批量创建服务器: 跳过(已存在)", index=i, name=item.name)
             else:
                 errors.append(f"{item.name}: {e}")
+                log.error("批量创建服务器: 失败", index=i, name=item.name, error=str(e))
+    log.info(
+        "批量创建服务器: 完成",
+        created=created,
+        skipped=skipped,
+        errors=len(errors),
+    )
     return BatchCreateResult(created=created, skipped=skipped, errors=errors)
 
 
