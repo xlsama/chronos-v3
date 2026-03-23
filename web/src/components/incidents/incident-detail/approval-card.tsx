@@ -1,18 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ShieldAlert, AlertTriangle, Loader2, Terminal } from "lucide-react";
+import { ShieldAlert, AlertTriangle, Loader2, Wrench } from "lucide-react";
 import { decideApproval } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ShellCodeBlock } from "@/components/ui/shell-code-block";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
-
-const TOOL_LABELS: Record<string, string> = {
-  ssh_bash: "SSH 远程命令",
-  bash: "本地命令",
-  service_exec: "服务命令",
-};
 
 interface ApprovalCardProps {
   toolCall: Record<string, unknown> | null;
@@ -97,9 +91,11 @@ export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, servi
       </div>
 
       {toolName && (
-        <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-          <Terminal className="h-3.5 w-3.5" />
-          <span>{TOOL_LABELS[toolName] ?? toolName}</span>
+        <div className="mt-2 flex items-center gap-2 text-sm">
+          <Wrench className={cn("h-3.5 w-3.5", isHigh ? "text-red-600" : "text-yellow-600")} />
+          <span className={cn("font-medium", isHigh ? "text-red-900" : "text-yellow-900")}>
+            {toolName}
+          </span>
           {toolName === "ssh_bash" && serverInfo && (
             <Badge variant="secondary" className="text-xs">{serverInfo}</Badge>
           )}

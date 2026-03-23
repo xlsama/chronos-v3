@@ -427,7 +427,7 @@
 }
 
 .prose-default [data-streamdown="mermaid"] > :first-child > [role="application"] {
-  zoom: 0.75;
+  zoom: 0.55;
 }
 
 /* streamdown 表格字体大小覆盖 */
