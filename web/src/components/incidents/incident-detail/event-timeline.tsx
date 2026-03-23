@@ -371,6 +371,10 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     phaseState.investigation === "pending" &&
     bothSubAgentsDone;
 
+  // Phase visibility
+  const showContextGathering = hasGatherContext || phaseState.contextGathering !== "pending" || isActiveIncident;
+  const showInvestigation = hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation;
+
   // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(mainEvents), [mainEvents]);
 
@@ -402,21 +406,22 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   }, [historyAgentState.events, kbAgentState.events]);
 
   return (
-    <div className="space-y-3 p-4" data-testid="event-timeline">
+    <div className="p-4" data-testid="event-timeline">
       {/* Phase 1: Context Gathering */}
-      {(hasGatherContext || phaseState.contextGathering !== "pending" || isActiveIncident) && (
+      {showContextGathering && (
         <PhaseSection
           title="上下文收集"
           subtitle={contextSubtitle}
           status={phaseState.contextGathering}
           icon={Search}
           defaultExpanded={phaseState.investigation === "pending" || undefined}
+          isLast={!showInvestigation}
           contentClassName={cn(
             shouldUseFixedContextLayout && [
               "overflow-hidden",
-              "has-[[data-expanded]]:h-[calc(100dvh-20rem)]",
+              "has-[[data-expanded]]:h-[calc(100dvh-19rem)]",
               "has-[[data-expanded]]:min-h-[18rem]",
-              "has-[[data-expanded]]:md:h-[calc(100dvh-18rem)]",
+              "has-[[data-expanded]]:md:h-[calc(100dvh-17rem)]",
             ],
           )}
         >
@@ -454,13 +459,14 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
       )}
 
       {/* Phase 2: Investigation */}
-      {(hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation) && (
+      {showInvestigation && (
         <PhaseSection
           title="排查处置"
           subtitle={phaseSubtitle}
           status={isTransitioningToInvestigation ? "active" : phaseState.investigation}
           icon={Brain}
           defaultExpanded
+          isLast
         >
           <div className="space-y-3">
             <AnimatePresence initial={false}>

@@ -12,25 +12,30 @@ interface PhaseSectionProps {
   children: React.ReactNode;
   defaultExpanded?: boolean;
   contentClassName?: string;
+  isLast?: boolean;
 }
 
-function StatusIndicator({ status }: { status: PhaseStatus }) {
+function TimelineNodeIndicator({ status }: { status: PhaseStatus }) {
   if (status === "completed") {
     return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+      <span className="absolute left-0 top-[10px] z-10 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-4 ring-background">
         <Check className="h-3 w-3" />
       </span>
     );
   }
   if (status === "active") {
     return (
-      <span className="relative flex h-3 w-3">
+      <span className="absolute left-0 top-[10px] z-10 flex h-3.5 w-3.5 -translate-x-1/2 items-center justify-center">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-        <span className="relative inline-flex h-3 w-3 rounded-full bg-blue-500" />
+        <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-blue-500 ring-4 ring-background" />
       </span>
     );
   }
-  return <span className="h-3 w-3 rounded-full bg-muted-foreground/30" />;
+  return (
+    <span className="absolute left-0 top-[11px] z-10 flex h-3 w-3 -translate-x-1/2 items-center justify-center">
+      <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 ring-4 ring-background" />
+    </span>
+  );
 }
 
 export function PhaseSection({
@@ -41,6 +46,7 @@ export function PhaseSection({
   children,
   defaultExpanded,
   contentClassName,
+  isLast,
 }: PhaseSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? status === "active");
 
@@ -51,26 +57,38 @@ export function PhaseSection({
   }, [status, defaultExpanded]);
 
   return (
-    <div className="rounded-lg border bg-card" data-testid="phase-section">
+    <div className="relative pl-6" data-testid="phase-section">
+      {/* Timeline vertical line */}
+      <div
+        className={cn(
+          "absolute left-0 w-px -translate-x-1/2 bg-border",
+          isLast ? "top-0 h-[18px]" : "top-0 bottom-0",
+        )}
+      />
+
+      {/* Timeline node indicator */}
+      <TimelineNodeIndicator status={status} />
+
+      {/* Header */}
       <button
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        className="flex w-full items-center gap-2 py-1.5 text-left"
         onClick={() => setExpanded(!expanded)}
       >
-        {expanded ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        )}
         <Icon className="h-4 w-4 text-muted-foreground" />
         <span className="text-[13px] font-medium">{title}</span>
         {subtitle && (
           <span className="text-xs text-muted-foreground">&middot; {subtitle}</span>
         )}
         <span className="ml-auto">
-          <StatusIndicator status={status} />
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
         </span>
       </button>
 
+      {/* Collapsible content */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -80,7 +98,7 @@ export function PhaseSection({
             transition={{ duration: 0.2 }}
             style={{ overflow: "hidden" }}
           >
-            <div className={cn("border-t px-4 py-3", contentClassName)}>{children}</div>
+            <div className={cn("pt-1 pb-3", contentClassName)}>{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
