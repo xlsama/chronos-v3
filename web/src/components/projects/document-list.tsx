@@ -145,8 +145,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <div className="flex-1">
                     <p className="text-sm font-medium">{doc.filename}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {doc.doc_type} &middot;{" "}
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
                       {dayjs(doc.created_at).fromNow()}
                     </p>
                   </div>
