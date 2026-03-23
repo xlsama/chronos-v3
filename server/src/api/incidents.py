@@ -56,6 +56,21 @@ async def _start_agent_background(
                     severity=severity,
                 )
 
+        # Enrich description with parsed attachment content
+        async with factory() as session:
+            result = await session.execute(
+                select(Attachment)
+                .where(Attachment.incident_id == uuid.UUID(incident_id))
+                .where(Attachment.parsed_content.isnot(None))
+            )
+            attachments = list(result.scalars())
+            if attachments:
+                parts = [
+                    f"### 附件: {a.filename}\n\n{a.parsed_content}"
+                    for a in attachments
+                ]
+                description = f"{description}\n\n## 附件内容\n\n" + "\n\n---\n\n".join(parts)
+
         thread_id = await runner.start(
             incident_id=incident_id,
             description=description,
@@ -313,6 +328,7 @@ async def send_user_message(
         raise NotFoundError("Incident not found")
 
     metadata = {}
+    attachment_texts: list[str] = []
     if body.attachment_ids:
         result = await session.execute(
             select(Attachment).where(Attachment.id.in_(body.attachment_ids))
@@ -320,6 +336,8 @@ async def send_user_message(
         attachments_list = list(result.scalars())
         for attachment in attachments_list:
             attachment.incident_id = incident_id
+            if attachment.parsed_content:
+                attachment_texts.append(f"[附件: {attachment.filename}]\n{attachment.parsed_content}")
         await session.flush()
 
         metadata["attachment_ids"] = [str(aid) for aid in body.attachment_ids]
@@ -347,12 +365,18 @@ async def send_user_message(
         sid = str(incident.id)[:8]
         log.info("User message received, resuming agent", sid=sid)
         log.debug("User message content", sid=sid, content=body.content)
+
+        # Enrich human input with parsed attachment content
+        human_input = body.content
+        if attachment_texts:
+            human_input += "\n\n## 附件内容\n\n" + "\n\n---\n\n".join(attachment_texts)
+
         runner: AgentRunner = request.app.state.agent_runner
         background_tasks.add_task(
             runner.resume_with_human_input,
             thread_id=incident.thread_id,
             incident_id=str(incident.id),
-            human_input=body.content,
+            human_input=human_input,
         )
 
     return message

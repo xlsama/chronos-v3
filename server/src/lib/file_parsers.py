@@ -5,6 +5,10 @@ import io
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from docling_core.types.doc import DoclingDocument
 
 
 @dataclass
@@ -15,11 +19,105 @@ class ParsedSegment:
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
+# Formats handled by docling
+DOCLING_FORMATS = {".pdf", ".docx", ".pptx", ".xlsx", ".xls"}
+
 
 def is_image(filename: str) -> bool:
     return Path(filename).suffix.lower() in IMAGE_EXTENSIONS
 
 
+# ---------------------------------------------------------------------------
+# Docling converter (lazy singleton)
+# ---------------------------------------------------------------------------
+_converter = None
+
+
+def _get_converter():
+    global _converter
+    if _converter is None:
+        from docling.document_converter import DocumentConverter
+
+        _converter = DocumentConverter()
+    return _converter
+
+
+def _convert_bytes(file_bytes: bytes, filename: str) -> "DoclingDocument":
+    """Convert file bytes to a DoclingDocument using docling."""
+    from docling.datamodel.base_models import DocumentStream
+
+    stream = DocumentStream(name=filename, stream=io.BytesIO(file_bytes))
+    result = _get_converter().convert(source=stream)
+    return result.document
+
+
+# ---------------------------------------------------------------------------
+# Docling-based segment extractors
+# ---------------------------------------------------------------------------
+def _pdf_segments(doc: "DoclingDocument") -> list[ParsedSegment]:
+    """Extract one segment per PDF page."""
+    segments = []
+    for page_no in sorted(doc.pages.keys()):
+        md = doc.export_to_markdown(page_no=page_no)
+        if md.strip():
+            segments.append(ParsedSegment(content=md, metadata={"page": page_no}))
+    return segments
+
+
+def _pptx_segments(doc: "DoclingDocument") -> list[ParsedSegment]:
+    """Extract one segment per PPTX slide."""
+    segments = []
+    for page_no in sorted(doc.pages.keys()):
+        md = doc.export_to_markdown(page_no=page_no)
+        if md.strip():
+            segments.append(ParsedSegment(
+                content=f"### Slide {page_no}\n\n{md}",
+                metadata={"slide": page_no},
+            ))
+    return segments
+
+
+def _xlsx_segments(doc: "DoclingDocument") -> list[ParsedSegment]:
+    """Extract one segment per Excel sheet (docling maps sheets to pages)."""
+    segments = []
+    for page_no in sorted(doc.pages.keys()):
+        md = doc.export_to_markdown(page_no=page_no)
+        if md.strip():
+            segments.append(ParsedSegment(
+                content=f"### Sheet {page_no}\n\n{md}",
+                metadata={"sheet": page_no},
+            ))
+    return segments
+
+
+def parse_docling_segments(file_bytes: bytes, filename: str) -> list[ParsedSegment]:
+    """Parse a document using docling, returning per-page/slide/sheet segments."""
+    doc = _convert_bytes(file_bytes, filename)
+    ext = Path(filename).suffix.lower()
+
+    if ext == ".pdf":
+        segments = _pdf_segments(doc)
+    elif ext == ".pptx":
+        segments = _pptx_segments(doc)
+    elif ext in (".xlsx", ".xls"):
+        segments = _xlsx_segments(doc)
+    else:
+        # .docx — single segment
+        md = doc.export_to_markdown()
+        segments = [ParsedSegment(content=md)] if md.strip() else []
+
+    return segments
+
+
+def parse_docling(file_bytes: bytes, filename: str = "") -> str:
+    """Parse a document using docling, returning full markdown text."""
+    segments = parse_docling_segments(file_bytes, filename)
+    return "\n\n".join(seg.content for seg in segments)
+
+
+# ---------------------------------------------------------------------------
+# Simple text-based parsers (unchanged)
+# ---------------------------------------------------------------------------
 def parse_text(file_bytes: bytes, _filename: str = "") -> str:
     """Parse plain text / markdown files."""
     return file_bytes.decode("utf-8", errors="replace")
@@ -43,91 +141,6 @@ def parse_csv(file_bytes: bytes, _filename: str = "") -> str:
     return "\n".join(lines)
 
 
-def parse_pdf(file_bytes: bytes, _filename: str = "") -> str:
-    """Parse PDF files using pymupdf."""
-    segments = parse_pdf_segments(file_bytes)
-    return "\n\n".join(seg.content for seg in segments)
-
-
-def parse_pdf_segments(file_bytes: bytes) -> list[ParsedSegment]:
-    """Parse PDF, returning one segment per page."""
-    import pymupdf
-
-    doc = pymupdf.open(stream=file_bytes, filetype="pdf")
-    segments = []
-    for i, page in enumerate(doc, 1):
-        text = page.get_text().strip()
-        if text:
-            segments.append(ParsedSegment(content=text, metadata={"page": i}))
-    doc.close()
-    return segments
-
-
-def parse_docx(file_bytes: bytes, _filename: str = "") -> str:
-    """Parse Word (.docx) files using python-docx."""
-    import docx
-
-    doc = docx.Document(io.BytesIO(file_bytes))
-    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    return "\n\n".join(paragraphs)
-
-
-def parse_excel(file_bytes: bytes, filename: str = "") -> str:
-    """Parse Excel (.xlsx/.xls) files using openpyxl."""
-    segments = parse_excel_segments(file_bytes)
-    return "\n\n".join(seg.content for seg in segments)
-
-
-def parse_excel_segments(file_bytes: bytes) -> list[ParsedSegment]:
-    """Parse Excel, returning one segment per sheet."""
-    import openpyxl
-
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
-    segments = []
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        rows = list(ws.iter_rows(values_only=True))
-        if not rows:
-            continue
-        lines = [f"### Sheet: {sheet_name}"]
-        header = [str(c) if c is not None else "" for c in rows[0]]
-        lines.append("| " + " | ".join(header) + " |")
-        lines.append("| " + " | ".join("---" for _ in header) + " |")
-        for row in rows[1:]:
-            cells = [str(c) if c is not None else "" for c in row]
-            padded = cells + [""] * (len(header) - len(cells))
-            lines.append("| " + " | ".join(padded[:len(header)]) + " |")
-        segments.append(ParsedSegment(content="\n".join(lines), metadata={"sheet": sheet_name}))
-    wb.close()
-    return segments
-
-
-def parse_pptx(file_bytes: bytes, _filename: str = "") -> str:
-    """Parse PowerPoint (.pptx) files using python-pptx."""
-    segments = parse_pptx_segments(file_bytes)
-    return "\n\n".join(seg.content for seg in segments)
-
-
-def parse_pptx_segments(file_bytes: bytes) -> list[ParsedSegment]:
-    """Parse PPTX, returning one segment per slide."""
-    from pptx import Presentation
-
-    prs = Presentation(io.BytesIO(file_bytes))
-    segments = []
-    for i, slide in enumerate(prs.slides, 1):
-        texts = []
-        for shape in slide.shapes:
-            if shape.has_text_frame:
-                for paragraph in shape.text_frame.paragraphs:
-                    text = paragraph.text.strip()
-                    if text:
-                        texts.append(text)
-        if texts:
-            content = f"### Slide {i}\n\n" + "\n".join(texts)
-            segments.append(ParsedSegment(content=content, metadata={"slide": i}))
-    return segments
-
-
 def parse_html(file_bytes: bytes, _filename: str = "") -> str:
     """Parse HTML files using BeautifulSoup."""
     from bs4 import BeautifulSoup
@@ -145,13 +158,15 @@ def parse_json(file_bytes: bytes, _filename: str = "") -> str:
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
-# Mapping of file extensions to parser functions
+# ---------------------------------------------------------------------------
+# Extension → parser mappings
+# ---------------------------------------------------------------------------
 PARSERS = {
-    ".pdf": parse_pdf,
-    ".docx": parse_docx,
-    ".pptx": parse_pptx,
-    ".xlsx": parse_excel,
-    ".xls": parse_excel,
+    ".pdf": parse_docling,
+    ".docx": parse_docling,
+    ".pptx": parse_docling,
+    ".xlsx": parse_docling,
+    ".xls": parse_docling,
     ".csv": parse_csv,
     ".html": parse_html,
     ".htm": parse_html,
@@ -168,17 +183,18 @@ SUPPORTED_EXTENSIONS = set(PARSERS.keys()) | IMAGE_EXTENSIONS
 
 # Segment parsers for formats that have natural sub-document boundaries
 SEGMENT_PARSERS = {
-    ".pdf": lambda b, _fn: parse_pdf_segments(b),
-    ".pptx": lambda b, _fn: parse_pptx_segments(b),
-    ".xlsx": lambda b, _fn: parse_excel_segments(b),
-    ".xls": lambda b, _fn: parse_excel_segments(b),
+    ".pdf": lambda b, fn: parse_docling_segments(b, fn),
+    ".docx": lambda b, fn: parse_docling_segments(b, fn),
+    ".pptx": lambda b, fn: parse_docling_segments(b, fn),
+    ".xlsx": lambda b, fn: parse_docling_segments(b, fn),
+    ".xls": lambda b, fn: parse_docling_segments(b, fn),
 }
 
 
 def parse_file_segments(file_bytes: bytes, filename: str) -> list[ParsedSegment]:
     """Parse a file into segments with metadata.
 
-    For PDF/PPTX/Excel, returns per-page/slide/sheet segments.
+    For PDF/DOCX/PPTX/Excel, returns per-page/slide/sheet segments.
     For other text formats, returns a single segment with empty metadata.
 
     Raises:

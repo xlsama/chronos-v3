@@ -154,6 +154,7 @@ class AttachmentResponse(BaseModel):
     stored_filename: str
     content_type: str
     size: int
+    parsed_content: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from pathlib import Path
 
@@ -10,8 +11,14 @@ from src.env import get_settings
 from src.db.connection import get_session
 from src.db.models import Attachment
 from src.lib.errors import NotFoundError
+from src.lib.file_parsers import SUPPORTED_EXTENSIONS, IMAGE_EXTENSIONS, parse_file
+from src.lib.logger import get_logger
+
+log = get_logger()
 
 router = APIRouter(prefix="/api/attachments", tags=["attachments"])
+
+MAX_PARSED_CONTENT_LEN = 100_000
 
 
 @router.post("", response_model=list[AttachmentResponse])
@@ -26,19 +33,31 @@ async def upload_files(
     results: list[Attachment] = []
 
     for file in files:
-        ext = Path(file.filename or "file").suffix
+        fname = file.filename or "file"
+        ext = Path(fname).suffix.lower()
         stored_name = f"{uuid.uuid4()}{ext}"
         stored_path = upload_dir / stored_name
 
         content = await file.read()
         stored_path.write_bytes(content)
 
+        # Parse text content for supported document formats
+        parsed_content = None
+        if ext in SUPPORTED_EXTENSIONS and ext not in IMAGE_EXTENSIONS:
+            try:
+                parsed_content = await asyncio.to_thread(parse_file, content, fname)
+                if parsed_content and len(parsed_content) > MAX_PARSED_CONTENT_LEN:
+                    parsed_content = parsed_content[:MAX_PARSED_CONTENT_LEN] + "\n\n[内容过长，已截断]"
+            except Exception as e:
+                log.warning("Failed to parse attachment", filename=fname, error=str(e))
+
         attachment = Attachment(
             incident_id=incident_id,
-            filename=file.filename or "file",
+            filename=fname,
             stored_filename=stored_name,
             content_type=file.content_type or "application/octet-stream",
             size=len(content),
+            parsed_content=parsed_content,
         )
         session.add(attachment)
         results.append(attachment)
