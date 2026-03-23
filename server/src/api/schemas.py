@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 T = TypeVar("T")
 
@@ -315,7 +315,12 @@ class ExtractedService(BaseModel):
     host: str | None = None
     port: int | None = None
     password: str | None = None
-    config: dict = Field(default_factory=dict)
+    config: dict | None = Field(default_factory=dict)
+
+    @field_validator("config", mode="before")
+    @classmethod
+    def _config_none_to_dict(cls, v: dict | None) -> dict:
+        return v if v is not None else {}
 
 
 class ExtractedServer(BaseModel):
