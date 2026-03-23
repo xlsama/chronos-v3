@@ -41,7 +41,17 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
     os.makedirs(settings.upload_dir, exist_ok=True)
-    os.makedirs("data/skills", exist_ok=True)
+
+    # 创建运行时数据目录
+    from src.lib.paths import skills_dir, incident_history_dir, knowledge_dir
+
+    for d in [skills_dir(), incident_history_dir(), knowledge_dir()]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # 从 seeds/ 复制内置 skills 到 data/skills/
+    from src.lib.seeder import seed_skills
+
+    await seed_skills(get_session_factory())
 
     for warning in settings.validate_production_secrets():
         log.warning(warning)

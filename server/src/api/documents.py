@@ -10,6 +10,7 @@ from src.api.schemas import DocumentDetailResponse, DocumentResponse, DocumentUp
 from src.db.connection import get_session
 from src.lib.errors import NotFoundError
 from src.lib.file_parsers import SUPPORTED_EXTENSIONS, ParsedSegment, is_image, parse_file_segments
+from src.lib.paths import knowledge_dir
 from src.lib.image_describer import ImageDescriber
 from src.services.document_service import DocumentService, _index_document_background
 from src.services.project_service import ProjectService
@@ -95,7 +96,7 @@ async def upload_document_file(
     file_bytes = await file.read()
 
     # Store original file to filesystem
-    storage_dir = Path("data/knowledge") / project.slug
+    storage_dir = knowledge_dir(project.slug)
     storage_dir.mkdir(parents=True, exist_ok=True)
     file_path = storage_dir / filename
     file_path.write_bytes(file_bytes)
@@ -198,7 +199,7 @@ async def get_document_file(
     if not doc:
         raise NotFoundError("Document not found")
 
-    file_path = Path("data/knowledge") / doc.project.slug / doc.filename
+    file_path = knowledge_dir(doc.project.slug) / doc.filename
     if not file_path.exists():
         raise NotFoundError("File not found on disk")
 

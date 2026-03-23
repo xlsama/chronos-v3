@@ -7,10 +7,9 @@ from pathlib import Path
 import yaml
 
 from src.lib.logger import get_logger
+from src.lib.paths import skills_dir
 
 log = get_logger(component="skill")
-
-SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "skills"
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _ALLOWED_SUBDIRS = {"scripts", "references", "assets"}
@@ -34,7 +33,7 @@ class SkillMeta:
 
 class SkillService:
     def __init__(self, base_dir: Path | None = None):
-        self.base_dir = base_dir or SKILLS_DIR
+        self.base_dir = base_dir or skills_dir()
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Parsing ──────────────────────────────────────────────

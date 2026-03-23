@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     agent_recursion_limit: int = 200
     tool_call_max_retries: int = 2  # LLM 未调用工具时的最大重试次数
 
+    # Data directories
+    data_dir: str = "data"
+    seeds_dir: str = "seeds"
+
     # Upload
     upload_dir: str = "uploads"
 

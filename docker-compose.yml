@@ -30,3 +30,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  chronos-data:  # server runtime data (skills, incident_history, knowledge)

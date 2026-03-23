@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.models import Incident, IncidentHistory
 from src.lib.embedder import Embedder
 from src.lib.logger import get_logger
+from src.lib.paths import incident_history_dir
 from src.lib.reranker import Reranker
 from src.services.version_service import VersionService
 
@@ -131,7 +132,7 @@ def _sanitize_filename(title: str, max_length: int = 80) -> str:
 
 def _write_md_file(title: str, summary_md: str, record_id: uuid.UUID | None = None) -> Path | None:
     try:
-        dir_path = Path("data/incident_history")
+        dir_path = incident_history_dir()
         dir_path.mkdir(parents=True, exist_ok=True)
         prefix = record_id.hex[:8] if record_id else uuid.uuid4().hex[:8]
         filename = f"{prefix}_{_sanitize_filename(title)}.md"
@@ -145,7 +146,7 @@ def _write_md_file(title: str, summary_md: str, record_id: uuid.UUID | None = No
 
 
 def _delete_md_file(record_id: uuid.UUID) -> None:
-    dir_path = Path("data/incident_history")
+    dir_path = incident_history_dir()
     prefix = record_id.hex[:8]
     for f in dir_path.glob(f"{prefix}_*.md"):
         f.unlink()
@@ -153,7 +154,7 @@ def _delete_md_file(record_id: uuid.UUID) -> None:
 
 
 def _rewrite_md_file(record_id: uuid.UUID, summary_md: str) -> None:
-    dir_path = Path("data/incident_history")
+    dir_path = incident_history_dir()
     prefix = record_id.hex[:8]
     matches = list(dir_path.glob(f"{prefix}_*.md"))
     if matches:

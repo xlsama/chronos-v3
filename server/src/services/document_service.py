@@ -14,6 +14,7 @@ from src.lib.chunker import ChunkWithMetadata, chunk_segments, chunk_text
 from src.lib.embedder import Embedder
 from src.lib.file_parsers import ParsedSegment, is_image, parse_file_segments
 from src.lib.logger import get_logger
+from src.lib.paths import knowledge_dir
 
 if TYPE_CHECKING:
     from src.lib.image_describer import ImageDescriber
@@ -177,7 +178,7 @@ class DocumentService:
         ext = Path(filename).suffix.lower()
 
         # Store original file to filesystem
-        storage_dir = Path("data/knowledge") / project_slug
+        storage_dir = knowledge_dir(project_slug)
         storage_dir.mkdir(parents=True, exist_ok=True)
         file_path = storage_dir / filename
         file_path.write_bytes(file_bytes)
@@ -234,7 +235,7 @@ class DocumentService:
         doc.content = content
 
         # Update file on disk if it exists
-        file_path = Path("data/knowledge") / project_slug / doc.filename
+        file_path = knowledge_dir(project_slug) / doc.filename
         if file_path.exists():
             file_path.write_text(content, encoding="utf-8")
 
@@ -265,7 +266,7 @@ class DocumentService:
 
         # Remove file from filesystem if it exists
         if project_slug:
-            file_path = Path("data/knowledge") / project_slug / doc.filename
+            file_path = knowledge_dir(project_slug) / doc.filename
             if file_path.exists():
                 os.remove(file_path)
 

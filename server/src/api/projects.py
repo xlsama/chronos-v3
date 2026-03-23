@@ -1,6 +1,5 @@
 import shutil
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy import func, select
@@ -15,6 +14,7 @@ from src.api.schemas import (
 from src.db.connection import get_session
 from src.db.models import Project
 from src.lib.errors import NotFoundError
+from src.lib.paths import knowledge_dir
 from src.services.project_service import ProjectService
 from src.services.agents_md import ensure_agents_md
 
@@ -89,7 +89,7 @@ async def delete_project(
         raise NotFoundError("Project not found")
     slug = project.slug
     await service.delete(project)
-    knowledge_dir = Path("data/knowledge") / slug
-    if knowledge_dir.exists():
-        shutil.rmtree(knowledge_dir)
+    knowledge_path = knowledge_dir(slug)
+    if knowledge_path.exists():
+        shutil.rmtree(knowledge_path)
     return Response(status_code=204)

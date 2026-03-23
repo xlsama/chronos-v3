@@ -44,3 +44,6 @@ alembic/versions/*.pyc
 
 .ruff_cache
 .tanstack
+
+# Runtime data
+server/data/
