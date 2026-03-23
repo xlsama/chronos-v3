@@ -87,13 +87,10 @@ _BLOCKED_PATTERNS = [
 ]
 
 # Local-only blocked patterns (local=True)
+# Only block privilege escalation and sensitive file access.
+# Service commands (docker/kubectl/systemctl) go through normal
+# DANGEROUS/WRITE/READ classification → approval flow.
 _LOCAL_BLOCKED_PATTERNS = [
-    r"\benv\b",
-    r"\bprintenv\b",
-    r"\bset\b\s*$",
-    r"\bdocker\b",
-    r"\bkubectl\b",
-    r"\bsystemctl\b",
     r"\bsudo\b",
     r"\bsu\b\s",
     r"\.env\b",
@@ -101,9 +98,7 @@ _LOCAL_BLOCKED_PATTERNS = [
 ]
 
 _LOCAL_BLOCKED_PREFIXES = [
-    "docker", "kubectl", "systemctl",
     "sudo", "su ",
-    "env", "printenv",
 ]
 
 # Dangerous patterns (needs approval + red warning)
@@ -180,11 +175,29 @@ _READ_PREFIXES = [
     "crontab -l",
 ]
 
-# Local read-only command prefixes (more conservative)
+# Local read-only command prefixes (aligned with SSH _READ_PREFIXES)
 _LOCAL_READ_PREFIXES = [
-    "ls", "cat", "head", "tail", "grep", "awk", "sed",
-    "echo", "find", "wc", "sort", "uniq", "cut", "tr",
-    "curl", "date", "file", "stat",
+    "ls", "cat", "head", "tail", "less", "more", "grep", "awk", "sed",
+    "echo", "nproc", "command",
+    "find", "which", "whereis", "whoami", "hostname", "uname",
+    "df", "du", "free", "top", "htop", "vmstat", "iostat", "sar",
+    "ps", "pgrep", "lsof", "ss", "netstat", "ip", "ifconfig",
+    "ping", "traceroute", "dig", "nslookup", "curl",
+    "uptime", "w", "who", "last", "dmesg", "journalctl",
+    "systemctl status", "systemctl is-active", "systemctl list-units",
+    "docker ps", "docker logs", "docker inspect", "docker stats",
+    "docker compose ps", "docker compose logs", "docker compose top",
+    "docker compose config", "docker compose images", "docker compose version",
+    "kubectl get", "kubectl describe", "kubectl logs", "kubectl top",
+    "date", "timedatectl", "env", "printenv", "id", "groups",
+    "xargs",
+    "file", "stat", "wc", "sort", "uniq", "cut", "tr",
+    "mount", "lsblk", "blkid", "fdisk -l",
+    "nginx -t", "nginx -T",
+    "supervisorctl status",
+    "pm2 list", "pm2 ls", "pm2 status", "pm2 logs", "pm2 show", "pm2 info",
+    "crontab -l",
+    # Local-specific
     "python", "python3",
     "bash", "sh",
     "jq",
