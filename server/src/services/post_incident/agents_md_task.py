@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.connection import get_session_factory
-from src.db.models import DocumentChunk, ProjectDocument, Server, Service
+from src.db.models import DocumentChunk, Project, ProjectDocument, Server, Service
 from src.lib.embedder import Embedder
 from src.lib.logger import get_logger
 from src.services.post_incident.base import get_mini_llm
@@ -375,6 +375,14 @@ async def _update_project_agents_md(
     # Update first, then save new content as version
     doc.content = result_text
     doc.status = "indexed"
+
+    # Sync to disk
+    from src.lib.paths import knowledge_dir
+    project = await session.get(Project, project_id)
+    if project:
+        file_path = knowledge_dir(project.slug) / "AGENTS.md"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(result_text, encoding="utf-8")
 
     from src.services.version_service import VersionService
     vs = VersionService(session)

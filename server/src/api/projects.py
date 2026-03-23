@@ -30,7 +30,7 @@ async def create_project(
 ):
     service = ProjectService(session=session)
     project = await service.create(**body.model_dump())
-    await ensure_agents_md(session, project.id, project.name)
+    await ensure_agents_md(session, project.id, project.name, project.slug)
     await session.commit()
     return project
 

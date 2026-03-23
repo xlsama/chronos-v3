@@ -19,7 +19,6 @@ import { Route as IncidentsIncidentIdRouteImport } from './routes/incidents/$inc
 import { Route as ProjectsProjectIdRouteRouteImport } from './routes/projects/$projectId/route'
 import { Route as ProjectsProjectIdIndexRouteImport } from './routes/projects/$projectId/index'
 import { Route as ProjectsProjectIdDocumentsDocumentIdRouteImport } from './routes/projects/$projectId/documents/$documentId'
-import { Route as ProjectsProjectIdDocumentsDocumentIdHistoryRouteImport } from './routes/projects/$projectId.documents.$documentId.history'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -72,12 +71,6 @@ const ProjectsProjectIdDocumentsDocumentIdRoute =
     path: '/documents/$documentId',
     getParentRoute: () => ProjectsProjectIdRouteRoute,
   } as any)
-const ProjectsProjectIdDocumentsDocumentIdHistoryRoute =
-  ProjectsProjectIdDocumentsDocumentIdHistoryRouteImport.update({
-    id: '/history',
-    path: '/history',
-    getParentRoute: () => ProjectsProjectIdDocumentsDocumentIdRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -89,8 +82,7 @@ export interface FileRoutesByFullPath {
   '/projects/': typeof ProjectsIndexRoute
   '/skills/': typeof SkillsIndexRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
-  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRouteWithChildren
-  '/projects/$projectId/documents/$documentId/history': typeof ProjectsProjectIdDocumentsDocumentIdHistoryRoute
+  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -101,8 +93,7 @@ export interface FileRoutesByTo {
   '/projects': typeof ProjectsIndexRoute
   '/skills': typeof SkillsIndexRoute
   '/projects/$projectId': typeof ProjectsProjectIdIndexRoute
-  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRouteWithChildren
-  '/projects/$projectId/documents/$documentId/history': typeof ProjectsProjectIdDocumentsDocumentIdHistoryRoute
+  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -115,8 +106,7 @@ export interface FileRoutesById {
   '/projects/': typeof ProjectsIndexRoute
   '/skills/': typeof SkillsIndexRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
-  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRouteWithChildren
-  '/projects/$projectId/documents/$documentId/history': typeof ProjectsProjectIdDocumentsDocumentIdHistoryRoute
+  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,7 +121,6 @@ export interface FileRouteTypes {
     | '/skills/'
     | '/projects/$projectId/'
     | '/projects/$projectId/documents/$documentId'
-    | '/projects/$projectId/documents/$documentId/history'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -143,7 +132,6 @@ export interface FileRouteTypes {
     | '/skills'
     | '/projects/$projectId'
     | '/projects/$projectId/documents/$documentId'
-    | '/projects/$projectId/documents/$documentId/history'
   id:
     | '__root__'
     | '/'
@@ -156,7 +144,6 @@ export interface FileRouteTypes {
     | '/skills/'
     | '/projects/$projectId/'
     | '/projects/$projectId/documents/$documentId'
-    | '/projects/$projectId/documents/$documentId/history'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -242,41 +229,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsProjectIdDocumentsDocumentIdRouteImport
       parentRoute: typeof ProjectsProjectIdRouteRoute
     }
-    '/projects/$projectId/documents/$documentId/history': {
-      id: '/projects/$projectId/documents/$documentId/history'
-      path: '/history'
-      fullPath: '/projects/$projectId/documents/$documentId/history'
-      preLoaderRoute: typeof ProjectsProjectIdDocumentsDocumentIdHistoryRouteImport
-      parentRoute: typeof ProjectsProjectIdDocumentsDocumentIdRoute
-    }
   }
 }
-
-interface ProjectsProjectIdDocumentsDocumentIdRouteChildren {
-  ProjectsProjectIdDocumentsDocumentIdHistoryRoute: typeof ProjectsProjectIdDocumentsDocumentIdHistoryRoute
-}
-
-const ProjectsProjectIdDocumentsDocumentIdRouteChildren: ProjectsProjectIdDocumentsDocumentIdRouteChildren =
-  {
-    ProjectsProjectIdDocumentsDocumentIdHistoryRoute:
-      ProjectsProjectIdDocumentsDocumentIdHistoryRoute,
-  }
-
-const ProjectsProjectIdDocumentsDocumentIdRouteWithChildren =
-  ProjectsProjectIdDocumentsDocumentIdRoute._addFileChildren(
-    ProjectsProjectIdDocumentsDocumentIdRouteChildren,
-  )
 
 interface ProjectsProjectIdRouteRouteChildren {
   ProjectsProjectIdIndexRoute: typeof ProjectsProjectIdIndexRoute
-  ProjectsProjectIdDocumentsDocumentIdRoute: typeof ProjectsProjectIdDocumentsDocumentIdRouteWithChildren
+  ProjectsProjectIdDocumentsDocumentIdRoute: typeof ProjectsProjectIdDocumentsDocumentIdRoute
 }
 
 const ProjectsProjectIdRouteRouteChildren: ProjectsProjectIdRouteRouteChildren =
   {
     ProjectsProjectIdIndexRoute: ProjectsProjectIdIndexRoute,
     ProjectsProjectIdDocumentsDocumentIdRoute:
-      ProjectsProjectIdDocumentsDocumentIdRouteWithChildren,
+      ProjectsProjectIdDocumentsDocumentIdRoute,
   }
 
 const ProjectsProjectIdRouteRouteWithChildren =

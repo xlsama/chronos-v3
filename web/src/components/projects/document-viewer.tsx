@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { History, Pencil, Eye, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +7,7 @@ import {
   getDocumentFileUrl,
   updateDocument,
 } from "@/api/documents";
+import { VersionHistoryDialog } from "@/components/version-history/version-history-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,6 +44,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
 
   const { data: doc, isLoading } = useQuery({
     queryKey: ["document", documentId],
@@ -125,12 +126,10 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
           </DialogTitle>
           <div className="mr-6 flex items-center gap-2">
             {doc?.doc_type === "agents_config" && (
-              <Link to="/projects/$projectId/documents/$documentId/history" params={{ projectId: doc.project_id, documentId: doc.id }} onClick={onClose}>
-                <Button variant="outline" size="sm">
-                  <History className="mr-1.5 h-3.5 w-3.5" />
-                  更新历史
-                </Button>
-              </Link>
+              <Button variant="outline" size="sm" onClick={() => setShowHistory(true)}>
+                <History className="mr-1.5 h-3.5 w-3.5" />
+                更新历史
+              </Button>
             )}
             {isEditable && !editing && !readOnly && (
               <Button variant="outline" size="sm" onClick={startEditing}>
@@ -182,6 +181,16 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
           </QueryContent>
         </div>
       </DialogContent>
+
+      {doc && (
+        <VersionHistoryDialog
+          open={showHistory}
+          onOpenChange={setShowHistory}
+          entityType="agents_md"
+          entityId={doc.id}
+          title="AGENTS.md 更新历史"
+        />
+      )}
     </Dialog>
   );
 }

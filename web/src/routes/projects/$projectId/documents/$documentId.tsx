@@ -11,6 +11,7 @@ import {
   getDocumentFileUrl,
   updateDocument,
 } from "@/api/documents";
+import { VersionHistoryDialog } from "@/components/version-history/version-history-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +55,7 @@ function DocumentDetailPage() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const { data: doc, isLoading } = useQuery({
     queryKey: ["document", documentId],
@@ -200,15 +202,10 @@ function DocumentDetailPage() {
                 </Button>
               )}
               {doc?.doc_type === "agents_config" && (
-                <Link
-                  to="/projects/$projectId/documents/$documentId/history"
-                  params={{ projectId, documentId }}
-                >
-                  <Button size="sm" variant="outline">
-                    <History className="mr-1.5 h-3.5 w-3.5" />
-                    更新历史
-                  </Button>
-                </Link>
+                <Button size="sm" variant="outline" onClick={() => setShowHistory(true)}>
+                  <History className="mr-1.5 h-3.5 w-3.5" />
+                  更新历史
+                </Button>
               )}
             </>
           )}
@@ -273,6 +270,14 @@ function DocumentDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <VersionHistoryDialog
+        open={showHistory}
+        onOpenChange={setShowHistory}
+        entityType="agents_md"
+        entityId={documentId}
+        title="AGENTS.md 更新历史"
+      />
     </motion.div>
   );
 }

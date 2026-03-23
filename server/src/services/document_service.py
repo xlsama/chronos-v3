@@ -234,10 +234,10 @@ class DocumentService:
 
         doc.content = content
 
-        # Update file on disk if it exists
+        # Sync to disk
         file_path = knowledge_dir(project_slug) / doc.filename
-        if file_path.exists():
-            file_path.write_text(content, encoding="utf-8")
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content, encoding="utf-8")
 
         # agents_config documents: only update content, skip chunk + embed
         if doc.doc_type == "agents_config":
