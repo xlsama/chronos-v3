@@ -289,6 +289,7 @@ export function useIncidentStream(
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
           } else if (event.event_type === "confirm_resolution_required") {
             setResolutionConfirmRequired(true);
+            setResolutionConfirmResolved(false);
           } else if (event.event_type === "resolution_confirmed") {
             setResolutionConfirmResolved(true);
           } else if (event.event_type === "incident_stopped") {

@@ -37,6 +37,7 @@ export function PromptComposer({
   const [text, setText] = useState("");
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const objectUrlsRef = useRef<string[]>([]);
+  const submittingRef = useRef(false);
 
   const preRecordTextRef = useRef("");
 
@@ -88,14 +89,17 @@ export function PromptComposer({
   }, []);
 
   const handleSubmit = useCallback(() => {
+    if (submittingRef.current) return;
     const trimmed = text.trim();
     if (!trimmed && files.length === 0) return;
+    submittingRef.current = true;
     onSubmit(
       trimmed,
       files.map((f) => f.file),
     );
     setText("");
     setFiles([]);
+    requestAnimationFrame(() => { submittingRef.current = false; });
   }, [text, files, onSubmit]);
 
   const handlePaste = useCallback(

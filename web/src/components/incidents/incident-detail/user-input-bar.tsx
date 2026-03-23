@@ -15,7 +15,7 @@ const TERMINAL_STATUSES = ["resolved", "stopped"];
 
 export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) {
   const queryClient = useQueryClient();
-  const { askHumanQuestion, setAskHumanQuestion, resolutionConfirmRequired, resolutionConfirmResolved, setResolutionConfirmResolved, addEvent } = useIncidentStreamStore();
+  const { askHumanQuestion, setAskHumanQuestion, resolutionConfirmRequired, resolutionConfirmResolved, setResolutionConfirmRequired, setResolutionConfirmResolved, addEvent } = useIncidentStreamStore();
 
   const isTerminal = !!incidentStatus && TERMINAL_STATUSES.includes(incidentStatus);
   const isWaitingForInput = !!askHumanQuestion || (resolutionConfirmRequired && !resolutionConfirmResolved);
@@ -59,7 +59,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
         timestamp: new Date().toISOString(),
       });
       setAskHumanQuestion(null);
-      if (resolutionConfirmRequired) setResolutionConfirmResolved(true);
+      if (resolutionConfirmRequired) setResolutionConfirmRequired(false);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["incidents", incidentId] });
