@@ -58,12 +58,12 @@ async def upload_document(
         )
 
     # Save init version for agents_config documents
-    if doc.doc_type == "agents_config" and not is_empty:
+    if doc.doc_type == "agents_config":
         from src.services.version_service import VersionService
         vs = VersionService(session)
         await vs.save_version(
             entity_type="agents_md", entity_id=str(doc.id),
-            content=body.content, change_source="init",
+            content=body.content or "", change_source="init",
         )
         await session.commit()
 
