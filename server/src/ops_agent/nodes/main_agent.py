@@ -37,9 +37,9 @@ def build_tools():
 
     @tool
     async def bash(command: str, explanation: str = "") -> dict:
-        """在本地执行命令（curl、技能脚本、文本处理等）。
-        用于不需要 SSH 到远程服务器的场景：运行本地脚本、curl 调用 API、文本处理等。
-        注意：本地环境禁止 docker/kubectl/systemctl/env/printenv/sudo 等命令。
+        """在本地执行命令。可以执行 docker/kubectl/systemctl 等服务管理命令（写操作需审批）。
+        用于不需要 SSH 到远程服务器的场景：运行本地脚本、curl 调用 API、docker/kubectl 管理容器和集群等。
+        注意：禁止 sudo/su 提权命令。
         - command: 要执行的命令
         - explanation: 可选，写操作时提供操作说明
         """

@@ -1,18 +1,28 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ShieldAlert, AlertTriangle, Loader2 } from "lucide-react";
+import { ShieldAlert, AlertTriangle, Loader2, Terminal } from "lucide-react";
 import { decideApproval } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ShellCodeBlock } from "@/components/ui/shell-code-block";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 
+const TOOL_LABELS: Record<string, string> = {
+  ssh_bash: "SSH 远程命令",
+  bash: "本地命令",
+  service_exec: "服务命令",
+};
+
 interface ApprovalCardProps {
   toolCall: Record<string, unknown> | null;
   approvalId?: string;
+  toolName?: string;
+  serverInfo?: string;
+  serviceInfo?: string;
 }
 
-export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
+export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, serviceInfo }: ApprovalCardProps) {
   const decidedApprovals = useIncidentStreamStore((s) => s.decidedApprovals);
   const setApprovalDecided = useIncidentStreamStore(
     (s) => s.setApprovalDecided,
@@ -85,6 +95,22 @@ export function ApprovalCard({ toolCall, approvalId }: ApprovalCardProps) {
           </span>
         )}
       </div>
+
+      {toolName && (
+        <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+          <Terminal className="h-3.5 w-3.5" />
+          <span>{TOOL_LABELS[toolName] ?? toolName}</span>
+          {toolName === "ssh_bash" && serverInfo && (
+            <Badge variant="secondary" className="text-xs">{serverInfo}</Badge>
+          )}
+          {toolName === "bash" && (
+            <Badge variant="secondary" className="text-xs">本地</Badge>
+          )}
+          {toolName === "service_exec" && serviceInfo && (
+            <Badge variant="secondary" className="text-xs">{serviceInfo}</Badge>
+          )}
+        </div>
+      )}
 
       {isHigh && (
         <div className="mt-2 rounded border border-red-200 bg-red-100/50 px-3 py-2 text-xs text-red-700">

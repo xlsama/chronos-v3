@@ -508,15 +508,32 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                       </motion.div>
                     );
                   }
-                  case "approval_required":
+                  case "approval_required": {
+                    const approvalToolName = item.event.data.tool_name as string | undefined;
+                    const approvalArgs = item.event.data.tool_args as Record<string, unknown> | undefined;
+
+                    let approvalServerInfo: string | undefined;
+                    let approvalServiceInfo: string | undefined;
+                    if (approvalToolName === "ssh_bash") {
+                      const sid = approvalArgs?.server_id as string | undefined;
+                      approvalServerInfo = sid ? serverMap.get(sid) : undefined;
+                    } else if (approvalToolName === "service_exec") {
+                      const sid = approvalArgs?.service_id as string | undefined;
+                      approvalServiceInfo = sid ? serviceMap.get(sid) : undefined;
+                    }
+
                     return (
                       <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
                         <ApprovalCard
-                          toolCall={item.event.data.tool_args as Record<string, unknown>}
+                          toolCall={approvalArgs as Record<string, unknown>}
                           approvalId={item.event.data.approval_id as string}
+                          toolName={approvalToolName}
+                          serverInfo={approvalServerInfo}
+                          serviceInfo={approvalServiceInfo}
                         />
                       </motion.div>
                     );
+                  }
                   case "ask_human":
                     return (
                       <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
