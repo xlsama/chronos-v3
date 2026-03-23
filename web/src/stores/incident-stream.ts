@@ -77,7 +77,23 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   decidedApprovals: {},
 
   addEvent: (event) => {
-    set((state) => ({ events: [...state.events, event] }));
+    set((state) => {
+      // Dedup: if a real user_message arrives and an optimistic version exists, reconcile IDs
+      if (event.event_type === "user_message" && event.event_id && !event.event_id.startsWith("optimistic-")) {
+        const idx = state.events.findIndex(
+          (e) =>
+            e.event_type === "user_message" &&
+            e.event_id?.startsWith("optimistic-") &&
+            e.data.content === event.data.content
+        );
+        if (idx !== -1) {
+          const newEvents = [...state.events];
+          newEvents[idx] = { ...newEvents[idx], event_id: event.event_id };
+          return { events: newEvents };
+        }
+      }
+      return { events: [...state.events, event] };
+    });
   },
 
   appendThinking: (content) =>

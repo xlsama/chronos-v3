@@ -401,7 +401,7 @@
 }
 
 .streamdown-markdown [data-streamdown="mermaid"] > :first-child {
-  min-height: 15.5rem;
+  min-height: 24rem;
   height: auto !important;
 }
 
@@ -427,7 +427,7 @@
 }
 
 .prose-default [data-streamdown="mermaid"] > :first-child > [role="application"] {
-  zoom: 0.55;
+  zoom: 0.75;
 }
 
 /* streamdown 表格字体大小覆盖 */

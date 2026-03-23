@@ -7,7 +7,7 @@ import type { SSEEvent } from "@/lib/types";
 
 const BASE_DELAY = 1000;
 const MAX_BACKOFF = 30_000;
-const HEARTBEAT_TIMEOUT = 45_000;
+const HEARTBEAT_TIMEOUT = 120_000;
 const MAX_RETRIES = 15;
 
 export function useIncidentStream(

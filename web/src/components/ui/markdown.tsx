@@ -1,8 +1,24 @@
 import { Streamdown } from "streamdown";
 import type { AnimateOptions } from "streamdown";
 import { code } from "@streamdown/code";
-import { mermaid } from "@streamdown/mermaid";
+import { createMermaidPlugin } from "@streamdown/mermaid";
 import { cn } from "@/lib/utils";
+
+const mermaid = createMermaidPlugin({
+  config: {
+    theme: "base",
+    themeVariables: {
+      fontSize: "12px",
+    },
+    flowchart: {
+      useMaxWidth: false,
+      nodeSpacing: 30,
+      rankSpacing: 40,
+      diagramPadding: 8,
+      padding: 8,
+    },
+  },
+});
 
 const DEFAULT_ANIMATION: AnimateOptions = {
   animation: "blurIn",
