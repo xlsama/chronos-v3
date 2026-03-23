@@ -7,11 +7,11 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import AttachmentResponse
-from src.env import get_settings
 from src.db.connection import get_session
 from src.db.models import Attachment
 from src.lib.errors import NotFoundError
 from src.lib.file_parsers import SUPPORTED_EXTENSIONS, IMAGE_EXTENSIONS, parse_file
+from src.lib.paths import uploads_dir
 from src.lib.logger import get_logger
 
 log = get_logger()
@@ -27,16 +27,14 @@ async def upload_files(
     incident_id: uuid.UUID | None = None,
     session: AsyncSession = Depends(get_session),
 ):
-    settings = get_settings()
-    upload_dir = Path(settings.upload_dir)
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_path = uploads_dir()
     results: list[Attachment] = []
 
     for file in files:
         fname = file.filename or "file"
         ext = Path(fname).suffix.lower()
         stored_name = f"{uuid.uuid4()}{ext}"
-        stored_path = upload_dir / stored_name
+        stored_path = upload_path / stored_name
 
         content = await file.read()
         stored_path.write_bytes(content)
@@ -77,8 +75,7 @@ async def download_file(
     if not attachment:
         raise NotFoundError("Attachment not found")
 
-    settings = get_settings()
-    file_path = Path(settings.upload_dir) / attachment.stored_filename
+    file_path = uploads_dir() / attachment.stored_filename
     if not file_path.exists():
         raise NotFoundError("File not found on disk")
 

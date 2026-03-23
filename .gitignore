@@ -47,3 +47,4 @@ alembic/versions/*.pyc
 
 # Runtime data
 server/data/
+server/uploads/

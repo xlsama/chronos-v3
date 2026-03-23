@@ -27,5 +27,9 @@ def knowledge_dir(project_slug: str | None = None) -> Path:
     return base / project_slug if project_slug else base
 
 
+def uploads_dir() -> Path:
+    return get_data_dir() / "uploads"
+
+
 def seeds_skills_dir() -> Path:
     return get_seeds_dir() / "skills"

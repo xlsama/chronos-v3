@@ -34,9 +34,6 @@ class Settings(BaseSettings):
     data_dir: str = "data"
     seeds_dir: str = "seeds"
 
-    # Upload
-    upload_dir: str = "uploads"
-
     # Security — override these in production via environment variables
     encryption_key: str = "dGVzdC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVz"
     jwt_secret: str = "dev-jwt-secret"

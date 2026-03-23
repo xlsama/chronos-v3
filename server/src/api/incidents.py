@@ -18,11 +18,11 @@ from src.api.schemas import (
     PaginatedResponse,
     UserMessageRequest,
 )
-from src.env import get_settings
 from src.db.connection import get_session, get_session_factory
 from src.db.models import Attachment, Incident, Message
 from src.lib.errors import BadRequestError, NotFoundError
 from src.lib.logger import get_logger
+from src.lib.paths import uploads_dir
 from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.services.agent_runner import AgentRunner
@@ -62,7 +62,6 @@ async def _start_agent_background(
 
         image_attachments: list[dict] = []
         async with factory() as session:
-            settings = get_settings()
             result = await session.execute(
                 select(Attachment)
                 .where(Attachment.incident_id == uuid.UUID(incident_id))
@@ -70,7 +69,7 @@ async def _start_agent_background(
             for a in result.scalars():
                 ext = Path(a.filename).suffix.lower()
                 if ext in IMAGE_EXTENSIONS:
-                    file_path = Path(settings.upload_dir) / a.stored_filename
+                    file_path = uploads_dir() / a.stored_filename
                     if file_path.exists():
                         image_attachments.append({
                             "filename": a.filename,
@@ -347,12 +346,11 @@ async def send_user_message(
             select(Attachment).where(Attachment.id.in_(body.attachment_ids))
         )
         attachments_list = list(result.scalars())
-        settings = get_settings()
         for attachment in attachments_list:
             attachment.incident_id = incident_id
             ext = Path(attachment.filename).suffix.lower()
             if ext in IMAGE_EXTENSIONS:
-                file_path = Path(settings.upload_dir) / attachment.stored_filename
+                file_path = uploads_dir() / attachment.stored_filename
                 if file_path.exists():
                     msg_image_attachments.append({
                         "filename": attachment.filename,
