@@ -7,7 +7,7 @@ from src.env import get_settings
 
 
 def _create_engine():
-    return create_async_engine(get_settings().database_url, echo=False)
+    return create_async_engine(get_settings().database_url, echo=False, pool_pre_ping=True)
 
 
 engine = None
