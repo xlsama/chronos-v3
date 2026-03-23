@@ -94,8 +94,8 @@ flowchart TD
   - 网关/代理类（Nginx, HAProxy）→ `["标签"]` 矩形
   - 应用服务（Java, Node, Python）→ `("标签")` 圆角矩形
   - 数据库（MySQL, PG, MongoDB）→ `[("标签")]` 圆柱体
-  - 缓存/队列（Redis, RabbitMQ）→ `{{"标签"}}` 六边形
-  - 判断/路由 → `{"标签"}` 菱形
+  - 缓存/队列（Redis, RabbitMQ）→ `{{{{"标签"}}}}` 六边形
+  - 判断/路由 → `{{"标签"}}` 菱形
 - 按服务类型选择 emoji 前缀：🌐 网关、☕/🟢 应用、🗄️ 数据库、⚡ 缓存、📨 队列
 - **依赖关系** → 带标签箭头 `serviceA -->|关系描述| serviceB`
 - 节点 ID 必须与 Services 表中的名称一致
