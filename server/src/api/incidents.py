@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from pathlib import Path
 
 import orjson
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
@@ -56,25 +57,34 @@ async def _start_agent_background(
                     severity=severity,
                 )
 
-        # Enrich description with parsed attachment content
+        # Enrich description with parsed attachment content + collect images
+        from src.lib.file_parsers import IMAGE_EXTENSIONS
+
+        image_attachments: list[dict] = []
         async with factory() as session:
+            settings = get_settings()
             result = await session.execute(
                 select(Attachment)
                 .where(Attachment.incident_id == uuid.UUID(incident_id))
-                .where(Attachment.parsed_content.isnot(None))
             )
-            attachments = list(result.scalars())
-            if attachments:
-                parts = [
-                    f"### 附件: {a.filename}\n\n{a.parsed_content}"
-                    for a in attachments
-                ]
-                description = f"{description}\n\n## 附件内容\n\n" + "\n\n---\n\n".join(parts)
+            for a in result.scalars():
+                ext = Path(a.filename).suffix.lower()
+                if ext in IMAGE_EXTENSIONS:
+                    file_path = Path(settings.upload_dir) / a.stored_filename
+                    if file_path.exists():
+                        image_attachments.append({
+                            "filename": a.filename,
+                            "bytes": file_path.read_bytes(),
+                            "content_type": a.content_type,
+                        })
+                elif a.parsed_content:
+                    description = f"{description}\n\n## 附件内容\n\n### 附件: {a.filename}\n\n{a.parsed_content}"
 
         thread_id = await runner.start(
             incident_id=incident_id,
             description=description,
             severity=severity,
+            image_attachments=image_attachments,
         )
         # Write thread_id back after agent completes
         async with factory() as session:
@@ -327,16 +337,29 @@ async def send_user_message(
     if not incident:
         raise NotFoundError("Incident not found")
 
+    from src.lib.file_parsers import IMAGE_EXTENSIONS
+
     metadata = {}
     attachment_texts: list[str] = []
+    msg_image_attachments: list[dict] = []
     if body.attachment_ids:
         result = await session.execute(
             select(Attachment).where(Attachment.id.in_(body.attachment_ids))
         )
         attachments_list = list(result.scalars())
+        settings = get_settings()
         for attachment in attachments_list:
             attachment.incident_id = incident_id
-            if attachment.parsed_content:
+            ext = Path(attachment.filename).suffix.lower()
+            if ext in IMAGE_EXTENSIONS:
+                file_path = Path(settings.upload_dir) / attachment.stored_filename
+                if file_path.exists():
+                    msg_image_attachments.append({
+                        "filename": attachment.filename,
+                        "bytes": file_path.read_bytes(),
+                        "content_type": attachment.content_type,
+                    })
+            elif attachment.parsed_content:
                 attachment_texts.append(f"[附件: {attachment.filename}]\n{attachment.parsed_content}")
         await session.flush()
 
@@ -377,6 +400,7 @@ async def send_user_message(
             thread_id=incident.thread_id,
             incident_id=str(incident.id),
             human_input=human_input,
+            image_attachments=msg_image_attachments,
         )
 
     return message

@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import time
 import uuid
@@ -39,6 +40,21 @@ class AgentRunner:
         self._thinking_content_log_buffer = ""
 
     @staticmethod
+    def _build_human_message(text: str, image_attachments: list[dict] | None = None) -> HumanMessage:
+        """Build a HumanMessage, optionally with multimodal image content."""
+        if not image_attachments:
+            return HumanMessage(content=text)
+        content_blocks: list[dict] = [{"type": "text", "text": text}]
+        for img in image_attachments[:5]:  # limit to 5 images
+            b64 = base64.b64encode(img["bytes"]).decode()
+            mime = img.get("content_type") or "image/png"
+            content_blocks.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            })
+        return HumanMessage(content=content_blocks)
+
+    @staticmethod
     def _format_agent_error(exc: Exception) -> str:
         """Normalize runtime errors into user-readable messages."""
         from langgraph.errors import GraphRecursionError
@@ -75,6 +91,7 @@ class AgentRunner:
         incident_id: str,
         description: str,
         severity: str,
+        image_attachments: list[dict] | None = None,
     ) -> str:
         self._reset_answer_stream_state()
         self._ask_human_streamed = False
@@ -86,8 +103,9 @@ class AgentRunner:
 
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
 
+        human_msg = self._build_human_message(f"事件描述: {description}", image_attachments)
         initial_state = {
-            "messages": [HumanMessage(content=f"事件描述: {description}")],
+            "messages": [human_msg],
             "incident_id": incident_id,
             "description": description,
             "severity": severity,
@@ -125,7 +143,13 @@ class AgentRunner:
         log.info("===== Agent lifecycle completed =====")
         return thread_id
 
-    async def resume_with_human_input(self, thread_id: str, incident_id: str, human_input: str) -> None:
+    async def resume_with_human_input(
+        self,
+        thread_id: str,
+        incident_id: str,
+        human_input: str,
+        image_attachments: list[dict] | None = None,
+    ) -> None:
         """Resume graph from ask_human interrupt with user's response."""
         self._reset_answer_stream_state()
         self._ask_human_streamed = False
@@ -143,7 +167,12 @@ class AgentRunner:
 
         from langgraph.types import Command
 
-        resume_input = Command(resume=human_input)
+        # Pass structured resume value with optional images
+        if image_attachments:
+            resume_value = {"text": human_input, "images": image_attachments}
+        else:
+            resume_value = human_input
+        resume_input = Command(resume=resume_value)
 
         log.info("Resuming agent (human input)", thread_id=thread_id)
         log.debug("human_input", content=human_input)
