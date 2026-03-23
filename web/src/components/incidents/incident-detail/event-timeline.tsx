@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, Brain, MessageCircleQuestion, Square, Sparkles, CheckCircle } from "lucide-react";
+import { MessageCircleQuestion, Square, Sparkles, CheckCircle } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
@@ -406,14 +406,13 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   }, [historyAgentState.events, kbAgentState.events]);
 
   return (
-    <div className="p-4" data-testid="event-timeline">
+    <div className="px-8 py-4" data-testid="event-timeline">
       {/* Phase 1: Context Gathering */}
       {showContextGathering && (
         <PhaseSection
           title="上下文收集"
           subtitle={contextSubtitle}
           status={phaseState.contextGathering}
-          icon={Search}
           defaultExpanded={phaseState.investigation === "pending" || undefined}
           isLast={!showInvestigation}
           contentClassName={cn(
@@ -464,7 +463,6 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           title="排查处置"
           subtitle={phaseSubtitle}
           status={isTransitioningToInvestigation ? "active" : phaseState.investigation}
-          icon={Brain}
           defaultExpanded
           isLast
         >
