@@ -58,18 +58,24 @@ def build_tools():
         return await _service_exec(service_id=service_id, command=command)
 
     @tool
-    async def list_servers() -> list[dict]:
+    async def list_servers() -> list[dict] | str:
         """列出所有可用服务器。返回 id, name, host, status。
         用于发现目标服务器（SSH 远程执行）。
         """
-        return await _list_servers()
+        result = await _list_servers()
+        if not result:
+            return "当前没有注册任何服务器（servers 表为空）。无法使用 ssh_bash 工具。如需 SSH 远程排查，请通过 ask_human 请用户在「连接」页面添加服务器。"
+        return result
 
     @tool
-    async def list_services() -> list[dict]:
+    async def list_services() -> list[dict] | str:
         """列出所有可用服务。返回 id, name, service_type, host, port, status。
         用于发现可直连的数据库/缓存/监控服务。
         """
-        return await _list_services()
+        result = await _list_services()
+        if not result:
+            return "当前没有注册任何服务（services 表为空）。无法使用 service_exec 工具。如需数据库/缓存排查，请通过 ask_human 请用户在「连接」页面添加服务。"
+        return result
 
     @tool
     def ask_human(question: str) -> str:
