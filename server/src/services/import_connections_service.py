@@ -167,13 +167,6 @@ class ImportConnectionsService:
             if chunk.choices and chunk.choices[0].delta.content:
                 delta = chunk.choices[0].delta.content
                 content_chunks.append(delta)
-                # Print streaming output in real-time
-                log.debug(
-                    "[3/4] LLM stream chunk",
-                    project_id=pid,
-                    chunk_no=chunk_count,
-                    delta=delta,
-                )
             # Capture usage from final chunk
             if hasattr(chunk, "usage") and chunk.usage:
                 usage_info = chunk.usage
