@@ -17,6 +17,25 @@ def _strip_stderr_discard(command: str) -> str:
     """去除命令中的 2>/dev/null，确保 stderr 始终被保留。"""
     return _STDERR_DISCARD_RE.sub('', command)
 
+
+# Permission denied 自动 sudo 重试
+_PERMISSION_DENIED_PATTERNS = [
+    "permission denied",
+    "operation not permitted",
+    "access denied",
+]
+
+
+def _is_permission_denied(exit_code: int, stdout: str, stderr: str) -> bool:
+    """检查命令输出是否为权限错误。"""
+    if exit_code == 0:
+        return False
+    combined = (stdout + stderr).lower()
+    # 目标机没有 sudo，重试无意义
+    if "sudo: command not found" in combined or "sudo: not found" in combined:
+        return False
+    return any(p in combined for p in _PERMISSION_DENIED_PATTERNS)
+
 # Registry of connectors by server ID with TTL and capacity management
 _connector_registry: dict[str, tuple[SSHConnector, float]] = {}  # server_id -> (connector, last_used_time)
 _registry_lock = asyncio.Lock()
@@ -161,6 +180,43 @@ async def ssh_bash(server_id: str, command: str) -> dict:
     except Exception as e:
         log.error("Unexpected error", error=str(e))
         return {"error": f"执行异常: {e}"}
+
+    # 自动 sudo 重试：仅限 READ 命令 + permission denied + 非 sudo 命令
+    if (
+        cmd_type == CommandType.READ
+        and _is_permission_denied(result.exit_code, result.stdout, result.stderr)
+        and not command.lstrip().startswith("sudo")
+    ):
+        sudo_command = f"sudo {command}"
+        log.info(
+            "Permission denied on READ cmd, auto-retrying with sudo",
+            server=server_id[:8],
+            original=command,
+        )
+        try:
+            retry_result = await connector.execute(sudo_command)
+            if not _is_permission_denied(
+                retry_result.exit_code, retry_result.stdout, retry_result.stderr
+            ):
+                retry_elapsed = time.monotonic() - t0
+                stdout_compressed = compress_output(retry_result.stdout)
+                log.info(
+                    "Sudo retry succeeded",
+                    elapsed=f"{retry_elapsed:.2f}s",
+                    exit_code=retry_result.exit_code,
+                    stdout_len=len(stdout_compressed),
+                )
+                return {
+                    "exit_code": retry_result.exit_code,
+                    "stdout": stdout_compressed,
+                    "stderr": retry_result.stderr,
+                    "error": None,
+                }
+            log.warning("Sudo retry also got permission denied")
+        except (asyncio.TimeoutError, TimeoutError):
+            log.warning("Sudo retry timed out")
+        except Exception as e:
+            log.warning("Sudo retry failed", error=str(e))
 
     stdout_compressed = compress_output(result.stdout)
     log.info("Result", elapsed=f"{exec_elapsed:.2f}s", exit_code=result.exit_code, stdout_len=len(stdout_compressed), stderr_len=len(result.stderr))
