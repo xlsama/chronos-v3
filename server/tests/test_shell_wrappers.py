@@ -1,5 +1,6 @@
 from src.ops_agent.ssh import SSHConnector
 from src.ops_agent.tools.bash_tool import _wrap_local_command
+from src.ops_agent.tools.ssh_bash_tool import _strip_stderr_discard
 from src.ops_agent.tools.tool_permissions import CommandType, ShellSafety
 
 
@@ -39,3 +40,22 @@ def test_prepare_command_uses_non_interactive_sudo_without_password():
 
     assert prepared.startswith("sudo -n docker ps")
     assert stdin_input is None
+
+
+class TestStripStderrDiscard:
+    def test_strips_basic_pattern(self):
+        assert _strip_stderr_discard('docker ps -a 2>/dev/null || echo "no"') == 'docker ps -a || echo "no"'
+
+    def test_strips_with_space(self):
+        assert _strip_stderr_discard('docker ps 2> /dev/null') == 'docker ps'
+
+    def test_strips_multiple_occurrences(self):
+        result = _strip_stderr_discard('cmd1 2>/dev/null; cmd2 2> /dev/null')
+        assert result == 'cmd1; cmd2'
+
+    def test_preserves_command_without_pattern(self):
+        cmd = 'docker ps -a 2>&1'
+        assert _strip_stderr_discard(cmd) == cmd
+
+    def test_preserves_empty_command(self):
+        assert _strip_stderr_discard('') == ''

@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 import uuid
 
@@ -7,6 +8,14 @@ from src.ops_agent.ssh import SSHConnector
 from src.ops_agent.tools.tool_permissions import ShellSafety, CommandType, compress_output
 
 log = get_logger(component="ssh_bash")
+
+# 匹配 2>/dev/null 和 2> /dev/null（含前导空白）
+_STDERR_DISCARD_RE = re.compile(r'\s*2>\s*/dev/null')
+
+
+def _strip_stderr_discard(command: str) -> str:
+    """去除命令中的 2>/dev/null，确保 stderr 始终被保留。"""
+    return _STDERR_DISCARD_RE.sub('', command)
 
 # Registry of connectors by server ID with TTL and capacity management
 _connector_registry: dict[str, tuple[SSHConnector, float]] = {}  # server_id -> (connector, last_used_time)
@@ -129,6 +138,9 @@ async def ssh_bash(server_id: str, command: str) -> dict:
     except ValueError as e:
         log.error("Connection error", error=str(e))
         return {"error": str(e)}
+
+    # 执行前去除 2>/dev/null，确保 stderr 中的权限错误等信息不会丢失
+    command = _strip_stderr_discard(command)
 
     try:
         t0 = time.monotonic()
