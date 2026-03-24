@@ -50,6 +50,8 @@ class ServerCreate(BaseModel):
     bastion_username: str | None = None
     bastion_password: str | None = None
     bastion_private_key: str | None = None
+    sudo_password: str | None = None
+    use_ssh_password_for_sudo: bool = False
 
 
 class ServerUpdate(BaseModel):
@@ -65,6 +67,8 @@ class ServerUpdate(BaseModel):
     bastion_username: str | None = None
     bastion_password: str | None = None
     bastion_private_key: str | None = None
+    sudo_password: str | None = None
+    use_ssh_password_for_sudo: bool | None = None
 
 
 class ServerResponse(BaseModel):
@@ -78,6 +82,7 @@ class ServerResponse(BaseModel):
     auth_method: str = "none"
     has_bastion: bool = False
     bastion_host: str | None = None
+    sudo_method: str = "nopasswd"
     created_at: datetime
     updated_at: datetime
 
@@ -94,6 +99,12 @@ class ServerResponse(BaseModel):
             else:
                 data.__dict__["auth_method"] = "none"
             data.__dict__["has_bastion"] = bool(getattr(data, "bastion_host", None))
+            if getattr(data, "encrypted_sudo_password", None):
+                data.__dict__["sudo_method"] = "password"
+            elif getattr(data, "use_ssh_password_for_sudo", False):
+                data.__dict__["sudo_method"] = "ssh_password"
+            else:
+                data.__dict__["sudo_method"] = "nopasswd"
         return data
 
 

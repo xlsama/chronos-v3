@@ -28,10 +28,138 @@ class KBProjectInfo(BaseModel):
     agents_md_content: str = Field(default="", description="AGENTS.md 完整原文")
     agents_md_empty: bool = Field(default=False, description="AGENTS.md 是否为空")
     business_context: str = Field(default="", description="该项目下检索到的相关文档片段")
+    match_confidence: str = Field(default="low", description="目标匹配置信度：high / medium / low")
+    source_categories: list[str] = Field(default_factory=list, description="命中的资料类型")
+    service_keywords: list[str] = Field(default_factory=list, description="候选服务关键词")
+    server_keywords: list[str] = Field(default_factory=list, description="候选服务器关键词")
+    entrypoint_hints: list[str] = Field(default_factory=list, description="接口、URL、端口等入口线索")
 
 
 class KBAgentOutput(BaseModel):
     projects: list[KBProjectInfo] = Field(default_factory=list, description="匹配到的项目列表")
+
+
+_SERVICE_MARKERS = (
+    "api",
+    "service",
+    "svc",
+    "worker",
+    "web",
+    "gateway",
+    "backend",
+    "frontend",
+    "nginx",
+    "redis",
+    "mysql",
+    "postgres",
+    "postgresql",
+    "mongo",
+    "kafka",
+    "queue",
+    "consumer",
+    "producer",
+    "scheduler",
+    "cron",
+    "job",
+)
+_SERVER_MARKERS = ("server", "host", "node", "prod", "staging", "stage", "dev", "test", "bastion")
+
+
+def _unique_keep_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        key = item.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(key)
+    return result
+
+
+def _categorize_source(filename: str) -> str:
+    lower = filename.lower()
+    if "agent" in lower or lower == "service.md":
+        return "架构/资产说明"
+    if any(marker in lower for marker in ("api", "openapi", "swagger", "postman")):
+        return "接口文档"
+    if any(marker in lower for marker in ("deploy", "docker", "compose", "k8s", "helm", "systemd")):
+        return "部署说明"
+    if any(marker in lower for marker in ("incident", "history", "postmortem", "故障", "事故", "复盘")):
+        return "事故记录"
+    return "知识文档"
+
+
+def _extract_source_categories(business_context: str) -> list[str]:
+    filenames = re.findall(r"\*\*\[(.+?)\]\*\*", business_context)
+    categories = [_categorize_source(filename) for filename in filenames]
+    return _unique_keep_order(categories)
+
+
+def _clean_token(token: str) -> str:
+    return token.strip("`'\"()[]{}<>.,;")
+
+
+def _looks_like_uuid(token: str) -> bool:
+    return bool(re.fullmatch(r"[0-9a-f]{8}-[0-9a-f-]{27}", token.lower()))
+
+
+def _extract_tokens(text: str) -> list[str]:
+    backtick_tokens = re.findall(r"`([^`]{2,80})`", text)
+    plain_tokens = re.findall(r"[A-Za-z0-9._:/-]{3,80}", text)
+    tokens = [_clean_token(token) for token in backtick_tokens + plain_tokens]
+    result: list[str] = []
+    for token in tokens:
+        lower = token.lower()
+        if not token or lower.startswith("http://") or lower.startswith("https://"):
+            continue
+        if token.startswith("/") or token.isdigit():
+            continue
+        if _looks_like_uuid(token):
+            continue
+        result.append(token)
+    return _unique_keep_order(result)
+
+
+def _extract_service_keywords(text: str) -> list[str]:
+    candidates = [
+        token
+        for token in _extract_tokens(text)
+        if any(marker in token.lower() for marker in _SERVICE_MARKERS)
+    ]
+    return candidates[:8]
+
+
+def _extract_server_keywords(text: str) -> list[str]:
+    ip_matches = re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text)
+    host_like = [
+        token
+        for token in _extract_tokens(text)
+        if any(marker in token.lower() for marker in _SERVER_MARKERS)
+        or re.fullmatch(r"[A-Za-z0-9-]+\.[A-Za-z0-9.-]+", token)
+    ]
+    return _unique_keep_order(ip_matches + host_like)[:8]
+
+
+def _extract_entrypoint_hints(text: str) -> list[str]:
+    urls = re.findall(r"https?://[^\s)>\]]+", text)
+    method_paths = re.findall(r"\b(?:GET|POST|PUT|DELETE|PATCH)\s+(/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=-]+)", text)
+    common_paths = re.findall(
+        r"(/(?:health|healthz|ready|readyz|live|livez|status|metrics|api(?:/[A-Za-z0-9._-]+){0,4}))",
+        text,
+    )
+    ports = [f"port {port}" for port in re.findall(r":(\d{2,5})\b", text)]
+    return _unique_keep_order(urls + method_paths + common_paths + ports)[:10]
+
+
+def _compute_match_confidence(search_info: dict, agents_info: dict) -> str:
+    has_search = bool(search_info)
+    has_agents = bool(agents_info) and not agents_info.get("agents_md_empty", True)
+    if has_search and has_agents:
+        return "high"
+    if has_search or has_agents:
+        return "medium"
+    return "low"
 
 
 def _build_tools():
@@ -271,11 +399,15 @@ async def run_kb_agent(
                 await event_callback("thinking", {"content": chunk.content})
         await event_callback("thinking_done", {})
 
-    # Build output: merge search results and agents_md results
-    all_project_ids = set(search_results_by_project.keys()) | set(agents_md_results.keys())
+    # Build output: merge search results and agents_md results while preserving candidate order.
+    ordered_project_ids = list(search_results_by_project.keys())
+    for pid in agents_md_results.keys():
+        if pid not in ordered_project_ids:
+            ordered_project_ids.append(pid)
+
     project_infos: list[KBProjectInfo] = []
 
-    for pid in all_project_ids:
+    for pid in ordered_project_ids:
         search_info = search_results_by_project.get(pid, {})
         agents_info = agents_md_results.get(pid, {})
 
@@ -284,6 +416,12 @@ async def run_kb_agent(
         agents_md_empty = agents_info.get("agents_md_empty", True)
         business_context = search_info.get("business_context", "")
         project_description = search_info.get("project_description", "")
+        combined_text = "\n".join(part for part in (agents_md_content, business_context) if part)
+        match_confidence = _compute_match_confidence(search_info, agents_info)
+        source_categories = _extract_source_categories(business_context)
+        service_keywords = _extract_service_keywords(combined_text)
+        server_keywords = _extract_server_keywords(combined_text)
+        entrypoint_hints = _extract_entrypoint_hints(combined_text)
 
         project_infos.append(KBProjectInfo(
             project_id=pid,
@@ -292,6 +430,11 @@ async def run_kb_agent(
             agents_md_content=agents_md_content,
             agents_md_empty=agents_md_empty,
             business_context=business_context,
+            match_confidence=match_confidence,
+            source_categories=source_categories,
+            service_keywords=service_keywords,
+            server_keywords=server_keywords,
+            entrypoint_hints=entrypoint_hints,
         ))
 
     output = KBAgentOutput(projects=project_infos)
@@ -304,6 +447,11 @@ async def run_kb_agent(
             agents_md_len=len(p.agents_md_content),
             agents_md_empty=p.agents_md_empty,
             business_context_len=len(p.business_context),
+            match_confidence=p.match_confidence,
+            source_categories=p.source_categories,
+            service_keywords=p.service_keywords,
+            server_keywords=p.server_keywords,
+            entrypoint_hints=p.entrypoint_hints,
         )
 
     log.info(

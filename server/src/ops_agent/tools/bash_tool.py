@@ -1,4 +1,5 @@
 import asyncio
+import shlex
 import time
 
 from src.lib.logger import get_logger
@@ -8,6 +9,16 @@ log = get_logger(component="bash")
 
 # Default work directory for local bash execution
 _WORK_DIR = "/tmp"
+
+
+def _wrap_local_command(command: str) -> str:
+    wrapped = f"set -o pipefail; {command}"
+    quoted = shlex.quote(wrapped)
+    return (
+        "if command -v bash >/dev/null 2>&1; "
+        f"then bash -lc {quoted}; "
+        f"else sh -c {shlex.quote(command)}; fi"
+    )
 
 
 async def local_bash(command: str) -> dict:
@@ -22,8 +33,9 @@ async def local_bash(command: str) -> dict:
         return {"error": "命令被系统拦截：本地环境禁止执行此命令"}
 
     try:
+        wrapped_command = _wrap_local_command(command)
         proc = await asyncio.create_subprocess_shell(
-            command,
+            wrapped_command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=_WORK_DIR,

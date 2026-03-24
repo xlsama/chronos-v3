@@ -97,6 +97,17 @@ async def gather_context_node(state: OpsState) -> dict:
             for p in kb_result.projects:
                 kb_project_ids.append(p.project_id)
                 project_parts = [f"匹配项目: {p.project_name} (ID: {p.project_id})"]
+                targeting_lines = [f"- 置信度: {p.match_confidence}"]
+                if p.source_categories:
+                    targeting_lines.append(f"- 命中文档类型: {', '.join(p.source_categories)}")
+                if p.service_keywords:
+                    targeting_lines.append(f"- 候选服务关键词: {', '.join(p.service_keywords)}")
+                if p.server_keywords:
+                    targeting_lines.append(f"- 候选服务器关键词: {', '.join(p.server_keywords)}")
+                if p.entrypoint_hints:
+                    targeting_lines.append(f"- 入口线索: {', '.join(p.entrypoint_hints)}")
+                if len(targeting_lines) > 1:
+                    project_parts.append("### 目标锁定提示\n" + "\n".join(targeting_lines))
                 if p.agents_md_content and not p.agents_md_empty:
                     project_parts.append(f"### AGENTS.md\n{p.agents_md_content}")
                 elif p.agents_md_empty:

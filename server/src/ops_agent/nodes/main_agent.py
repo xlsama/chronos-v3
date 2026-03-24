@@ -1,5 +1,4 @@
 import asyncio
-import json
 import time
 
 from langchain_core.messages import AIMessage, SystemMessage
@@ -164,10 +163,11 @@ def _build_skills_context(
     xml_lines = [
         "\n<available_skills>",
         "使用规则:",
-        '1. 渐进加载: 先读 SKILL.md 主体获取流程概要；scripts/references 等子文件只在执行到相关步骤时再按需加载（read_skill("slug/scripts/xxx")）。',
-        "2. 上下文控制: 技能内容较长时，在推理中总结关键步骤和命令，不要大段复制粘贴原文。",
-        "3. 多技能协调: 多个技能同时匹配时，选最小必要集合，声明使用顺序和原因。",
-        "4. 缺失回退: 若匹配的技能无法读取或不适用当前场景，简要说明原因，用通用排查方法继续。",
+        '1. 通用技能优先: 若存在 `incident-triage`，默认先 `read_skill("incident-triage")` 获取分诊骨架，再切到专项技能。',
+        '2. 渐进加载: 先读 SKILL.md 主体获取流程概要；scripts/references 等子文件只在执行到相关步骤时再按需加载（read_skill("slug/scripts/xxx")）。',
+        "3. 上下文控制: 技能内容较长时，在推理中总结关键步骤和命令，不要大段复制粘贴原文。",
+        "4. 多技能协调: 多个技能同时匹配时，选最小必要集合，声明使用顺序和原因。",
+        "5. 缺失回退: 若匹配的技能无法读取或不适用当前场景，简要说明原因，用通用排查方法继续。",
     ]
 
     if len(available) > _COMPACT_THRESHOLD:
@@ -236,99 +236,9 @@ def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> A
     return AIMessage(content=response.content or "")
 
 
-def _collect_tool_outputs(messages: list) -> dict[str, list[str]]:
-    """Collect ToolMessage contents grouped by originating tool name."""
-    tool_names_by_id: dict[str, str] = {}
-    grouped: dict[str, list[str]] = {}
-
-    for msg in messages:
-        tool_calls = getattr(msg, "tool_calls", None)
-        if tool_calls:
-            for tc in tool_calls:
-                tool_call_id = tc.get("id")
-                tool_name = tc.get("name")
-                if tool_call_id and tool_name:
-                    tool_names_by_id[tool_call_id] = tool_name
-
-        tool_call_id = getattr(msg, "tool_call_id", None)
-        if tool_call_id:
-            tool_name = tool_names_by_id.get(tool_call_id)
-            if tool_name:
-                grouped.setdefault(tool_name, []).append(str(getattr(msg, "content", "")))
-
-    return grouped
-
-
-def _is_no_server_output(content: str) -> bool:
-    text = content.strip()
-    if "当前没有注册任何服务器" in text:
-        return True
-    if text == "[]":
-        return True
-    try:
-        parsed = json.loads(text)
-    except Exception:
-        return False
-    return isinstance(parsed, list) and len(parsed) == 0
-
-
-def _has_successful_service_probe(tool_outputs: dict[str, list[str]]) -> bool:
-    for output in tool_outputs.get("service_exec", []):
-        if not output.strip():
-            continue
-        if any(err in output for err in ("错误:", "执行失败:", "执行异常:", "命令被系统拦截")):
-            continue
-        return True
-    return False
-
-
-def _has_application_hang_signal(tool_outputs: dict[str, list[str]]) -> bool:
-    outputs = tool_outputs.get("bash", []) + tool_outputs.get("ssh_bash", [])
-    for output in outputs:
-        if "命令执行超时" in output:
-            return True
-        if "Request completely sent off" in output and "< HTTP/" not in output:
-            return True
-        if "Connected to " in output and "0:00:09" in output and "< HTTP/" not in output:
-            return True
-    return False
-
-
 def _build_runtime_hints(state: OpsState) -> str:
-    tool_outputs = _collect_tool_outputs(state["messages"])
-    hints: list[str] = []
-
-    no_registered_servers = any(
-        _is_no_server_output(output)
-        for output in tool_outputs.get("list_servers", [])
-    )
-
-    if no_registered_servers:
-        hints.append(
-            "list_servers() 已经明确表明当前没有已登记的 SSH 服务器资产；这不是工具异常，"
-            "除非用户明确说明资产刚刚更新，否则不要再次调用 list_servers()."
-        )
-        hints.append("不要继续向用户追问系统中不存在的 server_id/UUID。")
-        if state.get("ask_human_count", 0) > 0:
-            hints.append("用户已经无法提供 server_id，禁止继续追问同类问题。")
-
-    if _has_successful_service_probe(tool_outputs):
-        hints.append("数据库/缓存/中间件探测成功，只能证明依赖可连，不能证明业务应用健康。")
-
-    if no_registered_servers and _has_application_hang_signal(tool_outputs):
-        hints.append(
-            "现有证据已满足“业务端口可连但 HTTP 无响应”的 hang 信号。"
-            "在依赖服务探测成功的前提下，应优先判断业务服务进程 hang、假活、内存/OOM 或阻塞。"
-        )
-        hints.append(
-            "当前应调用 complete(answer_md=...) 输出诊断结论、证据链，"
-            "并说明需要先登记服务器资产后才能继续 SSH 重启或日志排查。"
-        )
-
-    if not hints:
-        return ""
-
-    return "## 重要运行时事实\n" + "\n".join(f"- {hint}" for hint in hints)
+    # Procedural guidance belongs in reusable skills instead of runtime hints.
+    return ""
 
 
 async def main_agent_node(state: OpsState) -> dict:
@@ -363,14 +273,13 @@ async def main_agent_node(state: OpsState) -> dict:
         history_summary,
         state["description"],
     )
-    runtime_hints_context = _build_runtime_hints(state)
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         description=state["description"],
         severity=state["severity"],
         incident_history_context=history_context,
         kb_context=kb_context,
         skills_context=skills_context,
-        runtime_hints_context=runtime_hints_context,
+        runtime_hints_context="",
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]

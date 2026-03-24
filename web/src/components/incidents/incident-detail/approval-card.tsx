@@ -14,9 +14,10 @@ interface ApprovalCardProps {
   toolName?: string;
   serverInfo?: string;
   serviceInfo?: string;
+  incidentStatus?: string;
 }
 
-export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, serviceInfo }: ApprovalCardProps) {
+export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, serviceInfo, incidentStatus }: ApprovalCardProps) {
   const decidedApprovals = useIncidentStreamStore((s) => s.decidedApprovals);
   const setApprovalDecided = useIncidentStreamStore(
     (s) => s.setApprovalDecided,
@@ -136,31 +137,42 @@ export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, servi
       )}
 
       {approvalId && !resolvedDecision && (
-        <div className="mt-3 flex gap-2">
-          <Button
-            size="sm"
-            onClick={() => decideMutation.mutate("approved")}
-            disabled={decideMutation.isPending}
-            data-testid="approve-button"
-          >
-            {decideMutation.isPending && decideMutation.variables === "approved" && (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            )}
-            批准
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => decideMutation.mutate("rejected")}
-            disabled={decideMutation.isPending}
-            data-testid="reject-button"
-          >
-            {decideMutation.isPending && decideMutation.variables === "rejected" && (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            )}
-            拒绝
-          </Button>
-        </div>
+        (incidentStatus === "stopped" || incidentStatus === "resolved") ? (
+          <div className="mt-3">
+            <span
+              className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600"
+              data-testid="approval-decision"
+            >
+              已过期
+            </span>
+          </div>
+        ) : (
+          <div className="mt-3 flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => decideMutation.mutate("approved")}
+              disabled={decideMutation.isPending}
+              data-testid="approve-button"
+            >
+              {decideMutation.isPending && decideMutation.variables === "approved" && (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              )}
+              批准
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => decideMutation.mutate("rejected")}
+              disabled={decideMutation.isPending}
+              data-testid="reject-button"
+            >
+              {decideMutation.isPending && decideMutation.variables === "rejected" && (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              )}
+              拒绝
+            </Button>
+          </div>
+        )
       )}
 
       {resolvedDecision && (

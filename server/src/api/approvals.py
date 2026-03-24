@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas import ApprovalDecisionRequest, ApprovalResponse
 from src.db.connection import get_session
 from src.db.models import ApprovalRequest, Incident
-from src.lib.errors import NotFoundError
+from src.lib.errors import BadRequestError, NotFoundError
 from src.ops_agent.event_publisher import EventPublisher
 from src.services.approval_service import ApprovalService
 
@@ -32,6 +32,14 @@ async def decide_approval(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
+    # Check if the incident is still active before deciding
+    approval_record = await session.get(ApprovalRequest, approval_id)
+    if not approval_record:
+        raise NotFoundError("Approval request not found")
+    incident = await session.get(Incident, approval_record.incident_id)
+    if incident and incident.status in ("stopped", "resolved"):
+        raise BadRequestError("事件已终止，无法审批")
+
     service = ApprovalService(session=session)
     approval = await service.decide(approval_id, decision=body.decision, decided_by=body.decided_by)
 
@@ -49,7 +57,6 @@ async def decide_approval(
     )
 
     # Resume graph for both approved and rejected decisions
-    incident = await session.get(Incident, approval.incident_id)
     if incident and incident.thread_id:
         runner = request.app.state.agent_runner
         background_tasks.add_task(

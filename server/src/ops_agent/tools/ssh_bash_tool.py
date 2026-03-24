@@ -68,6 +68,7 @@ async def get_connector(server_id: str) -> SSHConnector:
         service = ServerService(session=session, crypto=crypto)
         password, private_key = service.get_decrypted_credentials(server)
         bastion_password, bastion_private_key = service.get_decrypted_bastion_credentials(server)
+        sudo_password = service.get_sudo_password(server)
 
         connector = SSHConnector(
             host=server.host,
@@ -80,6 +81,7 @@ async def get_connector(server_id: str) -> SSHConnector:
             bastion_username=server.bastion_username,
             bastion_password=bastion_password,
             bastion_private_key=bastion_private_key,
+            sudo_password=sudo_password,
         )
 
         async with _registry_lock:

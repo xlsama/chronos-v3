@@ -44,7 +44,7 @@ ssh_bash(server_id, "ping -c 5 -W 3 <目标地址>")
 ssh_bash(server_id, "timeout 5 bash -c 'echo > /dev/tcp/<目标IP>/<端口>' 2>&1 && echo 'PORT OPEN' || echo 'PORT CLOSED/FILTERED'")
 
 # curl 方式（HTTP/HTTPS）
-ssh_bash(server_id, "curl -s -o /dev/null -w 'HTTP %{http_code} | Time: %{time_total}s | Connect: %{time_connect}s' --connect-timeout 5 http://<目标>:<端口>/ 2>&1")
+ssh_bash(server_id, "curl -sS -o /dev/null -w 'HTTP %{http_code} | Time: %{time_total}s | Connect: %{time_connect}s\\n' --connect-timeout 5 http://<目标>:<端口>/ 2>&1")
 
 # nc 方式
 ssh_bash(server_id, "nc -zv -w 3 <目标IP> <端口> 2>&1")

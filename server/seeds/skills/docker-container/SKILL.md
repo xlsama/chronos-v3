@@ -23,12 +23,35 @@ metadata:
 2. 调用 `list_services()` 获取已注册服务
 3. 结合事件描述，确定目标服务器和相关容器
 
+## 全局优先级（必须遵守）
+
+- 当事件是”接口 pending / 端口监听但无响应 / 服务挂住 / 需要快速恢复”，并且目标机存在 Docker 迹象时，**先排查 Docker 容器层面，再深入应用进程层面**。
+- `docker ps` 失败时，不要立刻说“没有容器”；要先区分：
+  - `docker` 命令不在 PATH
+  - Docker daemon 未启动
+  - 当前用户无权限访问 Docker socket
+- 首轮 Docker 探测必须保留原始 stderr，不要用 `2>/dev/null` 或把失败藏在管道后面。
+- 如果错误明确是 `permission denied while trying to connect to the Docker daemon socket`，下一步应走审批后执行 `sudo docker ps` / `sudo docker ps -a` / `sudo docker logs`，而不是继续猜测“非容器部署”。
+- 对大多数容器化业务，默认链路是：
+  1. `docker ps`
+  2. `docker ps -a`
+  3. 找到承载故障端口的候选容器
+  4. `docker logs --tail`
+  5. 判断是否 OOM / hang / CrashLoop
+  6. 必要时 `docker restart`
+
 ## 第一步：容器状态总览
 
 通过 `ssh_bash(server_id, "...")` 执行：
 
 ```bash
-echo '===== Docker 版本 ====='; docker version --format '{{.Server.Version}}' 2>/dev/null || echo 'docker not available'; echo ''; echo '===== 运行中容器 ====='; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null; echo ''; echo '===== 全部容器（含停止） ====='; docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}' 2>/dev/null; echo ''; echo '===== 容器资源使用 ====='; docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}' 2>/dev/null
+echo '===== Docker 命令路径 ====='; command -v docker 2>&1 || echo 'docker binary not found'; echo ''; echo '===== Docker 服务 ====='; systemctl status docker --no-pager 2>&1 | head -20 || echo 'systemctl not available'; echo ''; echo '===== Docker 版本 ====='; docker version --format '{{.Server.Version}}' 2>&1; echo ''; echo '===== 运行中容器 ====='; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>&1; echo ''; echo '===== 全部容器（含停止） ====='; docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}' 2>&1; echo ''; echo '===== 容器资源使用 ====='; docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}' 2>&1
+```
+
+如果事件涉及某个业务端口，先用容器端口映射反查候选容器：
+
+```bash
+ssh_bash(server_id, "docker ps --format 'table {{.Names}}\t{{.Ports}}' 2>&1 | grep '<端口>'")
 ```
 
 ## 第二步：异常容器排查
@@ -41,6 +64,14 @@ ssh_bash(server_id, "docker logs --tail 100 --timestamps <容器名>")
 
 # 查看指定时间段日志
 ssh_bash(server_id, "docker logs --since '1h' <容器名>")
+```
+
+### 快速恢复（需要审批）
+
+如果日志和状态已经证明容器只是挂住、且风险可接受，优先恢复动作是：
+
+```bash
+ssh_bash(server_id, "docker restart <容器名>")
 ```
 
 ### 容器详情
@@ -77,7 +108,7 @@ ssh_bash(server_id, "docker network inspect <网络名>")
 
 # 容器内网络连通性测试
 ssh_bash(server_id, "docker exec <容器名> ping -c 2 <目标地址> 2>/dev/null || echo 'ping not available'")
-ssh_bash(server_id, "docker exec <容器名> curl -s -o /dev/null -w '%{http_code}' http://<目标> 2>/dev/null || echo 'curl not available'")
+ssh_bash(server_id, "docker exec <容器名> curl -sS -o /dev/null -w '%{http_code}\\n' http://<目标> 2>&1 || echo 'curl not available'")
 
 # 端口映射检查
 ssh_bash(server_id, "docker port <容器名>")

@@ -13,11 +13,17 @@ def test_shell_safety_treats_timeout_wrapped_tcp_probe_as_read():
     assert ShellSafety.classify(command, local=True) is CommandType.READ
 
 
+def test_shell_safety_treats_pwd_and_readlink_as_read():
+    command = "pwd; echo '---'; readlink /proc/20450/cwd"
+
+    assert ShellSafety.classify(command) is CommandType.READ
+
+
 def test_service_safety_treats_mongodb_ping_as_read():
     assert ServiceSafety.classify("mongodb", '{"ping": 1}') is CommandType.READ
 
 
-def test_runtime_hints_call_out_missing_server_assets_and_app_hang():
+def test_runtime_hints_are_disabled_even_when_state_has_signals():
     state = {
         "messages": [
             SimpleNamespace(
@@ -52,9 +58,15 @@ def test_runtime_hints_call_out_missing_server_assets_and_app_hang():
         "ask_human_count": 1,
     }
 
-    hints = _build_runtime_hints(state)
+    assert _build_runtime_hints(state) == ""
 
-    assert "没有已登记的 SSH 服务器资产" in hints
-    assert "用户已经无法提供 server_id" in hints
-    assert "业务端口" in hints
-    assert "complete(answer_md=...)" in hints
+
+def test_runtime_hints_are_disabled_on_initial_turn():
+    state = {
+        "messages": [],
+        "ask_human_count": 0,
+        "kb_summary": None,
+        "description": "用户反馈页面接口一直 pending，无响应",
+    }
+
+    assert _build_runtime_hints(state) == ""

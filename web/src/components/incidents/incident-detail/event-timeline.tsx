@@ -530,6 +530,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                           toolName={approvalToolName}
                           serverInfo={approvalServerInfo}
                           serviceInfo={approvalServiceInfo}
+                          incidentStatus={incidentStatus}
                         />
                       </motion.div>
                     );

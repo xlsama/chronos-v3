@@ -25,13 +25,23 @@ metadata:
 2. 调用 `list_services()` 获取已注册的数据库/缓存/监控服务（返回 id、name、service_type、host、port、status）
 3. 结合事件描述和知识库上下文，确定本次排查的目标服务器
 
+## 全局优先级（必须遵守）
+
+- 只要目标机出现 `docker.service`、`containerd.service`、`dockerd`、`containerd-shim`、`Dockerfile`、镜像构建脚本等容器化证据，**下一步必须优先走 Docker**。
+- 在这种情况下，先读取 `docker-container` 技能，再执行 Docker 诊断；不要先跳去看应用进程细节。
+- 如果 `docker ps` 失败，不要立刻认定“没有容器”；要继续区分是 **PATH 缺失**、**daemon 未启动**、还是 **权限问题**。
+- 首轮 Docker / systemd / curl 探测必须保留原始 stderr，不要用 `2>/dev/null` 或 `| head ... || echo ...` 把真实错误吞掉。
+- 如果首轮 Docker 探测报 `permission denied`，先把它识别为权限问题；必要时走审批后改用 `sudo docker ...` 验证，不要把空输出或权限错误当成“没有容器”。
+
 ## 第一步：服务器全貌（必须执行）
 
 将以下命令整体作为一条 command 传入 `ssh_bash(server_id, "...")` 执行：
 
 ```bash
-echo '===== 主机信息 ====='; hostname; hostname -I 2>/dev/null; uname -a; cat /etc/os-release 2>/dev/null | head -5; echo ''; echo '===== 资源概况 ====='; uptime; nproc; free -h; df -h -x tmpfs -x devtmpfs 2>/dev/null || df -h; echo ''; echo '===== systemd 服务 ====='; command -v systemctl >/dev/null 2>&1 && systemctl list-units --type=service --state=running --no-pager --no-legend 2>/dev/null | head -40 || echo 'systemd not available'; echo ''; echo '===== Supervisor ====='; supervisorctl status 2>/dev/null || echo 'not available'; echo ''; echo '===== PM2 ====='; pm2 list 2>/dev/null || echo 'not available'; echo ''; echo '===== Docker 容器 ====='; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || echo 'not available'; echo ''; echo '===== 监听端口 ====='; ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo 'ss/netstat not available'; echo ''; echo '===== Crontab ====='; crontab -l 2>/dev/null || echo 'no crontab'; echo ''; echo '===== Top 进程(内存) ====='; ps -eo pid,user,%cpu,%mem,comm --sort=-%mem | head -15
+echo '===== 主机信息 ====='; hostname; hostname -I 2>&1; uname -a; cat /etc/os-release 2>&1 | head -5; echo ''; echo '===== 资源概况 ====='; uptime; nproc; free -h; df -h -x tmpfs -x devtmpfs 2>&1 || df -h; echo ''; echo '===== systemd 服务 ====='; systemctl list-units --type=service --state=running --no-pager --no-legend 2>&1 | head -40 || echo 'systemd not available'; echo ''; echo '===== Supervisor ====='; supervisorctl status 2>&1 || echo 'supervisorctl not available'; echo ''; echo '===== PM2 ====='; pm2 list 2>&1 || echo 'pm2 not available'; echo ''; echo '===== Docker 服务 ====='; systemctl status docker --no-pager 2>&1 | head -20 || echo 'docker service status unavailable'; echo ''; echo '===== Docker 容器 ====='; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>&1; echo ''; echo '===== 全部容器（含停止） ====='; docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.CreatedAt}}' 2>&1; echo ''; echo '===== 监听端口 ====='; ss -tlnp 2>&1 || netstat -tlnp 2>&1 || echo 'ss/netstat not available'; echo ''; echo '===== Crontab ====='; crontab -l 2>&1 || echo 'no crontab'; echo ''; echo '===== Top 进程(内存) ====='; ps -eo pid,user,%cpu,%mem,comm --sort=-%mem | head -15
 ```
+
+如果上一步发现 Docker 服务正在运行、存在容器、或容器相关进程/构建脚本，请**立即切换到 `docker-container` 技能**继续排查，不要先深入应用进程层。
 
 ## 第二步：服务探测（根据第一步结果选择执行）
 
@@ -54,16 +64,16 @@ echo '===== 主机信息 ====='; hostname; hostname -I 2>/dev/null; uname -a; ca
 
 ```bash
 # MySQL/MariaDB（端口 3306）
-mysql -u root -e 'SELECT version();' 2>/dev/null || echo 'mysql connect failed'
+mysql -u root -e 'SELECT version();' 2>&1
 
 # PostgreSQL（端口 5432）
-psql -U postgres -c 'SELECT version();' 2>/dev/null || echo 'psql connect failed'
+psql -U postgres -c 'SELECT version();' 2>&1
 
 # Redis（端口 6379）
-redis-cli PING 2>/dev/null || echo 'redis not available'
+redis-cli PING 2>&1
 
 # MongoDB（端口 27017）
-mongosh --eval 'db.runCommand({ping:1})' 2>/dev/null || echo 'mongo not available'
+mongosh --eval 'db.runCommand({ping:1})' 2>&1
 ```
 
 > 数据库详细排查请参考 **数据库排查** 技能。
@@ -73,7 +83,7 @@ mongosh --eval 'db.runCommand({ping:1})' 2>/dev/null || echo 'mongo not availabl
 如果需要检查近期异常，通过 `ssh_bash(server_id, "...")` 执行：
 
 ```bash
-echo '===== 最近系统错误日志 ====='; journalctl --since '1h ago' -p err --no-pager 2>/dev/null | tail -30 || echo 'journalctl not available'; echo ''; echo '===== Nginx 错误日志 ====='; tail -20 /var/log/nginx/error.log 2>/dev/null || echo 'no nginx error log'; echo ''; echo '===== Docker 异常容器 ====='; docker ps -a --filter 'status=exited' --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null | head -10 || echo 'docker not available'
+echo '===== 最近系统错误日志 ====='; journalctl --since '1h ago' -p err --no-pager 2>&1 | tail -30; echo ''; echo '===== Nginx 错误日志 ====='; tail -20 /var/log/nginx/error.log 2>&1; echo ''; echo '===== Docker 异常容器 ====='; docker ps -a --filter 'status=exited' --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' 2>&1 | head -10
 ```
 
 ## 结果整理

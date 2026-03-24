@@ -56,6 +56,8 @@ class Server(Base):
     bastion_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     encrypted_bastion_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     encrypted_bastion_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_sudo_password: Mapped[str | None] = mapped_column(Text, nullable=True)
+    use_ssh_password_for_sudo: Mapped[bool] = mapped_column(default=False)
     status: Mapped[str] = mapped_column(String(20), default="unknown")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

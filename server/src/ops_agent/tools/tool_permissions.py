@@ -84,6 +84,26 @@ def _strip_timeout_wrapper(cmd: str) -> str:
     return text
 
 
+_SUDO_FLAGS_WITH_ARG = frozenset("ugpCrtD")
+
+
+def _strip_sudo_prefix(cmd: str) -> tuple[str, bool]:
+    """Strip 'sudo [-flags]' prefix for classification. Returns (inner_cmd, had_sudo)."""
+    tokens = cmd.split()
+    if not tokens or tokens[0] != "sudo":
+        return cmd, False
+    i = 1
+    while i < len(tokens) and tokens[i].startswith("-"):
+        flag = tokens[i]
+        i += 1
+        # Flags like -u, -g, -p take a separate argument
+        if len(flag) == 2 and flag[1] in _SUDO_FLAGS_WITH_ARG and i < len(tokens):
+            i += 1
+    if i >= len(tokens):
+        return "", True
+    return " ".join(tokens[i:]), True
+
+
 # ═══════════════════════════════════════════
 # Shell Safety (ssh_bash + bash shared)
 # ═══════════════════════════════════════════
@@ -114,6 +134,7 @@ _LOCAL_BLOCKED_PREFIXES = [
 
 # Dangerous patterns (needs approval + red warning)
 _DANGEROUS_PATTERNS = [
+    r"(^|[;&|]\s*)su\b",
     r"rm\s+-rf\b",
     r"mkfs\.",
     r"dd\s+.*of=/dev/",
@@ -158,6 +179,10 @@ _READ_PATTERNS = [
     r"\b(mysql|mariadb)\b.*-e\s+[\"']\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b",
     r"\bpsql\b.*-c\s+[\"']\s*(SELECT|SHOW|EXPLAIN)\b",
     r"\bpsql\b\s+.*(-l|--list)\b",
+    r"^java\s+-version\b",
+    r"^node\s+(-v|--version)\b",
+    r"^npm\s+(-v|--version)\b",
+    r"^yarn\s+(-v|--version)\b",
     r"\betcdctl\s+(get|endpoint\s+(health|status)|member\s+list|alarm\s+list|version)\b",
     r"\brabbitmqctl\s+(status|cluster_status|list_queues|list_exchanges|list_bindings|list_connections|list_channels|list_consumers|list_users|list_vhosts|list_permissions)\b",
 ]
@@ -166,13 +191,16 @@ _READ_PATTERNS = [
 _READ_PREFIXES = [
     "ls", "cat", "head", "tail", "less", "more", "grep", "awk", "sed",
     "echo", "nproc", "command",
-    "find", "which", "whereis", "whoami", "hostname", "uname",
+    "find", "which", "whereis", "whoami", "hostname", "uname", "pwd", "readlink",
     "df", "du", "free", "top", "htop", "vmstat", "iostat", "sar",
     "ps", "pgrep", "lsof", "ss", "netstat", "ip", "ifconfig",
     "ping", "traceroute", "dig", "nslookup", "curl",
     "uptime", "w", "who", "last", "dmesg", "journalctl",
     "systemctl status", "systemctl is-active", "systemctl list-units",
     "docker ps", "docker logs", "docker inspect", "docker stats",
+    "docker version", "docker info", "docker top", "docker port",
+    "docker network ls", "docker network inspect",
+    "docker volume ls", "docker images", "docker system df",
     "docker compose ps", "docker compose logs", "docker compose top",
     "docker compose config", "docker compose images", "docker compose version",
     "kubectl get", "kubectl describe", "kubectl logs", "kubectl top",
@@ -190,13 +218,16 @@ _READ_PREFIXES = [
 _LOCAL_READ_PREFIXES = [
     "ls", "cat", "head", "tail", "less", "more", "grep", "awk", "sed",
     "echo", "nproc", "command",
-    "find", "which", "whereis", "whoami", "hostname", "uname",
+    "find", "which", "whereis", "whoami", "hostname", "uname", "pwd", "readlink",
     "df", "du", "free", "top", "htop", "vmstat", "iostat", "sar",
     "ps", "pgrep", "lsof", "ss", "netstat", "ip", "ifconfig",
     "ping", "traceroute", "dig", "nslookup", "curl",
     "uptime", "w", "who", "last", "dmesg", "journalctl",
     "systemctl status", "systemctl is-active", "systemctl list-units",
     "docker ps", "docker logs", "docker inspect", "docker stats",
+    "docker version", "docker info", "docker top", "docker port",
+    "docker network ls", "docker network inspect",
+    "docker volume ls", "docker images", "docker system df",
     "docker compose ps", "docker compose logs", "docker compose top",
     "docker compose config", "docker compose images", "docker compose version",
     "kubectl get", "kubectl describe", "kubectl logs", "kubectl top",
@@ -247,6 +278,7 @@ class ShellSafety:
 
         # 4. Split compound commands then pipes — quote-aware
         read_prefixes = _LOCAL_READ_PREFIXES if local else _READ_PREFIXES
+        has_sudo = False
 
         sub_commands = _split_compounds(cmd)
         for sub_cmd in sub_commands:
@@ -255,16 +287,22 @@ class ShellSafety:
                 if not part:
                     continue
                 normalized_part = _strip_timeout_wrapper(part)
-                is_read = any(normalized_part.startswith(prefix) for prefix in read_prefixes)
+                inner, is_sudo = _strip_sudo_prefix(normalized_part)
+                if is_sudo:
+                    has_sudo = True
+                check_part = inner if is_sudo else normalized_part
+                is_read = any(check_part.startswith(prefix) for prefix in read_prefixes)
                 if not is_read:
                     is_read = any(
-                        re.search(p, normalized_part, re.IGNORECASE)
+                        re.search(p, check_part, re.IGNORECASE)
                         for p in _READ_PATTERNS
                     )
                 if not is_read:
                     return CommandType.WRITE
 
-        # 5. All parts in whitelist → READ
+        # 5. All parts in whitelist
+        if has_sudo:
+            return CommandType.WRITE  # sudo + read-only → medium risk
         return CommandType.READ
 
 

@@ -25,6 +25,8 @@ class ServerService:
         bastion_username: str | None = None,
         bastion_password: str | None = None,
         bastion_private_key: str | None = None,
+        sudo_password: str | None = None,
+        use_ssh_password_for_sudo: bool = False,
     ) -> Server:
         if not host:
             raise ValidationError("SSH server requires host")
@@ -52,6 +54,10 @@ class ServerService:
             encrypted_bastion_private_key=(
                 self.crypto.encrypt(bastion_private_key) if bastion_private_key else None
             ),
+            encrypted_sudo_password=(
+                self.crypto.encrypt(sudo_password) if sudo_password else None
+            ),
+            use_ssh_password_for_sudo=use_ssh_password_for_sudo,
         )
         self.session.add(server)
         await self.session.commit()
@@ -73,6 +79,7 @@ class ServerService:
         for field in (
             "name", "description", "host", "port", "username",
             "bastion_host", "bastion_port", "bastion_username",
+            "use_ssh_password_for_sudo",
         ):
             if field in kwargs:
                 setattr(server, field, kwargs[field])
@@ -90,6 +97,9 @@ class ServerService:
         if "bastion_private_key" in kwargs:
             bk = kwargs["bastion_private_key"]
             server.encrypted_bastion_private_key = self.crypto.encrypt(bk) if bk else None
+        if "sudo_password" in kwargs:
+            sp = kwargs["sudo_password"]
+            server.encrypted_sudo_password = self.crypto.encrypt(sp) if sp else None
 
         await self.session.commit()
         await self.session.refresh(server)
@@ -129,3 +139,11 @@ class ServerService:
             else None
         )
         return password, private_key
+
+    def get_sudo_password(self, server: Server) -> str | None:
+        """Get sudo password: dedicated sudo_password > SSH password (if enabled) > None."""
+        if server.encrypted_sudo_password:
+            return self.crypto.decrypt(server.encrypted_sudo_password)
+        if server.use_ssh_password_for_sudo and server.encrypted_password:
+            return self.crypto.decrypt(server.encrypted_password)
+        return None
