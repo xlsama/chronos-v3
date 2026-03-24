@@ -26,7 +26,7 @@ class ServerService:
         bastion_password: str | None = None,
         bastion_private_key: str | None = None,
         sudo_password: str | None = None,
-        use_ssh_password_for_sudo: bool = False,
+        use_ssh_password_for_sudo: bool = True,
     ) -> Server:
         if not host:
             raise ValidationError("SSH server requires host")

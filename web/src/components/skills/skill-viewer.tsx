@@ -69,7 +69,7 @@ export function SkillViewer({ skillSlug, onClose, autoEdit, readOnly }: SkillVie
 
   return (
     <Dialog open={!!skillSlug} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[80vh] flex-col sm:max-w-[80vw]">
+      <DialogContent className="flex h-[80vh] flex-col overflow-hidden sm:max-w-[80vw]">
         <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
           <div className="min-w-0 space-y-1">
             <DialogTitle className="truncate">
@@ -116,6 +116,7 @@ export function SkillViewer({ skillSlug, onClose, autoEdit, readOnly }: SkillVie
         </DialogHeader>
         <div className="min-h-0 flex-1">
           <QueryContent
+            className="h-full"
             isLoading={isLoading}
             data={skill}
             skeleton={

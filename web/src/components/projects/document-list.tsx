@@ -146,7 +146,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
                   <div className="flex-1">
                     <p className="text-sm font-medium">{doc.filename}</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {dayjs(doc.created_at).fromNow()}
+                      {dayjs(doc.updated_at).fromNow()}
                     </p>
                   </div>
                   {doc.doc_type === "agents_config" && (

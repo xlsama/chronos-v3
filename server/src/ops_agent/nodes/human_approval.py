@@ -44,11 +44,18 @@ async def human_approval_node(state: OpsState) -> dict:
             }
 
         # Approved: clear approval state, continue to tools
-        return {
+        updates: dict = {
             "needs_approval": False,
             "pending_tool_call": None,
             "approval_decision": None,
         }
+        # sudo 审批通过后，同事件内后续 sudo 免审
+        pending = state.get("pending_tool_call")
+        if pending:
+            cmd = pending.get("args", {}).get("command", "")
+            if cmd.lstrip().startswith("sudo"):
+                updates["sudo_approved"] = True
+        return updates
 
     # Initial entry: extract pending tool call that needs approval
     last_message = state["messages"][-1]

@@ -190,7 +190,7 @@ _READ_PATTERNS = [
 # SSH read-only command prefixes (whitelist)
 _READ_PREFIXES = [
     "ls", "cat", "head", "tail", "less", "more", "grep", "awk", "sed",
-    "echo", "nproc", "command",
+    "echo", "nproc", "command", "sleep",
     "find", "which", "whereis", "whoami", "hostname", "uname", "pwd", "readlink",
     "df", "du", "free", "top", "htop", "vmstat", "iostat", "sar",
     "ps", "pgrep", "lsof", "ss", "netstat", "ip", "ifconfig",
@@ -217,7 +217,7 @@ _READ_PREFIXES = [
 # Local read-only command prefixes (aligned with SSH _READ_PREFIXES)
 _LOCAL_READ_PREFIXES = [
     "ls", "cat", "head", "tail", "less", "more", "grep", "awk", "sed",
-    "echo", "nproc", "command",
+    "echo", "nproc", "command", "sleep",
     "find", "which", "whereis", "whoami", "hostname", "uname", "pwd", "readlink",
     "df", "du", "free", "top", "htop", "vmstat", "iostat", "sar",
     "ps", "pgrep", "lsof", "ss", "netstat", "ip", "ifconfig",
@@ -248,7 +248,11 @@ _LOCAL_READ_PREFIXES = [
 
 class ShellSafety:
     @staticmethod
-    def classify(command: str, local: bool = False) -> CommandType:
+    def classify(
+        command: str,
+        local: bool = False,
+        sudo_pre_approved: bool = False,
+    ) -> CommandType:
         """Classify a shell command. local=True enables stricter local execution policy."""
         cmd = command.strip()
 
@@ -301,7 +305,7 @@ class ShellSafety:
                     return CommandType.WRITE
 
         # 5. All parts in whitelist
-        if has_sudo:
+        if has_sudo and not sudo_pre_approved:
             return CommandType.WRITE  # sudo + read-only → medium risk
         return CommandType.READ
 

@@ -377,6 +377,7 @@ async def route_decision(state: OpsState) -> str:
             cmd_type = ShellSafety.classify(
                 tool_call["args"].get("command", ""),
                 local=(name == "bash"),
+                sudo_pre_approved=state.get("sudo_approved", False),
             )
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
                 log.info("route_decision: need_approval", tool=name, cmd_type=cmd_type.name)

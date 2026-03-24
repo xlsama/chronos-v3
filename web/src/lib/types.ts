@@ -99,6 +99,7 @@ export interface ProjectDocument {
   status: string;
   error_message: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ProjectDocumentDetail extends ProjectDocument {

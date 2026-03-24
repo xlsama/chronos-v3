@@ -57,7 +57,7 @@ class Server(Base):
     encrypted_bastion_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     encrypted_bastion_private_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     encrypted_sudo_password: Mapped[str | None] = mapped_column(Text, nullable=True)
-    use_ssh_password_for_sudo: Mapped[bool] = mapped_column(default=False)
+    use_ssh_password_for_sudo: Mapped[bool] = mapped_column(default=True)
     status: Mapped[str] = mapped_column(String(20), default="unknown")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -136,6 +136,9 @@ class ProjectDocument(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     project: Mapped["Project"] = relationship(back_populates="documents")
     chunks: Mapped[list["DocumentChunk"]] = relationship(

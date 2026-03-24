@@ -119,7 +119,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
 
   return (
     <Dialog open={!!documentId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[90vh] flex-col sm:max-w-[80vw]">
+      <DialogContent className="flex h-[90vh] flex-col overflow-hidden sm:max-w-[80vw]">
         <DialogHeader className="flex-row items-center justify-between gap-2 space-y-0">
           <DialogTitle className="truncate">
             {doc?.filename ?? "文档预览"}
@@ -165,6 +165,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
         </DialogHeader>
         <div className="min-h-0 flex-1">
           <QueryContent
+            className="h-full"
             isLoading={isLoading}
             data={doc}
             skeleton={

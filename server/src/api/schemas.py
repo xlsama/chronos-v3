@@ -51,7 +51,7 @@ class ServerCreate(BaseModel):
     bastion_password: str | None = None
     bastion_private_key: str | None = None
     sudo_password: str | None = None
-    use_ssh_password_for_sudo: bool = False
+    use_ssh_password_for_sudo: bool = True
 
 
 class ServerUpdate(BaseModel):
@@ -240,6 +240,7 @@ class DocumentResponse(BaseModel):
     status: str
     error_message: str | None = None
     created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 

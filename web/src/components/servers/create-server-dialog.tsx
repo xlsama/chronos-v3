@@ -61,6 +61,7 @@ export function ServerForm({
   server,
   onSuccess,
   onSubmitOverride,
+  initialPassword,
 }: {
   mode: "create" | "edit";
   server?: Server;
