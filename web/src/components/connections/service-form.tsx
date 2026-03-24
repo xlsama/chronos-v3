@@ -57,6 +57,7 @@ const SERVICE_CONFIGS: Record<
   elasticsearch: { label: "Elasticsearch", defaultPort: 9200, group: "monitoring" },
   jenkins: { label: "Jenkins", defaultPort: 8080, group: "devops" },
   kettle: { label: "Kettle (Carte)", defaultPort: 8181, group: "devops" },
+  docker: { label: "Docker", defaultPort: 2376, group: "devops" },
 };
 
 type FormValues = {
@@ -234,7 +235,7 @@ export function ServiceForm({
     "hive",
   ].includes(serviceType);
   const showPath = ["prometheus", "jenkins"].includes(serviceType);
-  const showTLS = ["prometheus", "elasticsearch", "jenkins", "kettle"].includes(serviceType);
+  const showTLS = ["prometheus", "elasticsearch", "jenkins", "kettle", "docker"].includes(serviceType);
 
   return (
     <form

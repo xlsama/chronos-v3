@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas import (
     BatchCreateResult,
     BatchServerCreate,
+    InlineServerTest,
     PaginatedResponse,
     ServerCreate,
     ServerResponse,
@@ -81,6 +82,23 @@ async def batch_create_servers(
         errors=len(errors),
     )
     return BatchCreateResult(created=created, skipped=skipped, errors=errors)
+
+
+@router.post("/test-inline", response_model=ServerTestResponse)
+async def test_server_inline(body: InlineServerTest):
+    """Test an SSH server connection without persisting — accepts raw params."""
+    connector = SSHConnector(
+        host=body.host,
+        port=body.port,
+        username=body.username,
+        password=body.password,
+        private_key=body.private_key,
+    )
+    ok = await connector.test_connection()
+    return ServerTestResponse(
+        success=ok,
+        message="SSH 连接测试成功" if ok else "SSH 连接测试失败",
+    )
 
 
 @router.get("", response_model=PaginatedResponse[ServerResponse])

@@ -1,7 +1,7 @@
 import shutil
 import uuid
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,6 +83,7 @@ async def update_project(
 @router.post("/{project_id}/import-connections", response_model=ExtractedConnections)
 async def import_connections(
     project_id: uuid.UUID,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     project_service = ProjectService(session=session)
@@ -91,7 +92,7 @@ async def import_connections(
         raise NotFoundError("Project not found")
 
     service = ImportConnectionsService(session=session)
-    return await service.extract(project_id)
+    return await service.extract(project_id, disconnect_check=request.is_disconnected)
 
 
 @router.delete("/{project_id}", status_code=204)

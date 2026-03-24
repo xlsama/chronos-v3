@@ -74,6 +74,7 @@ export function ServerForm({
     password?: string;
     private_key?: string;
   }) => void;
+  initialPassword?: string;
 }) {
   const queryClient = useQueryClient();
   const isEdit = mode === "edit";
@@ -107,7 +108,7 @@ export function ServerForm({
         port: String(server.port),
         username: server.username,
         auth_method: server.auth_method === "private_key" ? "private_key" : "password",
-        password: "",
+        password: initialPassword ?? "",
         private_key: "",
         use_bastion: server.has_bastion,
         bastion_host: server.bastion_host ?? "",

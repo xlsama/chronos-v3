@@ -109,7 +109,7 @@ class ServiceCreate(BaseModel):
         "mysql", "postgresql", "redis", "prometheus",
         "mongodb", "elasticsearch",
         "doris", "starrocks", "jenkins", "kettle", "hive",
-        "kubernetes",
+        "kubernetes", "docker",
     ]
     host: str
     port: int
@@ -316,6 +316,7 @@ class ExtractedService(BaseModel):
     port: int | None = None
     password: str | None = None
     config: dict | None = Field(default_factory=dict)
+    existing_name: str | None = None
 
     @field_validator("config", mode="before")
     @classmethod
@@ -329,11 +330,35 @@ class ExtractedServer(BaseModel):
     host: str | None = None
     port: int | None = None
     username: str | None = None
+    password: str | None = None
+    existing_name: str | None = None
 
 
 class ExtractedConnections(BaseModel):
     services: list[ExtractedService]
     servers: list[ExtractedServer]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class InlineServiceTest(BaseModel):
+    service_type: Literal[
+        "mysql", "postgresql", "redis", "prometheus",
+        "mongodb", "elasticsearch",
+        "doris", "starrocks", "jenkins", "kettle", "hive",
+        "kubernetes", "docker",
+    ]
+    host: str
+    port: int
+    password: str | None = None
+    config: dict = Field(default_factory=dict)
+
+
+class InlineServerTest(BaseModel):
+    host: str
+    port: int = 22
+    username: str = "root"
+    password: str | None = None
+    private_key: str | None = None
 
 
 class BatchServiceCreate(BaseModel):

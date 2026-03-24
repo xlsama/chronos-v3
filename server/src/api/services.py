@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, Response
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas import (
     BatchCreateResult,
     BatchServiceCreate,
+    InlineServiceTest,
     PaginatedResponse,
     ServiceCreate,
     ServiceResponse,
@@ -79,6 +81,46 @@ async def batch_create_services(
         errors=len(errors),
     )
     return BatchCreateResult(created=created, skipped=skipped, errors=errors)
+
+
+@router.post("/test-inline", response_model=ServerTestResponse)
+async def test_service_inline(body: InlineServiceTest):
+    """Test a service connection without persisting — accepts raw params."""
+    from src.ops_agent.tools.service_exec_tool import create_connector
+    from src.services.service_service import _PROBE_COMMANDS, _friendly_error
+
+    try:
+        connector = create_connector(
+            service_type=body.service_type,
+            host=body.host,
+            port=body.port,
+            password=body.password,
+            config=body.config,
+        )
+    except ValueError as e:
+        return ServerTestResponse(success=False, message=str(e))
+
+    probe = _PROBE_COMMANDS.get(body.service_type, "SELECT 1")
+    try:
+        result = await asyncio.wait_for(connector.execute(probe), timeout=10)
+        if result.success:
+            return ServerTestResponse(
+                success=True,
+                message=f"{body.service_type} 服务连接测试成功",
+            )
+        return ServerTestResponse(success=False, message=f"探测命令失败: {result.error}")
+    except asyncio.TimeoutError:
+        return ServerTestResponse(
+            success=False,
+            message=f"连接 {body.host}:{body.port} 超时（10秒）",
+        )
+    except Exception as e:
+        return ServerTestResponse(success=False, message=_friendly_error(body.service_type, e))
+    finally:
+        try:
+            await connector.close()
+        except Exception:
+            pass
 
 
 @router.get("", response_model=PaginatedResponse[ServiceResponse])

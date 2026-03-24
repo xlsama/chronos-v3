@@ -33,6 +33,7 @@ dependencies = [
     "rich>=13.0.0",
     "pyhive>=0.7.0",
     "thrift>=0.22.0",
+    "docker>=7.0.0",
 ]
 
 [project.optional-dependencies]

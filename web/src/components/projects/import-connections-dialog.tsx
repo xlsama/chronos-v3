@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -7,6 +7,7 @@ import {
   Pencil,
   ArrowLeft,
   Loader2,
+  Plug,
   Server,
   Database,
   AlertCircle,
@@ -17,8 +18,8 @@ import {
   type ExtractedService,
   type ExtractedServer,
 } from "@/api/projects";
-import { batchCreateServices } from "@/api/services";
-import { batchCreateServers } from "@/api/servers";
+import { batchCreateServices, testServiceInline } from "@/api/services";
+import { batchCreateServers, testServerInline } from "@/api/servers";
 import { ServiceIcon } from "@/lib/service-icons";
 import { ServiceForm } from "@/components/connections/service-form";
 import { ServerForm } from "@/components/servers/create-server-dialog";
@@ -70,6 +71,7 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
   jenkins: "Jenkins",
   kettle: "Kettle",
   kubernetes: "Kubernetes",
+  docker: "Docker",
 };
 
 // ── View JSON Dialog ──
@@ -135,26 +137,37 @@ export function ImportConnectionsButton({
     data: unknown;
     title: string;
   } | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [testingItems, setTestingItems] = useState<Set<string>>(new Set());
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Extract mutation
   const extractMutation = useMutation({
-    mutationFn: () => importConnections(projectId),
+    mutationFn: () => {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      return importConnections(projectId, controller.signal);
+    },
     onSuccess: (data) => {
+      abortControllerRef.current = null;
       setExtractedData(data);
-      // Auto-select complete items
+      // Auto-select complete items (skip already-existing ones)
       const svcSet = new Set<number>();
       data.services.forEach((s, i) => {
-        if (isServiceComplete(s)) svcSet.add(i);
+        if (isServiceComplete(s) && !s.existing_name) svcSet.add(i);
       });
       setSelectedServices(svcSet);
       const srvSet = new Set<number>();
       data.servers.forEach((s, i) => {
-        if (isServerComplete(s)) srvSet.add(i);
+        if (isServerComplete(s) && !s.existing_name) srvSet.add(i);
       });
       setSelectedServers(srvSet);
       setView("results");
     },
     onError: () => {
+      const wasAborted = abortControllerRef.current?.signal.aborted;
+      abortControllerRef.current = null;
+      if (wasAborted) return;
       setDialogOpen(false);
       setView("idle");
     },
@@ -185,6 +198,7 @@ export function ImportConnectionsButton({
           host: s.host!,
           port: s.port ?? 22,
           username: s.username ?? "root",
+          password: s.password ?? undefined,
         };
       });
 
@@ -241,7 +255,86 @@ export function ImportConnectionsButton({
     setSelectedServices(new Set());
     setSelectedServers(new Set());
     setEditTarget(null);
+    setShowCancelConfirm(false);
+    setTestingItems(new Set());
   }, []);
+
+  const handleTestService = useCallback(
+    async (index: number) => {
+      if (!extractedData) return;
+      const svc = extractedData.services[index];
+      if (!svc.service_type || !svc.host || !svc.port) {
+        toast.error("信息不完整，无法测试连接");
+        return;
+      }
+      const key = `service-${index}`;
+      setTestingItems((prev) => new Set([...prev, key]));
+      try {
+        const result = await testServiceInline({
+          service_type: svc.service_type,
+          host: svc.host,
+          port: svc.port,
+          password: svc.password,
+          config: svc.config ?? {},
+        });
+        if (result.success) {
+          toast.success(`${svc.name} 连接测试成功`, { description: result.message });
+        } else {
+          toast.error(`${svc.name} 连接测试失败`, { description: result.message });
+        }
+      } catch {
+        // request() already handles error toast
+      } finally {
+        setTestingItems((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [extractedData],
+  );
+
+  const handleTestServer = useCallback(
+    async (index: number) => {
+      if (!extractedData) return;
+      const srv = extractedData.servers[index];
+      if (!srv.host) {
+        toast.error("信息不完整，无法测试连接");
+        return;
+      }
+      const key = `server-${index}`;
+      setTestingItems((prev) => new Set([...prev, key]));
+      try {
+        const result = await testServerInline({
+          host: srv.host,
+          port: srv.port ?? 22,
+          username: srv.username ?? "root",
+          password: srv.password,
+        });
+        if (result.success) {
+          toast.success(`${srv.name} 连接测试成功`, { description: result.message });
+        } else {
+          toast.error(`${srv.name} 连接测试失败`, { description: result.message });
+        }
+      } catch {
+        // request() already handles error toast
+      } finally {
+        setTestingItems((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [extractedData],
+  );
+
+  const handleCancelExtract = useCallback(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    handleClose();
+  }, [handleClose]);
 
   const handleEdit = useCallback(
     (type: "service" | "server", index: number) => {
@@ -273,6 +366,7 @@ export function ImportConnectionsButton({
         port: data.port,
         password: data.password ?? null,
         config: data.config ?? {},
+        existing_name: null,
       };
       setExtractedData(updated);
       // Auto-select if now complete
@@ -290,6 +384,7 @@ export function ImportConnectionsButton({
       host: string;
       port?: number;
       username?: string;
+      password?: string;
     }) => {
       if (!extractedData || !editTarget) return;
       const updated = { ...extractedData };
@@ -301,6 +396,8 @@ export function ImportConnectionsButton({
         host: data.host,
         port: data.port ?? 22,
         username: data.username ?? "root",
+        password: data.password ?? null,
+        existing_name: null,
       };
       setExtractedData(updated);
       // Auto-select if now complete
@@ -365,10 +462,13 @@ export function ImportConnectionsButton({
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
-          if (!open) handleClose();
+          if (!open && view !== "loading") handleClose();
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent
+          className="sm:max-w-3xl"
+          showCloseButton={view !== "loading"}
+        >
           {/* Loading View */}
           {view === "loading" && (
             <>
@@ -386,6 +486,14 @@ export function ImportConnectionsButton({
                   </div>
                 </div>
               </DialogBody>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCancelConfirm(true)}
+                >
+                  取消分析
+                </Button>
+              </DialogFooter>
             </>
           )}
 
@@ -397,6 +505,20 @@ export function ImportConnectionsButton({
               </DialogHeader>
               <DialogBody>
                 <div className="space-y-6">
+                  {extractedData.warnings.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      <div className="mb-2 flex items-center gap-2 font-medium">
+                        <AlertCircle className="h-4 w-4" />
+                        导入提示
+                      </div>
+                      <div className="space-y-1 text-xs leading-5">
+                        {extractedData.warnings.map((warning, index) => (
+                          <p key={index}>{warning}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Services Section */}
                   {extractedData.services.length > 0 && (
                     <div>
@@ -409,15 +531,18 @@ export function ImportConnectionsButton({
                       <div className="space-y-2">
                         {extractedData.services.map((svc, i) => {
                           const complete = isServiceComplete(svc);
+                          const isExisting = !!svc.existing_name;
+                          const canSelect = complete && !isExisting;
                           return (
                             <div
                               key={i}
-                              className={`flex items-center gap-3 rounded-lg border p-3 ${!complete ? "opacity-60" : ""}`}
+                              className={`flex items-center gap-3 rounded-lg border p-3 ${!canSelect ? "opacity-60" : "cursor-pointer"}`}
+                              onClick={() => canSelect && toggleService(i)}
                             >
                               <Checkbox
                                 checked={selectedServices.has(i)}
                                 onCheckedChange={() => toggleService(i)}
-                                disabled={!complete}
+                                disabled={!canSelect}
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
@@ -442,20 +567,26 @@ export function ImportConnectionsButton({
                                     ? `${svc.host}${svc.port ? `:${svc.port}` : ""}`
                                     : "未知地址"}
                                 </div>
-                                {!complete && (
+                                {isExisting && (
+                                  <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
+                                    <AlertCircle className="h-3 w-3" />
+                                    已导入，对应：{svc.existing_name}
+                                  </div>
+                                )}
+                                {!isExisting && !complete && (
                                   <div className="mt-1 flex items-center gap-1 text-xs text-amber-600">
                                     <AlertCircle className="h-3 w-3" />
                                     信息不完整，请点击编辑补充
                                   </div>
                                 )}
-                                {complete && !svc.password && (
+                                {!isExisting && complete && !svc.password && (
                                   <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                                     <AlertCircle className="h-3 w-3" />
-                                    未检测到密码，可点击编辑补充
+                                    未检测到密码，可点击编辑补充。即使这里连通，仍不代表业务平台在线。
                                   </div>
                                 )}
                               </div>
-                              <div className="flex items-center gap-1 shrink-0">
+                              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                                 <Button
                                   variant="ghost"
                                   size="icon-sm"
@@ -474,6 +605,18 @@ export function ImportConnectionsButton({
                                   onClick={() => handleEdit("service", i)}
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => handleTestService(i)}
+                                  disabled={!complete || testingItems.has(`service-${i}`)}
+                                >
+                                  {testingItems.has(`service-${i}`) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Plug className="h-3.5 w-3.5" />
+                                  )}
                                 </Button>
                               </div>
                             </div>
@@ -495,15 +638,18 @@ export function ImportConnectionsButton({
                       <div className="space-y-2">
                         {extractedData.servers.map((srv, i) => {
                           const complete = isServerComplete(srv);
+                          const isExisting = !!srv.existing_name;
+                          const canSelect = complete && !isExisting;
                           return (
                             <div
                               key={i}
-                              className={`flex items-center gap-3 rounded-lg border p-3 ${!complete ? "opacity-60" : ""}`}
+                              className={`flex items-center gap-3 rounded-lg border p-3 ${!canSelect ? "opacity-60" : "cursor-pointer"}`}
+                              onClick={() => canSelect && toggleServer(i)}
                             >
                               <Checkbox
                                 checked={selectedServers.has(i)}
                                 onCheckedChange={() => toggleServer(i)}
-                                disabled={!complete}
+                                disabled={!canSelect}
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
@@ -517,14 +663,26 @@ export function ImportConnectionsButton({
                                     ? `${srv.username ?? "root"}@${srv.host}:${srv.port ?? 22}`
                                     : "未知地址"}
                                 </div>
-                                {!complete && (
+                                {isExisting && (
+                                  <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
+                                    <AlertCircle className="h-3 w-3" />
+                                    已导入，对应：{srv.existing_name}
+                                  </div>
+                                )}
+                                {!isExisting && !complete && (
                                   <div className="mt-1 flex items-center gap-1 text-xs text-amber-600">
                                     <AlertCircle className="h-3 w-3" />
                                     信息不完整，请点击编辑补充
                                   </div>
                                 )}
+                                {!isExisting && complete && !srv.password && (
+                                  <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                    <AlertCircle className="h-3 w-3" />
+                                    未检测到密码，可点击编辑补充
+                                  </div>
+                                )}
                               </div>
-                              <div className="flex items-center gap-1 shrink-0">
+                              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                                 <Button
                                   variant="ghost"
                                   size="icon-sm"
@@ -543,6 +701,18 @@ export function ImportConnectionsButton({
                                   onClick={() => handleEdit("server", i)}
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => handleTestServer(i)}
+                                  disabled={!complete || testingItems.has(`server-${i}`)}
+                                >
+                                  {testingItems.has(`server-${i}`) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Plug className="h-3.5 w-3.5" />
+                                  )}
                                 </Button>
                               </div>
                             </div>
@@ -634,6 +804,27 @@ export function ImportConnectionsButton({
           title={viewJson.title}
         />
       )}
+
+      {/* Cancel Extract Confirmation */}
+      <AlertDialog
+        open={showCancelConfirm}
+        onOpenChange={setShowCancelConfirm}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>取消文档分析</AlertDialogTitle>
+            <AlertDialogDescription>
+              文档正在分析中，确定要取消吗？取消后需要重新发起分析。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>继续等待</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancelExtract}>
+              确认取消
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -697,6 +888,7 @@ function EditServerView({
     host: string;
     port?: number;
     username?: string;
+    password?: string;
   }) => void;
   onBack: () => void;
 }) {
@@ -722,6 +914,7 @@ function EditServerView({
       server={tempServer}
       onSuccess={onBack}
       onSubmitOverride={onSubmit}
+      initialPassword={server.password ?? undefined}
     />
   );
 }

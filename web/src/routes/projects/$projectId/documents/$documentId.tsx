@@ -126,7 +126,7 @@ function DocumentDetailPage() {
     if (isMarkdown) {
       return (
         <ScrollArea className="h-full" scrollToTop>
-          <div className="p-4">
+          <div className="px-10 py-4">
             <Markdown content={doc.content} />
           </div>
         </ScrollArea>

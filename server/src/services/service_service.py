@@ -21,6 +21,7 @@ _PROBE_COMMANDS: dict[str, str] = {
     "kettle": "GET /kettle/status",
     "hive": "SELECT 1",
     "kubernetes": "kubectl cluster-info",
+    "docker": "docker version",
 }
 
 
@@ -115,7 +116,7 @@ class ServiceService:
         try:
             result = await asyncio.wait_for(connector.execute(probe), timeout=10)
             if result.success:
-                return True, f"{service.service_type} 连接测试成功"
+                return True, f"{service.service_type} 服务连接测试成功"
             return False, f"探测命令失败: {result.error}"
         except asyncio.TimeoutError:
             return False, f"连接 {service.host}:{service.port} 超时（10秒）"

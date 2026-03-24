@@ -73,6 +73,17 @@ def _split_pipes(cmd: str) -> list[str]:
     return _split_outside_quotes(cmd, ["|"])
 
 
+def _strip_timeout_wrapper(cmd: str) -> str:
+    """Strip a leading `timeout <duration>` wrapper for read/write classification."""
+    text = cmd.strip()
+    while text.startswith("timeout "):
+        parts = text.split(None, 2)
+        if len(parts) < 3:
+            return text
+        text = parts[2].strip()
+    return text
+
+
 # ═══════════════════════════════════════════
 # Shell Safety (ssh_bash + bash shared)
 # ═══════════════════════════════════════════
@@ -243,9 +254,13 @@ class ShellSafety:
             for part in parts:
                 if not part:
                     continue
-                is_read = any(part.startswith(prefix) for prefix in read_prefixes)
+                normalized_part = _strip_timeout_wrapper(part)
+                is_read = any(normalized_part.startswith(prefix) for prefix in read_prefixes)
                 if not is_read:
-                    is_read = any(re.search(p, part, re.IGNORECASE) for p in _READ_PATTERNS)
+                    is_read = any(
+                        re.search(p, normalized_part, re.IGNORECASE)
+                        for p in _READ_PATTERNS
+                    )
                 if not is_read:
                     return CommandType.WRITE
 
@@ -336,7 +351,7 @@ def _classify_prometheus(_command: str) -> CommandType:
 
 _MONGO_READ = {
     "find", "count", "countdocuments", "listcollections", "listdatabases",
-    "aggregate", "dbstats", "collstats", "explain", "distinct",
+    "aggregate", "dbstats", "collstats", "explain", "distinct", "ping",
     "getmore", "serverstatus", "buildinfo", "connectionstatus",
 }
 
@@ -542,6 +557,56 @@ def _classify_kubernetes(command: str) -> CommandType:
     return CommandType.WRITE
 
 
+_DOCKER_READ_SUBCOMMANDS = {
+    "ps", "inspect", "logs", "top", "stats", "diff",
+    "images", "version", "info", "port",
+}
+_DOCKER_WRITE_SUBCOMMANDS = {
+    "start", "stop", "restart", "pause", "unpause", "exec", "pull",
+}
+_DOCKER_DANGEROUS_SUBCOMMANDS = {
+    "rm", "rmi", "kill", "prune",
+}
+
+
+def _classify_docker(command: str) -> CommandType:
+    """Classify a docker command."""
+    cmd = command.strip()
+
+    if cmd.startswith("docker "):
+        rest = cmd[len("docker "):]
+    elif cmd == "docker":
+        return CommandType.READ
+    else:
+        return CommandType.WRITE
+
+    parts = rest.split()
+    if not parts:
+        return CommandType.READ
+
+    subcmd = parts[0].lower()
+
+    # Handle compound subcommands: docker system prune
+    if subcmd == "system" and len(parts) > 1:
+        sub_sub = parts[1].lower()
+        if sub_sub == "prune":
+            return CommandType.DANGEROUS
+        if sub_sub in ("info", "df", "events"):
+            return CommandType.READ
+        return CommandType.WRITE
+
+    if subcmd in _DOCKER_DANGEROUS_SUBCOMMANDS:
+        return CommandType.DANGEROUS
+
+    if subcmd in _DOCKER_READ_SUBCOMMANDS:
+        return CommandType.READ
+
+    if subcmd in _DOCKER_WRITE_SUBCOMMANDS:
+        return CommandType.WRITE
+
+    return CommandType.WRITE
+
+
 _SERVICE_CLASSIFIERS = {
     "postgresql": _classify_sql,
     "mysql": _classify_sql,
@@ -555,6 +620,7 @@ _SERVICE_CLASSIFIERS = {
     "kettle": _classify_kettle,
     "hive": _classify_sql,
     "kubernetes": _classify_kubernetes,
+    "docker": _classify_docker,
 }
 
 

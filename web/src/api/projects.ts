@@ -41,6 +41,7 @@ export interface ExtractedService {
   port?: number | null;
   password?: string | null;
   config?: Record<string, unknown>;
+  existing_name?: string | null;
 }
 
 export interface ExtractedServer {
@@ -49,16 +50,22 @@ export interface ExtractedServer {
   host?: string | null;
   port?: number | null;
   username?: string | null;
+  password?: string | null;
+  existing_name?: string | null;
 }
 
 export interface ExtractedConnections {
   services: ExtractedService[];
   servers: ExtractedServer[];
+  warnings: string[];
 }
 
-export function importConnections(projectId: string) {
+export function importConnections(
+  projectId: string,
+  signal?: AbortSignal,
+) {
   return request<ExtractedConnections>(
     `/projects/${projectId}/import-connections`,
-    { method: "POST" },
+    { method: "POST", signal },
   );
 }

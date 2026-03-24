@@ -34,6 +34,7 @@ def _load_connector_map():
     from src.ops_agent.tools.service_connectors.kettle import KettleConnector
     from src.ops_agent.tools.service_connectors.hive import HiveConnector
     from src.ops_agent.tools.service_connectors.kubernetes import KubernetesConnector
+    from src.ops_agent.tools.service_connectors.docker_conn import DockerConnector
     CONNECTOR_MAP = {
         "postgresql": PostgreSQLConnector,
         "mysql": MySQLConnector,
@@ -47,6 +48,7 @@ def _load_connector_map():
         "kettle": KettleConnector,
         "hive": HiveConnector,
         "kubernetes": KubernetesConnector,
+        "docker": DockerConnector,
     }
 
 
@@ -235,6 +237,13 @@ def create_connector(
             kubeconfig=password,
             default_namespace=config.get("default_namespace", "default"),
             context=config.get("context"),
+        )
+    elif service_type == "docker":
+        return connector_cls(
+            host=host,
+            port=port,
+            use_tls=config.get("use_tls", False),
+            tls_certs=password if config.get("use_tls", False) else None,
         )
     else:
         raise ValueError(f"不支持的服务类型: {service_type}")

@@ -24,6 +24,14 @@ export async function request<T>(
       ...fetchOptions,
     });
   } catch (error) {
+    // Abort errors should propagate silently without toast
+    const isAbort =
+      (error instanceof DOMException && error.name === "AbortError") ||
+      (error instanceof FetchError && fetchOptions.signal?.aborted);
+    if (isAbort) {
+      throw error;
+    }
+
     const detail =
       error instanceof FetchError
         ? (error.data?.detail ?? error.statusMessage ?? "Request failed")

@@ -65,6 +65,18 @@ export function testServer(id: string) {
   );
 }
 
+export function testServerInline(data: {
+  host: string;
+  port?: number;
+  username?: string;
+  password?: string | null;
+}) {
+  return request<{ success: boolean; message: string }>(
+    "/servers/test-inline",
+    { method: "POST", body: data },
+  );
+}
+
 export interface BatchCreateResult {
   created: number;
   skipped: number;

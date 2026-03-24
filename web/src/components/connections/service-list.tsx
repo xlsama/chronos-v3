@@ -81,6 +81,8 @@ const typeLabels: Record<string, string> = {
   jenkins: "Jenkins",
   kettle: "Kettle (Carte)",
   hive: "Apache Hive",
+  kubernetes: "Kubernetes",
+  docker: "Docker",
 };
 
 export function ServiceItem({ service }: { service: Service }) {
@@ -92,9 +94,11 @@ export function ServiceItem({ service }: { service: Service }) {
     mutationFn: testService,
     onSuccess: (data) => {
       if (data.success) {
-        toast.success("连接测试成功");
+        toast.success("服务连接测试成功", {
+          description: data.message,
+        });
       } else {
-        toast.error("连接测试失败", { description: data.message });
+        toast.error("服务连接测试失败", { description: data.message });
       }
       queryClient.invalidateQueries({ queryKey: ["services"] });
     },
@@ -145,7 +149,7 @@ export function ServiceItem({ service }: { service: Service }) {
             onClick={() => testMutation.mutate(service.id)}
             disabled={testMutation.isPending}
           >
-            {testMutation.isPending ? "测试中..." : "测试"}
+            {testMutation.isPending ? "测试中..." : "测试连接"}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
