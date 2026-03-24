@@ -73,8 +73,10 @@ flowchart TD
     nginx["🌐 nginx :80/443\nprod-web-01"]
     app-backend("☕ app-backend :8080\nprod-web-01")
     app-mysql[("🗄️ app-mysql :3306\nprod-db-01")]
+    app-redis{{{{"⚡ app-redis :6379\nprod-cache-01"}}}}
     nginx -->|反向代理| app-backend
     app-backend -->|数据存储| app-mysql
+    app-backend -->|缓存| app-redis
 ```
 
 ## 服务配置
