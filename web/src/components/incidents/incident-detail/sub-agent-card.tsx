@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { getIncidentHistory } from "@/api/incident-history";
 import { DocumentViewer } from "@/components/projects/document-viewer";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { QueryContent } from "@/components/query-content";
 
 interface Source {
   type: "incident_history" | "document";
@@ -326,22 +328,35 @@ function IncidentHistoryPreview({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[80vh] flex-col sm:max-w-[70vw]">
+      <DialogContent className="flex h-[80vh] flex-col overflow-hidden sm:max-w-[70vw]">
         <DialogHeader>
           <DialogTitle className="truncate">
             {data?.title ?? "历史事件"}
           </DialogTitle>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : data ? (
-            <Markdown content={data.summary_md} />
-          ) : (
-            <p className="text-muted-foreground">未找到历史记录</p>
-          )}
+        <div className="min-h-0 flex-1">
+          <QueryContent
+            className="h-full"
+            isLoading={isLoading}
+            data={data}
+            skeleton={
+              <div className="space-y-3 p-4">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            }
+            empty={<p className="p-4 text-muted-foreground">未找到历史记录</p>}
+          >
+            {(data) => (
+              <ScrollArea className="h-full" scrollToTop>
+                <div className="p-4">
+                  <Markdown content={data.summary_md} />
+                </div>
+              </ScrollArea>
+            )}
+          </QueryContent>
         </div>
       </DialogContent>
     </Dialog>
