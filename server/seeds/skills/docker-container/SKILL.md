@@ -26,18 +26,23 @@ metadata:
 ## 全局优先级（必须遵守）
 
 - 当事件是”接口 pending / 端口监听但无响应 / 服务挂住 / 需要快速恢复”，并且目标机存在 Docker 迹象时，**先排查 Docker 容器层面，再深入应用进程层面**。
-- `docker ps` 失败时，不要立刻说“没有容器”；要先区分：
-  - `docker` 命令不在 PATH
-  - Docker daemon 未启动
-  - 当前用户无权限访问 Docker socket
-- 首轮 Docker 探测必须保留原始 stderr，不要用 `2>/dev/null` 或把失败藏在管道后面。
-- 如果错误明确是 `permission denied while trying to connect to the Docker daemon socket`，下一步应走审批后执行 `sudo docker ps` / `sudo docker ps -a` / `sudo docker logs`，而不是继续猜测“非容器部署”。
+- `docker ps` 失败时，不要立刻说”没有容器”；根据输出判断下一步：
+  - 输出 `command not found` → Docker 未安装，跳过 Docker
+  - 输出 `Cannot connect to the Docker daemon`（无权限关键词）→ Docker daemon 未启动，尝试 `sudo systemctl start docker`
+  - 输出 `permission denied` / `Got permission denied` / `docker.sock` → 权限问题，**立即 `sudo docker ps -a 2>&1`**
+  - 输出为空或不明确 → **先 `sudo docker ps -a 2>&1` 确认**
+- 首轮 Docker 探测必须保留原始 stderr：
+  - **禁止** `2>/dev/null`：会吞掉 permission denied
+  - **禁止** `|| echo “Docker not available”` 或 `|| echo “Docker not available or no permission”`：会把原始错误替换成你自己写的文本，导致无法判断真实失败原因
+  - **正确做法**：统一使用 `2>&1` 保留完整输出
+- 如果错误明确是 `permission denied while trying to connect to the Docker daemon socket`，下一步应走审批后执行 `sudo docker ps` / `sudo docker ps -a` / `sudo docker logs`，而不是继续猜测”非容器部署”。
+- **禁止**在 docker 命令失败后、未完成权限判断前，跑去执行 `ls /var/log`、`find ... -name “*.log”`、`systemctl list-units`、`ps aux | grep` 等发散探索。
 - 对大多数容器化业务，默认链路是：
-  1. `docker ps`
-  2. `docker ps -a`
-  3. 找到承载故障端口的候选容器
-  4. `docker logs --tail`
-  5. 判断是否 OOM / hang / CrashLoop
+  1. `docker ps -a 2>&1`（如权限不足则 `sudo docker ps -a 2>&1`）
+  2. 找到承载故障端口的候选容器
+  3. `docker logs --tail 200 <容器名>`（或 `sudo docker logs --tail 200 <容器名>`）
+  4. 判断是否 OOM / hang / CrashLoop
+  5. 如需深入：`docker inspect <容器名>` 查看配置（内存限制、JVM 参数、环境变量等）
   6. 必要时 `docker restart`
 
 ## 第一步：容器状态总览

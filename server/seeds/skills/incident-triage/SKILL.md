@@ -78,9 +78,11 @@ metadata:
 首轮探测的写法规则：
 
 - 不要在第一次失败验证时使用 `2>/dev/null` 或 `>/dev/null` 吞掉原始错误
-- 不要用会掩盖左侧失败的管道写法去判断“命令不存在”或“服务没起”
+- 不要用 `<命令> || echo “...”` 替换原始错误信息，这会让你看到自己写的文本而非系统真正的报错，导致无法触发 sudo 重试
+- 不要用会掩盖左侧失败的管道写法去判断”命令不存在”或”服务没起”
 - HTTP 探测优先使用 `curl -sS`，保留错误信息；不要只拿 `000` 就下结论
 - 只有在确认命令可用、只是为了降噪时，第二轮才允许按需压 stderr
+- 关键路径命令（`docker`、`systemctl`、`kubectl`）统一使用 `2>&1` 保留完整输出
 
 ### 外部探测面
 
@@ -94,8 +96,14 @@ metadata:
 
 适用：怀疑服务挂掉、假活、阻塞、资源耗尽
 
+**Docker 快速路径（默认首选）**：进入运行面时，第一条命令应为 `docker ps -a 2>&1`。大多数生产服务是容器部署的，一条命令即可判断是否存在容器：
+- 输出包含容器列表 → 有容器，切到 `docker-container` 技能
+- 输出 `command not found` → 无 Docker，转其他运行面
+- 输出包含 `permission denied` / `docker.sock` → 权限问题，立即 `sudo docker ps -a 2>&1`
+- **禁止**在 docker 命令失败后、未完成权限判断前，跑去做 `ls /var/log`、`find ... -name "*.log"` 等发散探索
+
+其他运行面探针：
 - 进程 / systemd / supervisor / pm2
-- Docker / containerd / 容器状态
 - CPU / 内存 / 磁盘 / 监听端口
 
 ### 依赖面
@@ -130,7 +138,8 @@ metadata:
 - 未锁定项目、服务、服务器前，不要直接建议重启或回滚
 - 没有容器证据时，不要机械进入 Docker 诊断
 - 有容器证据时，优先切到 `docker-container`，不要先把 JVM / Node 裸进程当默认根因
-- 如果首轮结果出现 `permission denied`、`Operation not permitted`、`access denied`、`docker.sock` 权限错误，不要把它误判成“服务不存在”；先判断是否需要带 `sudo` 的只读探测，并走审批
+- 如果首轮结果出现 `permission denied`、`Operation not permitted`、`access denied`、`docker.sock` 权限错误，不要把它误判成”服务不存在”；**必须立即** `sudo <原命令>` 重试（走审批），不要绕道去做 `ls /var/log`、`find ... -name “*.log”` 等发散探索
+- 特别注意：Docker 命令失败（无论是空输出还是权限错误），都应先 `sudo docker ps -a 2>&1` 确认，再决定是否跳过 Docker 观测面
 
 常见收敛结果：
 
