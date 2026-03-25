@@ -250,7 +250,10 @@ async def main_agent_node(state: OpsState) -> dict:
     history_summary = state.get("incident_history_summary")
     if history_summary:
         history_context = (
-            f"## 历史事件参考\n以下是与当前事件相似的历史事件供参考：\n\n{history_summary}"
+            "## 历史事件参考\n"
+            "以下是与当前事件**描述相似**的历史事件。注意：描述相似不代表根因相同，"
+            "你必须对当前事件独立排查验证，不要直接套用历史事件的诊断结论或修复方案。\n\n"
+            f"{history_summary}"
         )
     else:
         history_context = ""
