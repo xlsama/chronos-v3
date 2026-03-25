@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tansta
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Copy, EllipsisVertical, FolderOpen, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, EllipsisVertical, FolderOpen, Pencil, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
 import { deleteProject, getProjects } from "@/api/projects";
 import type { Project } from "@/lib/types";
@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { listVariants, cardItemVariants } from "@/lib/motion";
 import { QueryContent } from "@/components/query-content";
+import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 
 const GRADIENTS = [
   "from-violet-500 to-purple-600",
@@ -72,6 +73,7 @@ function getInitial(name: string) {
 function ProjectCard({ project }: { project: Project }) {
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteProject(project.id),
@@ -111,6 +113,16 @@ function ProjectCard({ project }: { project: Project }) {
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
+                    setShowEditDialog(true);
+                  }}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  编辑
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
                     navigator.clipboard.writeText(project.id);
                     toast.success("已复制项目 ID");
                   }}
@@ -135,9 +147,11 @@ function ProjectCard({ project }: { project: Project }) {
           </div>
           <CardHeader>
             <CardTitle className="line-clamp-1">{project.name}</CardTitle>
-            <CardDescription className="line-clamp-2">
-              {project.description || project.slug}
-            </CardDescription>
+            {project.description && (
+              <CardDescription className="line-clamp-2">
+                {project.description}
+              </CardDescription>
+            )}
           </CardHeader>
           <CardFooter>
             <span className="text-xs text-muted-foreground">
@@ -146,6 +160,12 @@ function ProjectCard({ project }: { project: Project }) {
           </CardFooter>
         </Card>
       </Link>
+
+      <EditProjectDialog
+        project={project}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+      />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>

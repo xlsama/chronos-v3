@@ -44,6 +44,7 @@ export const STATUS_OPTIONS = [
   { value: "open", label: "待处理" },
   { value: "investigating", label: "调查中" },
   { value: "resolved", label: "已解决" },
+  { value: "interrupted", label: "已中断" },
   { value: "stopped", label: "已停止" },
 ] as const;
 

@@ -66,9 +66,9 @@ export function ServerItem({ server }: { server: ServerType }) {
     mutationFn: testServer,
     onSuccess: (data) => {
       if (data.success) {
-        toast.success("连接测试成功");
+        toast.success("SSH 连接测试成功");
       } else {
-        toast.error("连接测试失败", { description: data.message });
+        toast.error("SSH 连接测试失败", { description: data.message });
       }
       queryClient.invalidateQueries({ queryKey: ["servers"] });
     },
@@ -126,7 +126,7 @@ export function ServerItem({ server }: { server: ServerType }) {
             onClick={() => testMutation.mutate(server.id)}
             disabled={testMutation.isPending}
           >
-            {testMutation.isPending ? "测试中..." : "测试"}
+            {testMutation.isPending ? "测试中..." : "测试连接"}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>

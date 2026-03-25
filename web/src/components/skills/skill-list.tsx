@@ -61,7 +61,6 @@ function SkillItem({ skill, onSelect }: SkillItemProps) {
           className="group flex cursor-pointer items-center gap-3 p-4 hover:bg-muted/50"
           onClick={onSelect}
         >
-          <Sparkles className="h-5 w-5 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <p className="font-medium">{skill.name}</p>

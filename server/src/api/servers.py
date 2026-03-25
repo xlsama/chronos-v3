@@ -190,5 +190,5 @@ async def test_server(
 
     return ServerTestResponse(
         success=ok,
-        message="Connection successful" if ok else "Connection failed",
+        message="SSH 连接测试成功" if ok else "SSH 连接测试失败",
     )
