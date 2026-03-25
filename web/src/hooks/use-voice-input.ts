@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 
-type VoiceState = "idle" | "connecting" | "recording" | "error";
+import { transcribeAudio } from "@/api/asr";
+
+type VoiceState = "idle" | "recording" | "transcribing";
 
 interface UseVoiceInputOptions {
   onTranscript: (text: string) => void;
@@ -10,7 +12,6 @@ interface UseVoiceInputOptions {
 
 interface UseVoiceInputReturn {
   state: VoiceState;
-  interimText: string;
   analyserNode: AnalyserNode | null;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
@@ -22,13 +23,12 @@ export function useVoiceInput({
   onCancel,
 }: UseVoiceInputOptions): UseVoiceInputReturn {
   const [state, setState] = useState<VoiceState>("idle");
-  const [interimText, setInterimText] = useState("");
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const cancelledRef = useRef(false);
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
@@ -36,9 +36,6 @@ export function useVoiceInput({
   onCancelRef.current = onCancel;
 
   const cleanup = useCallback(() => {
-    workletNodeRef.current?.disconnect();
-    workletNodeRef.current = null;
-
     if (streamRef.current) {
       for (const track of streamRef.current.getTracks()) {
         track.stop();
@@ -51,38 +48,21 @@ export function useVoiceInput({
       audioContextRef.current = null;
     }
 
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
     setAnalyserNode(null);
-    setInterimText("");
   }, []);
 
   const startRecording = useCallback(async () => {
     if (state !== "idle") return;
 
     cancelledRef.current = false;
-    setInterimText("");
-    setState("connecting");
-
-    // Check AudioWorklet support
-    if (typeof AudioWorkletNode === "undefined") {
-      toast.error("当前浏览器不支持语音输入");
-      setState("idle");
-      return;
-    }
+    chunksRef.current = [];
 
     // Get microphone
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-        },
-      });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
       const name = (err as DOMException).name;
       if (name === "NotAllowedError") {
@@ -92,115 +72,87 @@ export function useVoiceInput({
       } else {
         toast.error("无法访问麦克风");
       }
-      setState("idle");
       return;
     }
     streamRef.current = stream;
 
-    // Setup AudioContext + Worklet
-    let audioContext: AudioContext;
-    try {
-      audioContext = new AudioContext({ sampleRate: 16000 });
-      await audioContext.audioWorklet.addModule("/pcm-processor.js");
-    } catch {
-      toast.error("音频初始化失败");
-      cleanup();
-      setState("idle");
-      return;
-    }
+    // Setup AudioContext + AnalyserNode for visualization
+    const audioContext = new AudioContext();
     audioContextRef.current = audioContext;
-
     const source = audioContext.createMediaStreamSource(stream);
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
     setAnalyserNode(analyser);
 
-    const workletNode = new AudioWorkletNode(audioContext, "pcm-processor");
-    analyser.connect(workletNode);
-    workletNode.connect(audioContext.destination);
-    workletNodeRef.current = workletNode;
+    // Setup MediaRecorder
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : undefined;
 
-    // Setup WebSocket
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${location.host}/api/asr/stream`);
-    wsRef.current = ws;
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    mediaRecorderRef.current = recorder;
 
-    ws.onopen = () => {
-      if (cancelledRef.current) {
-        ws.close();
-        return;
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data);
       }
-      setState("recording");
     };
 
-    ws.onerror = () => {
-      if (!cancelledRef.current) {
-        toast.error("语音识别连接失败");
+    recorder.onstop = async () => {
+      if (cancelledRef.current) {
+        cleanup();
+        return;
       }
+
+      const chunks = chunksRef.current;
+      if (chunks.length === 0) {
+        cleanup();
+        setState("idle");
+        return;
+      }
+
+      const blob = new Blob(chunks, { type: recorder.mimeType });
       cleanup();
+      setState("transcribing");
+
+      try {
+        const { text } = await transcribeAudio(blob);
+        if (text && !cancelledRef.current) {
+          onTranscriptRef.current(text);
+        }
+      } catch {
+        if (!cancelledRef.current) {
+          toast.error("语音识别失败");
+        }
+      }
       setState("idle");
     };
 
-    ws.onclose = () => {
-      if (!cancelledRef.current) {
-        setState("idle");
-      }
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "result") {
-          if (msg.is_end) {
-            if (msg.text && !cancelledRef.current) {
-              onTranscriptRef.current(msg.text);
-            }
-            setInterimText("");
-          } else {
-            setInterimText(msg.text || "");
-          }
-        } else if (msg.type === "finished") {
-          cleanup();
-          setState("idle");
-        } else if (msg.type === "error") {
-          if (!cancelledRef.current) {
-            toast.error(msg.message || "语音识别失败");
-          }
-          cleanup();
-          setState("idle");
-        }
-      } catch {
-        // ignore parse errors
-      }
-    };
-
-    // Forward PCM from worklet to WS
-    workletNode.port.onmessage = (e) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(e.data as ArrayBuffer);
-      }
-    };
+    recorder.start();
+    setState("recording");
   }, [state, cleanup]);
 
   const stopRecording = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ action: "stop" }));
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
     }
-    cleanup();
-    setState("idle");
-  }, [cleanup]);
+  }, []);
 
   const cancelRecording = useCallback(() => {
     cancelledRef.current = true;
-    onCancelRef.current?.();
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
     cleanup();
+    onCancelRef.current?.();
     setState("idle");
   }, [cleanup]);
 
   return {
     state,
-    interimText,
     analyserNode,
     startRecording,
     stopRecording,
