@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     rerank_model: str = "qwen3-rerank"
     rerank_base_url: str = "https://dashscope.aliyuncs.com/compatible-api/v1"
     vision_model: str = "qwen-vl-max"
-    asr_model: str = "qwen3-asr-flash-realtime"
+    stt_model: str = "qwen3-asr-flash-realtime"
     dashscope_ws_url: str = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
 
     # Agent

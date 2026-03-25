@@ -34,6 +34,8 @@ dependencies = [
     "pyhive>=0.7.0",
     "thrift>=0.22.0",
     "docker>=7.0.0",
+    "dashscope>=1.25.15",
+    "av>=17.0.0",
 ]
 
 [project.optional-dependencies]

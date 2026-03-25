@@ -1,86 +1,23 @@
-import asyncio
+from fastapi import APIRouter, HTTPException, UploadFile
 
-import orjson
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-
-from src.env import get_settings
 from src.lib.logger import get_logger
-from src.services.asr_service import ASRProxySession
+from src.services.asr_service import transcribe_audio
 
 log = get_logger()
 
 router = APIRouter(prefix="/api/asr", tags=["asr"])
 
 
-@router.websocket("/stream")
-async def asr_stream(ws: WebSocket):
-    await ws.accept()
-
-    settings = get_settings()
-    session = ASRProxySession(settings)
-
-    try:
-        await asyncio.wait_for(session.connect(), timeout=10)
-    except Exception as e:
-        log.error("ASR: failed to connect upstream", error=str(e))
-        await ws.send_json({"type": "error", "message": "ASR 服务连接失败"})
-        await ws.close()
-        return
-
-    async def forward_audio():
-        """Receive audio from client and forward to DashScope."""
-        try:
-            while True:
-                data = await ws.receive()
-                if data.get("type") == "websocket.disconnect":
-                    break
-                if "bytes" in data and data["bytes"]:
-                    await session.send_audio(data["bytes"])
-                elif "text" in data and data["text"]:
-                    msg = orjson.loads(data["text"])
-                    if msg.get("action") == "stop":
-                        await session.finish_session()
-                        break
-        except WebSocketDisconnect:
-            await session.finish_session()
-
-    async def forward_results():
-        """Receive results from DashScope and forward to client."""
-        try:
-            async for result in session.receive_results():
-                await ws.send_json(result)
-        except Exception as e:
-            log.error("ASR: upstream receive error", error=str(e))
-            try:
-                await ws.send_json({"type": "error", "message": str(e)})
-            except Exception:
-                pass
-
-    audio_task = asyncio.create_task(forward_audio())
-    results_task = asyncio.create_task(forward_results())
+@router.post("/transcribe")
+async def transcribe(file: UploadFile):
+    audio_data = await file.read()
+    if not audio_data:
+        raise HTTPException(status_code=400, detail="空的音频文件")
 
     try:
-        done, pending = await asyncio.wait(
-            [audio_task, results_task],
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in pending:
-            # Give remaining task a few seconds to finish gracefully
-            try:
-                await asyncio.wait_for(asyncio.shield(task), timeout=5)
-            except (asyncio.TimeoutError, Exception):
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        text = await transcribe_audio(audio_data, file.filename or "audio.webm")
     except Exception as e:
-        log.error("ASR: session error", error=str(e))
-        audio_task.cancel()
-        results_task.cancel()
-    finally:
-        await session.close()
-        try:
-            await ws.close()
-        except Exception:
-            pass
+        log.error("ASR transcription failed", error=str(e))
+        raise HTTPException(status_code=502, detail="语音识别失败") from e
+
+    return {"text": text}
