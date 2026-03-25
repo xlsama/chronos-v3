@@ -27,7 +27,7 @@ export function useAutoScroll(
   const shouldAutoScroll = useRef(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollRafId = useRef(0);
-  const mutationRafId = useRef(0);
+  const mutationTimerId = useRef<ReturnType<typeof setTimeout>>(undefined);
   const resizeRafId = useRef(0);
 
   // scroll 事件：rAF 节流，检测用户是否在底部
@@ -53,31 +53,34 @@ export function useAutoScroll(
     };
   }, [scrollEl, threshold]);
 
-  // MutationObserver：监听深层 DOM 变化，自动滚动到底部
+  // MutationObserver：监听 DOM 子节点变化，自动滚动到底部
+  // 只监听 childList（新增/删除节点），不监听 characterData（逐字更新会触发过于频繁）
+  // 使用 80ms throttle 代替 rAF（~16ms），减少流式渲染时的强制重排频率
   useEffect(() => {
     if (!scrollEl || !enabled) return;
 
+    const doScroll = () => {
+      if (shouldAutoScroll.current) {
+        scrollEl.scrollTop = scrollEl.scrollHeight;
+      }
+      const atBottom =
+        scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
+        threshold;
+      shouldAutoScroll.current = atBottom;
+      setIsAtBottom(atBottom);
+    };
+
     const observer = new MutationObserver(() => {
-      if (mutationRafId.current) return;
-      mutationRafId.current = requestAnimationFrame(() => {
-        mutationRafId.current = 0;
-        if (shouldAutoScroll.current) {
-          scrollEl.scrollTop = scrollEl.scrollHeight;
-        }
-        const atBottom =
-          scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
-          threshold;
-        shouldAutoScroll.current = atBottom;
-        setIsAtBottom(atBottom);
-      });
+      if (mutationTimerId.current) return;
+      mutationTimerId.current = setTimeout(() => {
+        mutationTimerId.current = undefined;
+        doScroll();
+      }, 80);
     });
 
     observer.observe(scrollEl, {
       childList: true,
       subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ["style"],
     });
 
     // 初始滚动到底部
@@ -85,7 +88,7 @@ export function useAutoScroll(
 
     return () => {
       observer.disconnect();
-      if (mutationRafId.current) cancelAnimationFrame(mutationRafId.current);
+      if (mutationTimerId.current) clearTimeout(mutationTimerId.current);
     };
   }, [scrollEl, enabled]);
 

@@ -26,6 +26,7 @@ _EVENT_ROLE = {
     "approval_decided": "system",
     "error": "system",
     "incident_stopped": "system",
+    "agent_interrupted": "system",
     "confirm_resolution_required": "system",
     "resolution_confirmed": "system",
 }

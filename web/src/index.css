@@ -43,6 +43,12 @@
 @source "../node_modules/@streamdown/code";
 @source "../node_modules/@streamdown/mermaid";
 
+@property --flowing-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -520,4 +526,67 @@
   border-radius: 0.25rem;
   padding: 0.25rem !important;
   margin: 0.375rem !important;
+}
+
+/* ── 流动渐变边框（可复用激活态样式） ── */
+
+@keyframes flowing-rotate {
+  to { --flowing-angle: 360deg; }
+}
+
+.flowing-gradient-border {
+  --flowing-border-width: 2px;
+  --flowing-speed: 3s;
+  --flowing-color-1: oklch(0.82 0.12 255);
+  --flowing-color-2: oklch(0.80 0.14 270);
+  --flowing-color-3: oklch(0.85 0.10 235);
+  --flowing-color-4: oklch(0.82 0.12 255);
+
+  position: relative;
+  border-color: transparent !important;
+  box-shadow:
+    0 0 10px oklch(0.82 0.12 255 / 0.25),
+    0 0 3px oklch(0.80 0.14 270 / 0.15) !important;
+}
+
+.dark .flowing-gradient-border {
+  --flowing-color-1: oklch(0.78 0.14 255);
+  --flowing-color-2: oklch(0.76 0.16 270);
+  --flowing-color-3: oklch(0.82 0.12 235);
+  --flowing-color-4: oklch(0.78 0.14 255);
+  box-shadow:
+    0 0 14px oklch(0.78 0.14 255 / 0.3),
+    0 0 5px oklch(0.76 0.16 270 / 0.2) !important;
+}
+
+.flowing-gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: var(--flowing-border-width);
+  background: conic-gradient(
+    from var(--flowing-angle),
+    var(--flowing-color-1),
+    var(--flowing-color-2),
+    var(--flowing-color-3),
+    var(--flowing-color-4)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: flowing-rotate var(--flowing-speed) linear infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flowing-gradient-border::before {
+    animation: none;
+    --flowing-angle: 135deg;
+  }
 }

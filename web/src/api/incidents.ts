@@ -54,6 +54,12 @@ export function confirmResolution(incidentId: string) {
   });
 }
 
+export function interruptIncident(incidentId: string) {
+  return request<{ status: string }>(`/incidents/${incidentId}/interrupt`, {
+    method: "POST",
+  });
+}
+
 export function stopIncident(incidentId: string) {
   return request<Incident>(`/incidents/${incidentId}/stop`, {
     method: "POST",

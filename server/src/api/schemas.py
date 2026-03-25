@@ -222,8 +222,9 @@ class ApprovalResponse(BaseModel):
 
 
 class ApprovalDecisionRequest(BaseModel):
-    decision: Literal["approved", "rejected"]
+    decision: Literal["approved", "rejected", "supplemented"]
     decided_by: str = "admin"
+    supplement_text: str | None = None
 
 
 class DocumentUpload(BaseModel):

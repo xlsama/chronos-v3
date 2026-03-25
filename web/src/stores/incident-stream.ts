@@ -28,6 +28,7 @@ interface IncidentStreamState {
   resolutionConfirmRequired: boolean;
   resolutionConfirmResolved: boolean;
   decidedApprovals: Record<string, string>;
+  pendingSupplement: { approvalId: string } | null;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
@@ -45,6 +46,7 @@ interface IncidentStreamState {
   setWaitingForAgent: (waiting: boolean) => void;
   setResolutionConfirmResolved: (resolved: boolean) => void;
   setApprovalDecided: (approvalId: string, decision: string) => void;
+  setPendingSupplement: (pending: { approvalId: string } | null) => void;
   setConnected: (connected: boolean) => void;
   loadHistory: (events: SSEEvent[]) => void;
   reset: () => void;
@@ -75,6 +77,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   resolutionConfirmRequired: false,
   resolutionConfirmResolved: false,
   decidedApprovals: {},
+  pendingSupplement: null,
 
   addEvent: (event) => {
     set((state) => {
@@ -196,6 +199,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       decidedApprovals: { ...state.decidedApprovals, [approvalId]: decision },
     })),
 
+  setPendingSupplement: (pending) => set({ pendingSupplement: pending }),
+
   setConnected: (connected) => set({ isConnected: connected }),
 
   loadHistory: (events) => {
@@ -247,7 +252,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_read") {
+      if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_read" || event.event_type === "agent_interrupted") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
         mainEvents.push(event);
         continue;
@@ -320,5 +325,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       resolutionConfirmRequired: false,
       resolutionConfirmResolved: false,
       decidedApprovals: {},
+      pendingSupplement: null,
     }),
 }));

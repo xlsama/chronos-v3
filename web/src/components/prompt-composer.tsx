@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Mic, Paperclip, Plus, Send, X } from "lucide-react";
+import { Check, Loader2, Mic, Paperclip, Plus, Send, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,10 @@ interface PromptComposerProps {
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
+  showInterrupt?: boolean;
+  onInterrupt?: () => void;
+  isInterrupting?: boolean;
+  accentMode?: "flowing";
 }
 
 export function PromptComposer({
@@ -33,6 +37,10 @@ export function PromptComposer({
   isLoading = false,
   disabled = false,
   placeholder = "描述事件情况...",
+  showInterrupt = false,
+  onInterrupt,
+  isInterrupting = false,
+  accentMode,
 }: PromptComposerProps) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<FileWithPreview[]>([]);
@@ -144,6 +152,7 @@ export function PromptComposer({
         isLoading={isLoading}
         onSubmit={handleSubmit}
         disabled={disabled}
+        className={accentMode === "flowing" ? "flowing-gradient-border" : undefined}
       >
         {files.length > 0 && !isRecording && (
           <div className="flex flex-wrap gap-2 px-2 pt-2">
@@ -258,15 +267,32 @@ export function PromptComposer({
                       <Mic className="size-4" />
                     </Button>
                   </PromptInputAction>
-                  <Button
-                    size="icon"
-                    className="size-8 rounded-full"
-                    onClick={handleSubmit}
-                    disabled={disabled || isLoading || (!text.trim() && files.length === 0)}
-                    data-testid="submit-incident"
-                  >
-                    <Send className="size-4 -translate-x-px translate-y-px" />
-                  </Button>
+                  {showInterrupt ? (
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="size-8 rounded-full hover:bg-destructive/10 hover:text-destructive hover:border-transparent"
+                      onClick={onInterrupt}
+                      disabled={isInterrupting}
+                      title="停止"
+                    >
+                      {isInterrupting ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Square className="size-3.5" />
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="icon"
+                      className="size-8 rounded-full"
+                      onClick={handleSubmit}
+                      disabled={disabled || isLoading || (!text.trim() && files.length === 0)}
+                      data-testid="submit-incident"
+                    >
+                      <Send className="size-4 -translate-x-px translate-y-px" />
+                    </Button>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

@@ -12,15 +12,13 @@ from src.ops_agent.state import OpsState
 
 
 def route_after_approval(state: OpsState) -> str:
-    """Route after human_approval: rejected goes back to LLM, approved goes to tools."""
+    """Route after human_approval: rejected/supplemented goes back to LLM, approved goes to tools."""
     sid = state["incident_id"][:8]
     log = get_logger(component="approval", sid=sid)
     decision = state.get("approval_decision", "approved")
-    route = "main_agent" if decision == "rejected" else "tools"
+    route = "main_agent" if decision in ("rejected", "supplemented") else "tools"
     log.info("route_after_approval", decision=decision, route=route)
-    if decision == "rejected":
-        return "main_agent"
-    return "tools"
+    return route
 
 
 def build_graph():

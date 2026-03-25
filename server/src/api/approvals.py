@@ -37,7 +37,7 @@ async def decide_approval(
     if not approval_record:
         raise NotFoundError("Approval request not found")
     incident = await session.get(Incident, approval_record.incident_id)
-    if incident and incident.status in ("stopped", "resolved"):
+    if incident and incident.status in ("stopped", "resolved", "interrupted"):
         raise BadRequestError("事件已终止，无法审批")
 
     service = ApprovalService(session=session)
@@ -46,24 +46,37 @@ async def decide_approval(
     # Publish approval_decided SSE event (use app-level publisher for persistence)
     publisher = request.app.state.agent_runner.publisher
     channel = EventPublisher.channel_for_incident(str(approval.incident_id))
+    decided_data: dict = {
+        "approval_id": str(approval.id),
+        "decision": body.decision,
+        "decided_by": body.decided_by,
+    }
+    if body.supplement_text:
+        decided_data["supplement_text"] = body.supplement_text
     await publisher.publish(
         channel=channel,
         event_type="approval_decided",
-        data={
-            "approval_id": str(approval.id),
-            "decision": body.decision,
-            "decided_by": body.decided_by,
-        },
+        data=decided_data,
     )
 
-    # Resume graph for both approved and rejected decisions
+    # Resume graph for all decisions (approved / rejected / supplemented)
     if incident and incident.thread_id:
+        # Clear stale cancel flags before resuming to prevent old interrupt
+        # requests from immediately cancelling the new run
+        from src.lib.redis import get_redis
+        redis = get_redis()
+        await redis.delete(f"incident:{approval.incident_id}:cancel")
+
+        approval_result: dict = {"decision": body.decision}
+        if body.supplement_text:
+            approval_result["supplement_text"] = body.supplement_text
+
         runner = request.app.state.agent_runner
         background_tasks.add_task(
             runner.resume,
             thread_id=incident.thread_id,
             incident_id=str(incident.id),
-            approval_result={"decision": body.decision},
+            approval_result=approval_result,
         )
 
     return approval

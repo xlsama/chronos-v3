@@ -45,7 +45,7 @@ function IncidentDetailPage() {
   const isConnected = useIncidentStreamStore((s) => s.isConnected);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
 
-  const isActive = incident?.status === "open" || incident?.status === "investigating";
+  const isActive = incident?.status === "open" || incident?.status === "investigating" || incident?.status === "interrupted";
 
   const { scrollRef, bottomRef, isAtBottom, scrollToBottom } = useAutoScroll({
     enabled: isActive,
@@ -175,7 +175,7 @@ function IncidentDetailPage() {
                 onClick={() => setStopDialogOpen(true)}
               >
                 <Square className="mr-1 h-3.5 w-3.5" />
-                停止
+                终止事件
               </Button>
             )}
           </div>
@@ -186,9 +186,9 @@ function IncidentDetailPage() {
       <AlertDialog open={stopDialogOpen} onOpenChange={setStopDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认停止</AlertDialogTitle>
+            <AlertDialogTitle>确认终止事件</AlertDialogTitle>
             <AlertDialogDescription>
-              停止后 Agent 将终止调查，此操作不可撤销。确定要停止吗？
+              终止后 Agent 将永久停止调查，此操作不可撤销。确定要终止吗？
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -197,7 +197,7 @@ function IncidentDetailPage() {
               onClick={() => stopMutation.mutate()}
               disabled={stopMutation.isPending}
             >
-              确认停止
+              确认终止
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

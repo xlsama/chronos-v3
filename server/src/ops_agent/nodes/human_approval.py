@@ -22,8 +22,14 @@ async def human_approval_node(state: OpsState) -> dict:
         decision = state.get("approval_decision")
         log.info("Resume", decision=decision)
 
-        if decision == "rejected":
+        if decision in ("rejected", "supplemented"):
             # Inject a ToolMessage telling the LLM the command was rejected
+            supplement = state.get("approval_supplement")
+            if decision == "supplemented" and supplement:
+                content = f"用户拒绝了该命令并补充说明: {supplement}\n请根据用户的补充信息重新思考方案。"
+            else:
+                content = "用户拒绝了该命令，请换一个方案继续排查。"
+
             last_message = state["messages"][-1]
             tool_messages = []
             if hasattr(last_message, "tool_calls") and last_message.tool_calls:
@@ -31,16 +37,17 @@ async def human_approval_node(state: OpsState) -> dict:
                     if tc["name"] in _APPROVAL_TOOLS:
                         tool_messages.append(
                             ToolMessage(
-                                content="用户拒绝了该命令，请换一个方案继续排查。",
+                                content=content,
                                 tool_call_id=tc["id"],
                             )
                         )
-            log.info("Rejected", injected_messages=len(tool_messages))
+            log.info("Rejected", decision=decision, has_supplement=bool(supplement), injected_messages=len(tool_messages))
             return {
                 "messages": tool_messages,
                 "needs_approval": False,
                 "pending_tool_call": None,
                 "approval_decision": None,
+                "approval_supplement": None,
             }
 
         # Approved: clear approval state, continue to tools
@@ -48,6 +55,7 @@ async def human_approval_node(state: OpsState) -> dict:
             "needs_approval": False,
             "pending_tool_call": None,
             "approval_decision": None,
+            "approval_supplement": None,
         }
         # sudo 审批通过后，同事件内后续 sudo 免审
         pending = state.get("pending_tool_call")

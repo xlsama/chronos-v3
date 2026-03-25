@@ -233,10 +233,7 @@ export function SubAgentCard({
             {config.subAgentName}
           </span>
         )}
-        <span className={cn(
-          "ml-auto text-xs text-blue-600",
-          (status === "idle" || status === "started") && "animate-pulse",
-        )}>
+        <span className="ml-auto text-xs text-blue-600">
           {statusText}
         </span>
       </button>

@@ -228,6 +228,8 @@ def _message_to_event(m: Message) -> dict:
         data = metadata
     elif m.event_type == "incident_stopped":
         data = {"reason": m.content}
+    elif m.event_type == "agent_interrupted":
+        data = {}
     elif m.event_type == "thinking_done":
         data = metadata  # {phase, agent}
     elif m.event_type == "answer":
@@ -381,20 +383,45 @@ async def send_user_message(
         metadata_json=metadata if metadata else None,
     )
 
+    # Enrich human input with parsed attachment content
+    human_input = body.content
+    if attachment_texts:
+        human_input += "\n\n## 附件内容\n\n" + "\n\n---\n\n".join(attachment_texts)
+
     # If agent is waiting for human input (ask_human interrupt), resume the graph
     if incident.thread_id and incident.status == "investigating":
         sid = str(incident.id)[:8]
         log.info("User message received, resuming agent", sid=sid)
         log.debug("User message content", sid=sid, content=body.content)
 
-        # Enrich human input with parsed attachment content
-        human_input = body.content
-        if attachment_texts:
-            human_input += "\n\n## 附件内容\n\n" + "\n\n---\n\n".join(attachment_texts)
+        # Clear stale cancel flags before resuming
+        redis = get_redis()
+        await redis.delete(f"incident:{incident_id}:cancel")
 
         runner: AgentRunner = request.app.state.agent_runner
         background_tasks.add_task(
             runner.resume_with_human_input,
+            thread_id=incident.thread_id,
+            incident_id=str(incident.id),
+            human_input=human_input,
+            image_attachments=msg_image_attachments,
+        )
+
+    # If agent was interrupted by user, resume after interrupt
+    elif incident.thread_id and incident.status == "interrupted":
+        sid = str(incident.id)[:8]
+        log.info("User message received (interrupted), resuming agent", sid=sid)
+
+        incident.status = "investigating"
+        await session.commit()
+
+        # Clear stale cancel flags before resuming
+        redis = get_redis()
+        await redis.delete(f"incident:{incident_id}:cancel")
+
+        runner: AgentRunner = request.app.state.agent_runner
+        background_tasks.add_task(
+            runner.resume_after_interrupt,
             thread_id=incident.thread_id,
             incident_id=str(incident.id),
             human_input=human_input,
@@ -437,6 +464,47 @@ async def confirm_resolution(
     return {"status": "ok"}
 
 
+@router.post("/{incident_id}/interrupt")
+async def interrupt_incident(
+    incident_id: uuid.UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """Interrupt a running agent so the user can provide guidance."""
+    incident = await session.get(Incident, incident_id)
+    if not incident:
+        raise NotFoundError("Incident not found")
+    if incident.status != "investigating":
+        raise BadRequestError("Incident is not in investigating state")
+
+    redis = get_redis()
+    sid = str(incident_id)[:8]
+
+    # Check if agent is paused at a LangGraph interrupt point (not actively streaming).
+    # If so, handle interrupt immediately instead of relying on the streaming loop.
+    if incident.thread_id:
+        runner: AgentRunner = request.app.state.agent_runner
+        config = {"configurable": {"thread_id": incident.thread_id}}
+        state = await runner.graph.aget_state(config)
+        if state.next:
+            # Agent is paused (human_approval / ask_human / confirm_resolution)
+            incident.status = "interrupted"
+            await session.commit()
+
+            channel = EventPublisher.channel_for_incident(str(incident_id))
+            await runner.publisher.publish(channel, "agent_interrupted", {})
+
+            log.info("Incident interrupted (agent was paused)", sid=sid, paused_at=state.next)
+            return {"status": "ok"}
+
+    # Agent is actively streaming — set Redis flag for the streaming loop to pick up
+    await redis.set(f"incident:{incident_id}:cancel", "interrupted", ex=300)
+
+    log.info("Incident interrupt requested", sid=sid)
+
+    return {"status": "ok"}
+
+
 @router.post("/{incident_id}/stop", response_model=IncidentResponse)
 async def stop_incident(
     incident_id: uuid.UUID,
@@ -446,7 +514,7 @@ async def stop_incident(
     incident = await session.get(Incident, incident_id)
     if not incident:
         raise NotFoundError("Incident not found")
-    if incident.status not in ("open", "investigating"):
+    if incident.status not in ("open", "investigating", "interrupted"):
         raise BadRequestError("Incident is not active")
 
     # Set Redis cancel flag

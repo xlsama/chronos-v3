@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { MessageCircleQuestion, Square, Sparkles, CheckCircle } from "lucide-react";
+import { MessageCircleQuestion, Sparkles, CheckCircle } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
@@ -9,7 +8,6 @@ import { getServers } from "@/api/servers";
 import { getServices } from "@/api/services";
 import { SkillViewer } from "@/components/skills/skill-viewer";
 import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
-import { timelineItemVariants } from "@/lib/motion";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 import { PhaseSection } from "./phase-section";
@@ -18,6 +16,7 @@ import { ToolCallCard } from "./tool-call-card";
 import { ApprovalCard } from "./approval-card";
 
 import { SubAgentCard } from "./sub-agent-card";
+import { TimelineDivider } from "./timeline-divider";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
 
@@ -35,7 +34,9 @@ type TimelineItem =
   | { type: "user_message"; event: SSEEvent }
   | { type: "incident_stopped"; event: SSEEvent }
   | { type: "skill_read"; event: SSEEvent }
-  | { type: "answer"; event: SSEEvent };
+  | { type: "answer"; event: SSEEvent }
+  | { type: "agent_interrupted"; event: SSEEvent }
+  | { type: "done"; event: SSEEvent };
 
 
 function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
@@ -82,6 +83,12 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
         break;
       case "incident_stopped":
         items.push({ type: "incident_stopped", event });
+        break;
+      case "agent_interrupted":
+        items.push({ type: "agent_interrupted", event });
+        break;
+      case "done":
+        items.push({ type: "done", event });
         break;
       case "skill_read":
         if (event.data.success !== false) {
@@ -141,91 +148,54 @@ function SkillReadCard({ skillName, skillSlug }: { skillName: string; skillSlug:
 
 function WaitingIndicator() {
   const isWaiting = useIncidentStreamStore((s) => s.isWaitingForAgent);
+  if (!isWaiting) return null;
   return (
-    <AnimatePresence>
-      {isWaiting && (
-        <motion.div
-          key="waiting-indicator"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="px-1 py-2"
-        >
-          <span className="text-xs text-muted-foreground animate-pulse">Agent 思考中...</span>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div className="animate-in fade-in duration-150 px-1 py-2">
+      <span className="text-xs text-muted-foreground animate-pulse">Agent 思考中...</span>
+    </div>
   );
 }
 
 function LiveThinkingSection() {
   const thinkingContent = useIncidentStreamStore((s) => s.thinkingContent);
+  if (!thinkingContent) return null;
   return (
-    <AnimatePresence>
-      {thinkingContent && (
-        <motion.div
-          key="live-thinking"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <ThinkingBubble content={thinkingContent} isStreaming />
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div className="animate-in fade-in duration-150">
+      <ThinkingBubble content={thinkingContent} isStreaming />
+    </div>
   );
 }
 
 function LiveAskHumanSection() {
   const askHumanStreamContent = useIncidentStreamStore((s) => s.askHumanStreamContent);
+  if (!askHumanStreamContent) return null;
   return (
-    <AnimatePresence>
-      {askHumanStreamContent && (
-        <motion.div
-          key="live-ask-human"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
-            <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <div>
-              <p className="text-sm font-medium text-amber-800">
-                Agent 需要更多信息
-              </p>
-              <Markdown
-                content={askHumanStreamContent}
-                streaming
-                variant="compact"
-                className="mt-1 card-markdown card-markdown--amber"
-              />
-            </div>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div className="animate-in fade-in duration-150">
+      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+        <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+        <div>
+          <p className="text-sm font-medium text-amber-800">
+            Agent 需要更多信息
+          </p>
+          <Markdown
+            content={askHumanStreamContent}
+            streaming
+            variant="compact"
+            className="mt-1 card-markdown card-markdown--amber"
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
 function LiveAnswerSection() {
   const answerContent = useIncidentStreamStore((s) => s.answerContent);
+  if (!answerContent) return null;
   return (
-    <AnimatePresence>
-      {answerContent && (
-        <motion.div
-          key="live-answer"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <AnswerCard content={answerContent} isStreaming />
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div className="animate-in fade-in duration-150">
+      <AnswerCard content={answerContent} isStreaming />
+    </div>
   );
 }
 
@@ -333,7 +303,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     return map;
   }, [servicesData]);
 
-  const isActiveIncident = incidentStatus === "open" || incidentStatus === "investigating";
+  const isActiveIncident = incidentStatus === "open" || incidentStatus === "investigating" || incidentStatus === "interrupted";
   const contextActive = phaseState.contextGathering === "active";
 
   const hasHistory = contextActive ||
@@ -356,7 +326,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   const shouldUseFixedContextLayout =
     contextActive && hasGatherContext && hasSubAgentContent;
 
-  const mainEvents = events.filter((e) => e.event_type !== "done");
+  const mainEvents = events;
   const hasInvestigation = mainEvents.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
 
   // Transitional state: both sub-agents done but investigation phase hasn't started yet
@@ -467,20 +437,18 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           isLast
         >
           <div className="space-y-3">
-            <AnimatePresence initial={false}>
               {timelineItems.map((item, i) => {
                 switch (item.type) {
                   case "thinking":
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
+                      <div key={i}>
                         <ThinkingBubble content={item.event.data.content as string} />
-                      </motion.div>
+                      </div>
                     );
                   case "paired_tool": {
                     const toolName = item.toolCall.data.name as string;
                     const toolArgs = item.toolCall.data.args as Record<string, unknown> | undefined;
 
-                    // Resolve server/service info based on tool type
                     let serverInfo: string | undefined;
                     let serviceInfo: string | undefined;
                     if (toolName === "ssh_bash") {
@@ -495,7 +463,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                       ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
                       : undefined;
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
+                      <div key={i}>
                         <ToolCallCard
                           name={toolName}
                           args={toolArgs}
@@ -505,7 +473,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                           serverInfo={serverInfo}
                           serviceInfo={serviceInfo}
                         />
-                      </motion.div>
+                      </div>
                     );
                   }
                   case "approval_required": {
@@ -523,7 +491,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                     }
 
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
+                      <div key={i}>
                         <ApprovalCard
                           toolCall={approvalArgs as Record<string, unknown>}
                           approvalId={item.event.data.approval_id as string}
@@ -532,12 +500,12 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                           serviceInfo={approvalServiceInfo}
                           incidentStatus={incidentStatus}
                         />
-                      </motion.div>
+                      </div>
                     );
                   }
                   case "ask_human":
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
+                      <div key={i}>
                         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
                           <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                           <div>
@@ -551,23 +519,23 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                             />
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     );
                   case "user_message":
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
+                      <div key={i}>
                         <UserMessageBubble
                           content={item.event.data.content as string}
                           attachments={item.event.data.attachments as { filename: string; content_type: string; size: number; preview_url: string | null }[]}
                           attachment_ids={item.event.data.attachment_ids as string[]}
                           attachments_meta={item.event.data.attachments_meta as { id: string; filename: string; content_type: string; size: number }[]}
                         />
-                      </motion.div>
+                      </div>
                     );
 
                   case "error":
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
+                      <div key={i}>
                         <div className="rounded-md border border-destructive bg-destructive/10 p-3">
                           <Markdown
                             content={formatErrorMessage(item.event.data.message as string)}
@@ -575,37 +543,45 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                             className="card-markdown card-markdown--destructive"
                           />
                         </div>
-                      </motion.div>
+                      </div>
+                    );
+                  case "agent_interrupted":
+                    return (
+                      <div key={i}>
+                        <TimelineDivider type="agent_interrupted" />
+                      </div>
+                    );
+                  case "done":
+                    return (
+                      <div key={i}>
+                        <TimelineDivider type="done" />
+                      </div>
                     );
                   case "incident_stopped":
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
-                        <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                          <Square className="h-5 w-5 shrink-0 text-gray-500" />
-                          <p className="text-sm text-gray-600">事件已被手动停止</p>
-                        </div>
-                      </motion.div>
+                      <div key={i}>
+                        <TimelineDivider type="incident_stopped" />
+                      </div>
                     );
                   case "skill_read": {
                     const skillName = (item.event.data.skill_name as string) || (item.event.data.skill_slug as string);
                     const skillSlug = item.event.data.skill_slug as string;
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
+                      <div key={i}>
                         <SkillReadCard skillName={skillName} skillSlug={skillSlug} />
-                      </motion.div>
+                      </div>
                     );
                   }
                   case "answer":
                     return (
-                      <motion.div key={i} variants={timelineItemVariants} initial="hidden" animate="visible">
+                      <div key={i}>
                         <AnswerCard content={item.event.data.content as string} />
-                      </motion.div>
+                      </div>
                     );
                   default:
                     return null;
                 }
               })}
-            </AnimatePresence>
 
             {/* Transitional indicator — waiting for first investigation event after context gathering */}
             {isTransitioningToInvestigation && timelineItems.length === 0 && !hasThinking && (

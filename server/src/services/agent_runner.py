@@ -6,7 +6,7 @@ import uuid
 
 import orjson
 import redis.asyncio as aioredis
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 
 from src.env import get_settings
 from src.ops_agent.event_publisher import EventPublisher
@@ -113,6 +113,7 @@ class AgentRunner:
             "needs_approval": False,
             "pending_tool_call": None,
             "approval_decision": None,
+            "approval_supplement": None,
             "ask_human_count": 0,
             "tool_call_retry_count": 0,
             "incident_history_summary": None,
@@ -138,7 +139,9 @@ class AgentRunner:
             raise
 
         await self.publisher.flush_remaining(channel)
-        if not cancelled:
+        if cancelled:
+            await self._handle_cancel_reason(incident_id, channel)
+        else:
             await self._post_run(config, channel, incident_id)
         log.info("===== Agent lifecycle completed =====")
         return thread_id
@@ -192,7 +195,9 @@ class AgentRunner:
             raise
 
         await self.publisher.flush_remaining(channel)
-        if not cancelled:
+        if cancelled:
+            await self._handle_cancel_reason(incident_id, channel)
+        else:
             await self._post_run(config, channel, incident_id)
 
     async def resume(self, thread_id: str, incident_id: str, approval_result: dict) -> None:
@@ -209,7 +214,11 @@ class AgentRunner:
         from langgraph.types import Command
 
         decision = approval_result.get("decision", "approved")
-        resume_input = Command(resume=None, update={"approval_decision": decision})
+        supplement_text = approval_result.get("supplement_text")
+        state_update: dict = {"approval_decision": decision}
+        if supplement_text:
+            state_update["approval_supplement"] = supplement_text
+        resume_input = Command(resume=None, update=state_update)
 
         cancelled = False
         try:
@@ -226,8 +235,101 @@ class AgentRunner:
             raise
 
         await self.publisher.flush_remaining(channel)
-        if not cancelled:
+        if cancelled:
+            await self._handle_cancel_reason(incident_id, channel)
+        else:
             await self._post_run(config, channel, incident_id)
+
+    async def resume_after_interrupt(
+        self,
+        thread_id: str,
+        incident_id: str,
+        human_input: str,
+        image_attachments: list[dict] | None = None,
+    ) -> None:
+        """Resume graph after human interrupt: inject human message and continue from main_agent."""
+        self._reset_answer_stream_state()
+        self._ask_human_streamed = False
+        self._reset_ask_human_stream_state()
+        channel = EventPublisher.channel_for_incident(incident_id)
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
+
+        sid = incident_id[:8]
+        log = get_logger(component="main", sid=sid)
+        log.info("Resuming agent (after interrupt)", thread_id=thread_id)
+
+        # Get current checkpoint state
+        state = await self.graph.aget_state(config)
+        vals = state.values
+        messages = vals.get("messages", [])
+
+        # Cancel any pending tool calls that don't have matching ToolMessages
+        update_messages: list = []
+        if messages:
+            last_msg = messages[-1]
+            if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                answered_ids = {
+                    m.tool_call_id for m in messages
+                    if hasattr(m, "tool_call_id") and m.tool_call_id
+                }
+                for tc in last_msg.tool_calls:
+                    if tc["id"] not in answered_ids:
+                        update_messages.append(ToolMessage(
+                            content="操作已被用户中断。",
+                            tool_call_id=tc["id"],
+                        ))
+
+        # Add human message
+        human_msg = self._build_human_message(human_input, image_attachments)
+        update_messages.append(human_msg)
+
+        # Update checkpoint as if ask_human just ran → next node: main_agent
+        await self.graph.aupdate_state(
+            config,
+            {"messages": update_messages},
+            as_node="ask_human",
+        )
+
+        log.info("Checkpoint updated with human input, resuming stream")
+
+        # Resume streaming
+        cancelled = False
+        try:
+            async for event in self.graph.astream_events(None, config=config, version="v2"):
+                cancel_reason = await self._check_cancelled(incident_id)
+                if cancel_reason:
+                    log.info("Agent cancelled during resume_after_interrupt", reason=cancel_reason)
+                    cancelled = True
+                    break
+                await self._process_event(channel, event)
+        except Exception as e:
+            log.error("Agent resume_after_interrupt error", error=str(e))
+            await self.publisher.publish(channel, "error", {"message": self._format_agent_error(e)})
+            raise
+
+        await self.publisher.flush_remaining(channel)
+        if cancelled:
+            await self._handle_cancel_reason(incident_id, channel)
+        else:
+            await self._post_run(config, channel, incident_id)
+
+    async def _handle_cancel_reason(self, incident_id: str, channel: str) -> None:
+        """Handle cancel reason after agent stream is broken: distinguish interrupted vs stopped."""
+        sid = incident_id[:8]
+        log = get_logger(component="main", sid=sid)
+        cancel_reason = await self._check_cancelled(incident_id)
+        if cancel_reason == "interrupted":
+            log.info("Agent interrupted by user")
+            async with get_session_factory()() as session:
+                incident = await session.get(Incident, uuid.UUID(incident_id))
+                if incident and incident.status == "investigating":
+                    incident.status = "interrupted"
+                    await session.commit()
+                    log.info("status -> interrupted")
+            await self.publisher.publish(channel, "agent_interrupted", {})
+        # Clean up Redis cancel flag
+        if self.redis:
+            await self.redis.delete(f"incident:{incident_id}:cancel")
 
     async def _post_run(self, config: dict, channel: str, incident_id: str) -> None:
         sid = incident_id[:8]

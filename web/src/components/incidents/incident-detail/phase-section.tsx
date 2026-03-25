@@ -17,22 +17,22 @@ interface PhaseSectionProps {
 function TimelineNodeIndicator({ status }: { status: PhaseStatus }) {
   if (status === "completed") {
     return (
-      <span className="absolute left-0 top-1.5 z-10 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-4 ring-background">
-        <Check className="h-3 w-3" />
+      <span className="absolute left-0 top-2 z-10 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full bg-blue-500 text-white ring-2 ring-blue-500/20">
+        <Check className="h-2.5 w-2.5" strokeWidth={3} />
       </span>
     );
   }
   if (status === "active") {
     return (
-      <span className="absolute left-0 top-[9px] z-10 flex h-3.5 w-3.5 -translate-x-1/2 items-center justify-center">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-        <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-blue-500 ring-4 ring-background" />
+      <span className="absolute left-0 top-2 z-10 flex h-4 w-4 -translate-x-1/2 items-center justify-center">
+        <span className="absolute h-4 w-4 animate-pulse rounded-full bg-blue-500/20" />
+        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.5)]" />
       </span>
     );
   }
   return (
-    <span className="absolute left-0 top-2.5 z-10 flex h-3 w-3 -translate-x-1/2 items-center justify-center">
-      <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30 ring-4 ring-background" />
+    <span className="absolute left-0 top-2.5 z-10 flex h-2.5 w-2.5 -translate-x-1/2 items-center justify-center">
+      <span className="h-2 w-2 rounded-full bg-muted-foreground/25 ring-2 ring-background" />
     </span>
   );
 }
@@ -62,6 +62,7 @@ export function PhaseSection({
           "absolute left-0 w-px -translate-x-1/2 bg-border",
           isLast ? "top-0 h-4" : "top-0 bottom-0",
         )}
+        style={isLast ? { maskImage: "linear-gradient(to bottom, black, transparent)" } : undefined}
       />
 
       {/* Timeline node indicator */}

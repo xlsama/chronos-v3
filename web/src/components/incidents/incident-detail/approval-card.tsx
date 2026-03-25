@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ShieldAlert, AlertTriangle, Loader2, Wrench } from "lucide-react";
+import { ShieldAlert, AlertTriangle, Loader2, Wrench, MessageSquarePlus } from "lucide-react";
 import { decideApproval } from "@/api/approvals";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,25 +19,27 @@ interface ApprovalCardProps {
 
 export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, serviceInfo, incidentStatus }: ApprovalCardProps) {
   const decidedApprovals = useIncidentStreamStore((s) => s.decidedApprovals);
-  const setApprovalDecided = useIncidentStreamStore(
-    (s) => s.setApprovalDecided,
-  );
+  const setApprovalDecided = useIncidentStreamStore((s) => s.setApprovalDecided);
+  const pendingSupplement = useIncidentStreamStore((s) => s.pendingSupplement);
+  const setPendingSupplement = useIncidentStreamStore((s) => s.setPendingSupplement);
+
   const resolvedDecision = approvalId
     ? (decidedApprovals[approvalId] ?? null)
     : null;
 
+  const isSupplementing = pendingSupplement?.approvalId === approvalId;
+
   const decideMutation = useMutation({
-    mutationFn: (decision: string) =>
+    mutationFn: (vars: { decision: string }) =>
       decideApproval(approvalId!, {
-        decision,
+        decision: vars.decision,
         decided_by: "admin",
         silent: true,
       }),
-    onSuccess: (_, decision) => {
-      setApprovalDecided(approvalId!, decision);
+    onSuccess: (_, vars) => {
+      setApprovalDecided(approvalId!, vars.decision);
     },
     onError: (error: unknown) => {
-      // 409 Conflict → approval already decided, parse actual decision from detail
       const apiErr = error as { status?: number; detail?: string };
       if (apiErr.status === 409) {
         const decision = apiErr.detail?.includes("rejected") ? "rejected" : "approved";
@@ -52,6 +54,7 @@ export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, servi
   const explanation = toolCall?.explanation as string | undefined;
   const command = toolCall?.command as string | undefined;
   const isHigh = riskLevel === "HIGH";
+  const isExpired = incidentStatus === "stopped" || incidentStatus === "resolved" || incidentStatus === "interrupted";
 
   return (
     <div
@@ -136,8 +139,9 @@ export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, servi
         </div>
       )}
 
+      {/* Pending: show action buttons */}
       {approvalId && !resolvedDecision && (
-        (incidentStatus === "stopped" || incidentStatus === "resolved") ? (
+        isExpired ? (
           <div className="mt-3">
             <span
               className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600"
@@ -146,15 +150,25 @@ export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, servi
               已过期
             </span>
           </div>
+        ) : isSupplementing ? (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xs text-blue-600 font-medium">补充说明中...</span>
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+              onClick={() => setPendingSupplement(null)}
+            >
+              取消
+            </button>
+          </div>
         ) : (
           <div className="mt-3 flex gap-2">
             <Button
               size="sm"
-              onClick={() => decideMutation.mutate("approved")}
+              onClick={() => decideMutation.mutate({ decision: "approved" })}
               disabled={decideMutation.isPending}
               data-testid="approve-button"
             >
-              {decideMutation.isPending && decideMutation.variables === "approved" && (
+              {decideMutation.isPending && decideMutation.variables?.decision === "approved" && (
                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
               )}
               批准
@@ -162,19 +176,30 @@ export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, servi
             <Button
               size="sm"
               variant="outline"
-              onClick={() => decideMutation.mutate("rejected")}
+              onClick={() => decideMutation.mutate({ decision: "rejected" })}
               disabled={decideMutation.isPending}
               data-testid="reject-button"
             >
-              {decideMutation.isPending && decideMutation.variables === "rejected" && (
+              {decideMutation.isPending && decideMutation.variables?.decision === "rejected" && (
                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
               )}
               拒绝
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setPendingSupplement({ approvalId: approvalId! })}
+              disabled={decideMutation.isPending}
+              data-testid="supplement-button"
+            >
+              <MessageSquarePlus className="mr-1 h-3.5 w-3.5" />
+              补充说明
             </Button>
           </div>
         )
       )}
 
+      {/* Decided: show decision badge */}
       {resolvedDecision && (
         <div className="mt-3">
           <span
@@ -182,11 +207,13 @@ export function ApprovalCard({ toolCall, approvalId, toolName, serverInfo, servi
               "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
               resolvedDecision === "approved"
                 ? "bg-green-100 text-green-800"
-                : "bg-red-100 text-red-800",
+                : resolvedDecision === "supplemented"
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-red-100 text-red-800",
             )}
             data-testid="approval-decision"
           >
-            {resolvedDecision === "approved" ? "已批准" : "已拒绝"}
+            {resolvedDecision === "approved" ? "已批准" : resolvedDecision === "supplemented" ? "已补充" : "已拒绝"}
           </span>
         </div>
       )}

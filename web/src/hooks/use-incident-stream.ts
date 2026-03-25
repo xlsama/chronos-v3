@@ -281,6 +281,8 @@ export function useIncidentStream(
             );
           } else if (event.event_type === "done") {
             setWaitingForAgent(false);
+            // Add done event to timeline (renders "Agent 排查完成" separator)
+            addEvent(event);
             // Agent completed; invalidate queries + close SSE
             updatePhase("summary_complete");
             setResolutionConfirmResolved(true);
@@ -292,6 +294,32 @@ export function useIncidentStream(
             setResolutionConfirmResolved(false);
           } else if (event.event_type === "resolution_confirmed") {
             setResolutionConfirmResolved(true);
+          } else if (event.event_type === "agent_interrupted") {
+            // Flush thinking buffer
+            const { thinkingContent: intThk } = useIncidentStreamStore.getState();
+            if (intThk) {
+              addEvent({
+                event_type: "thinking",
+                data: { content: intThk },
+                timestamp: event.timestamp,
+              });
+              clearThinking();
+            }
+            // Flush answer buffer
+            const { answerContent: intAns } = useIncidentStreamStore.getState();
+            if (intAns) {
+              addEvent({
+                event_type: "answer",
+                data: { content: intAns },
+                timestamp: event.timestamp,
+              });
+              clearAnswer();
+            }
+            // Add interrupted event to timeline (renders "已中断" separator)
+            addEvent(event);
+            setWaitingForAgent(false);
+            // Don't close SSE — interrupted is not terminal. Refresh incident status.
+            queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
           } else if (event.event_type === "incident_stopped") {
             addEvent(event);
             setResolutionConfirmResolved(true);
