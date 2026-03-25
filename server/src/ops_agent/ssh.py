@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import asyncssh
 
+from src.env import get_settings
 from src.lib.logger import get_logger
 
 log = get_logger(component="ssh")
@@ -27,7 +28,7 @@ class SSHConnector:
         username: str = "root",
         password: str | None = None,
         private_key: str | None = None,
-        timeout: int = 30,
+        timeout: int | None = None,
         bastion_host: str | None = None,
         bastion_port: int | None = None,
         bastion_username: str | None = None,
@@ -40,7 +41,7 @@ class SSHConnector:
         self.username = username
         self.password = password
         self.private_key = private_key
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else get_settings().command_timeout
         self.bastion_host = bastion_host
         self.bastion_port = bastion_port or 22
         self.bastion_username = bastion_username

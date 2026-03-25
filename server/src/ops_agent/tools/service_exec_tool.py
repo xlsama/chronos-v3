@@ -2,6 +2,7 @@ import asyncio
 import time
 import uuid
 
+from src.env import get_settings
 from src.lib.logger import get_logger
 from src.ops_agent.tools.tool_permissions import ServiceSafety, CommandType, compress_output
 from src.ops_agent.tools.service_connectors.base import ServiceConnector
@@ -296,13 +297,17 @@ async def service_exec(service_id: str, command: str) -> str:
 
     try:
         t0 = time.monotonic()
-        result = await asyncio.wait_for(connector.execute(command), timeout=30)
+        settings = get_settings()
+        result = await asyncio.wait_for(
+            connector.execute(command), timeout=settings.command_timeout
+        )
         exec_elapsed = time.monotonic() - t0
         log.info("Completed", elapsed=f"{exec_elapsed:.2f}s")
     except asyncio.TimeoutError:
         actual_elapsed = time.monotonic() - t0
-        log.warning("Timeout", elapsed=f"{actual_elapsed:.2f}s", limit="30s")
-        return "查询执行超时（30秒），请简化查询或增加限制条件"
+        timeout_val = get_settings().command_timeout
+        log.warning("Timeout", elapsed=f"{actual_elapsed:.2f}s", limit=f"{timeout_val}s")
+        return f"查询执行超时（{timeout_val}秒），请简化查询或增加限制条件"
     except Exception as e:
         log.error("Error", error=str(e))
         return f"执行异常: {e}"

@@ -2,6 +2,7 @@ import asyncio
 import shlex
 import time
 
+from src.env import get_settings
 from src.lib.logger import get_logger
 from src.ops_agent.tools.tool_permissions import ShellSafety, CommandType, compress_output
 
@@ -41,11 +42,14 @@ async def local_bash(command: str) -> dict:
             cwd=_WORK_DIR,
         )
         t0 = time.monotonic()
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        settings = get_settings()
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=settings.command_timeout
+        )
         exec_elapsed = time.monotonic() - t0
     except asyncio.TimeoutError:
-        log.warning("Timeout after 30s")
-        return {"error": "命令执行超时（30秒）"}
+        log.warning("Timeout", limit=f"{get_settings().command_timeout}s")
+        return {"error": f"命令执行超时（{get_settings().command_timeout}秒）"}
     except OSError as e:
         log.error("OS error", error=str(e))
         return {"error": f"执行失败: {e}"}
