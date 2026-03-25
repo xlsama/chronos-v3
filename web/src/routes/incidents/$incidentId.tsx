@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowDown, ArrowLeft, Info, Square } from "lucide-react";
 import { getIncident, stopIncident } from "@/api/incidents";
@@ -52,6 +52,14 @@ function IncidentDetailPage() {
     threshold: 100,
     smooth: true,
   });
+
+  // 审批操作后强制滚动到底部，防止 shouldAutoScroll 被中间布局状态错误置 false
+  const scrollToBottomTrigger = useIncidentStreamStore((s) => s.scrollToBottomTrigger);
+  useEffect(() => {
+    if (scrollToBottomTrigger > 0) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [scrollToBottomTrigger, scrollToBottom]);
 
   const stopMutation = useMutation({
     mutationFn: () => stopIncident(incidentId),

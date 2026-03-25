@@ -218,13 +218,16 @@ class EventPublisher:
                 "status": data.get("status", ""),
             }
         if event_type == "tool_use":
-            return {
+            meta = {
                 "name": data.get("name", ""),
                 "args": data.get("args", {}),
                 "tool_call_id": data.get("tool_call_id", ""),
                 "phase": data.get("phase", ""),
                 "agent": data.get("agent", ""),
             }
+            if data.get("approval_id"):
+                meta["approval_id"] = data["approval_id"]
+            return meta
         if event_type == "tool_result":
             meta = {
                 "name": data.get("name", ""),
@@ -234,6 +237,8 @@ class EventPublisher:
             }
             if data.get("sources"):
                 meta["sources"] = data["sources"]
+            if data.get("approval_id"):
+                meta["approval_id"] = data["approval_id"]
             return meta
         if event_type == "skill_read":
             return {
@@ -247,6 +252,7 @@ class EventPublisher:
                 "approval_id": data.get("approval_id", ""),
                 "tool_name": data.get("tool_name", ""),
                 "tool_args": data.get("tool_args", {}),
+                "tool_call_id": data.get("tool_call_id", ""),
             }
         if event_type == "approval_decided":
             return {

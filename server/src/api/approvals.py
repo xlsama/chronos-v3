@@ -77,6 +77,8 @@ async def decide_approval(
             thread_id=incident.thread_id,
             incident_id=str(incident.id),
             approval_result=approval_result,
+            approval_id=str(approval.id),
+            approval_tool_name=approval.tool_name,
         )
 
     return approval

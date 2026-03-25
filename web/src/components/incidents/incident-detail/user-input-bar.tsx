@@ -27,6 +27,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
     pendingSupplement,
     setPendingSupplement,
     setApprovalDecided,
+    triggerScrollToBottom,
     addEvent,
   } = useIncidentStreamStore();
 
@@ -109,6 +110,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
     onSuccess: () => {
       setApprovalDecided(pendingSupplement!.approvalId, "supplemented");
       setPendingSupplement(null);
+      triggerScrollToBottom();
     },
     onError: () => {
       toast.error("补充说明发送失败，请重试");

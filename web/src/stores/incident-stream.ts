@@ -29,6 +29,7 @@ interface IncidentStreamState {
   resolutionConfirmResolved: boolean;
   decidedApprovals: Record<string, string>;
   pendingSupplement: { approvalId: string } | null;
+  scrollToBottomTrigger: number;
   addEvent: (event: SSEEvent) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
@@ -47,6 +48,7 @@ interface IncidentStreamState {
   setResolutionConfirmResolved: (resolved: boolean) => void;
   setApprovalDecided: (approvalId: string, decision: string) => void;
   setPendingSupplement: (pending: { approvalId: string } | null) => void;
+  triggerScrollToBottom: () => void;
   setConnected: (connected: boolean) => void;
   loadHistory: (events: SSEEvent[]) => void;
   reset: () => void;
@@ -78,6 +80,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   resolutionConfirmResolved: false,
   decidedApprovals: {},
   pendingSupplement: null,
+  scrollToBottomTrigger: 0,
 
   addEvent: (event) => {
     set((state) => {
@@ -200,6 +203,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     })),
 
   setPendingSupplement: (pending) => set({ pendingSupplement: pending }),
+
+  triggerScrollToBottom: () =>
+    set((state) => ({ scrollToBottomTrigger: state.scrollToBottomTrigger + 1 })),
 
   setConnected: (connected) => set({ isConnected: connected }),
 
@@ -326,5 +332,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       resolutionConfirmResolved: false,
       decidedApprovals: {},
       pendingSupplement: null,
+      scrollToBottomTrigger: 0,
     }),
 }));

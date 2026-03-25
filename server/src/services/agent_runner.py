@@ -200,10 +200,20 @@ class AgentRunner:
         else:
             await self._post_run(config, channel, incident_id)
 
-    async def resume(self, thread_id: str, incident_id: str, approval_result: dict) -> None:
+    async def resume(
+        self,
+        thread_id: str,
+        incident_id: str,
+        approval_result: dict,
+        approval_id: str = "",
+        approval_tool_name: str = "",
+    ) -> None:
         self._reset_answer_stream_state()
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
+        # Store approval context so _process_event can inject approval_id into tool events
+        self._active_approval_id = approval_id
+        self._active_approval_tool_name = approval_tool_name
         sid = incident_id[:8]
         log = get_logger(component="main", sid=sid)
         channel = EventPublisher.channel_for_incident(incident_id)
@@ -235,6 +245,8 @@ class AgentRunner:
             raise
 
         await self.publisher.flush_remaining(channel)
+        self._active_approval_id = ""
+        self._active_approval_tool_name = ""
         if cancelled:
             await self._handle_cancel_reason(incident_id, channel)
         else:
@@ -375,6 +387,7 @@ class AgentRunner:
                     "approval_id": str(approval.id),
                     "tool_name": pending["name"],
                     "tool_args": {**args, "risk_level": risk_level},
+                    "tool_call_id": pending.get("id", ""),
                 })
                 notify_fire_and_forget(
                     "need_approval", incident_id,
@@ -621,13 +634,16 @@ class AgentRunner:
             run_id = event.get("run_id", "")
             main_log.info("Tool start", tool=name)
             main_log.debug("Tool input", input=event["data"].get("input", {}))
-            await self.publisher.publish(channel, "tool_use", {
+            tool_use_data: dict = {
                 "name": name,
                 "args": event["data"].get("input", {}),
                 "tool_call_id": run_id,
                 "phase": phase,
                 "agent": agent,
-            })
+            }
+            if self._active_approval_id and name == self._active_approval_tool_name:
+                tool_use_data["approval_id"] = self._active_approval_id
+            await self.publisher.publish(channel, "tool_use", tool_use_data)
 
         elif kind == "on_tool_end":
             name = event.get("name", "")
@@ -657,10 +673,15 @@ class AgentRunner:
             output_str = str(event["data"].get("output", ""))
             main_log.info("Tool end", tool=name)
             main_log.debug("Tool output", output=output_str)
-            await self.publisher.publish(channel, "tool_result", {
+            tool_result_data: dict = {
                 "name": name,
                 "output": output_str,
                 "tool_call_id": run_id,
                 "phase": phase,
                 "agent": agent,
-            })
+            }
+            if self._active_approval_id and name == self._active_approval_tool_name:
+                tool_result_data["approval_id"] = self._active_approval_id
+                self._active_approval_id = ""
+                self._active_approval_tool_name = ""
+            await self.publisher.publish(channel, "tool_result", tool_result_data)

@@ -1,8 +1,22 @@
 import { useState } from "react";
-import { Wrench, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  Wrench,
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  ShieldAlert,
+  AlertTriangle,
+  MessageSquarePlus,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ShellCodeBlock } from "@/components/ui/shell-code-block";
 import { Markdown } from "@/components/ui/markdown";
+import { cn } from "@/lib/utils";
+import { decideApproval } from "@/api/approvals";
+import { useIncidentStreamStore } from "@/stores/incident-stream";
 
 interface ToolCallCardProps {
   name: string;
@@ -12,6 +26,11 @@ interface ToolCallCardProps {
   relativeTime?: string;
   serverInfo?: string;
   serviceInfo?: string;
+  // Approval-related (optional)
+  approvalId?: string;
+  riskLevel?: string;
+  explanation?: string;
+  incidentStatus?: string;
 }
 
 const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
@@ -24,67 +43,228 @@ export function ToolCallCard({
   relativeTime,
   serverInfo,
   serviceInfo,
+  approvalId,
+  riskLevel,
+  explanation,
+  incidentStatus,
 }: ToolCallCardProps) {
-  const [expanded, setExpanded] = useState(isExecuting ?? false);
+  const isApproval = !!approvalId;
+  const isHigh = riskLevel === "HIGH";
+
+  const [expanded, setExpanded] = useState(isApproval ? true : (isExecuting ?? false));
+
+  // Approval state from store
+  const decidedApprovals = useIncidentStreamStore((s) => s.decidedApprovals);
+  const setApprovalDecided = useIncidentStreamStore((s) => s.setApprovalDecided);
+  const pendingSupplement = useIncidentStreamStore((s) => s.pendingSupplement);
+  const setPendingSupplement = useIncidentStreamStore((s) => s.setPendingSupplement);
+  const triggerScrollToBottom = useIncidentStreamStore((s) => s.triggerScrollToBottom);
+
+  const resolvedDecision = approvalId ? (decidedApprovals[approvalId] ?? null) : null;
+  const isSupplementing = pendingSupplement?.approvalId === approvalId;
+  const isExpired =
+    incidentStatus === "stopped" ||
+    incidentStatus === "resolved" ||
+    incidentStatus === "interrupted";
+
+  const decideMutation = useMutation({
+    mutationFn: (vars: { decision: string }) =>
+      decideApproval(approvalId!, {
+        decision: vars.decision,
+        decided_by: "admin",
+        silent: true,
+      }),
+    onSuccess: (_, vars) => {
+      setApprovalDecided(approvalId!, vars.decision);
+      triggerScrollToBottom();
+    },
+    onError: (error: unknown) => {
+      const apiErr = error as { status?: number; detail?: string };
+      if (apiErr.status === 409) {
+        const decision = apiErr.detail?.includes("rejected") ? "rejected" : "approved";
+        setApprovalDecided(approvalId!, decision);
+        triggerScrollToBottom();
+        return;
+      }
+      toast.error("审批操作失败");
+    },
+  });
 
   const hasCommand = COMMAND_TOOLS.has(name);
   const command = hasCommand ? (args?.command as string | undefined) : undefined;
   const hasNonCommandArgs = !hasCommand && args && Object.keys(args).length > 0;
 
-  // Badge info
   const badgeLabel =
-    name === "ssh_bash" ? serverInfo :
-    name === "bash" ? "本地" :
-    name === "service_exec" ? serviceInfo :
-    undefined;
+    name === "ssh_bash"
+      ? serverInfo
+      : name === "bash"
+        ? "本地"
+        : name === "service_exec"
+          ? serviceInfo
+          : undefined;
+
+  // Color theme
+  const colors = isApproval
+    ? isHigh
+      ? {
+          border: "border-red-300",
+          bg: "bg-red-50/50",
+          chevron: "text-red-400",
+          icon: "text-red-700",
+          name: "text-red-900",
+          spinner: "text-red-500",
+          divider: "border-red-100",
+          cmdBorder: "border-red-400",
+          argBorder: "border-red-400",
+          borderWidth: "border-2",
+        }
+      : {
+          border: "border-yellow-300",
+          bg: "bg-yellow-50/50",
+          chevron: "text-yellow-400",
+          icon: "text-yellow-700",
+          name: "text-yellow-900",
+          spinner: "text-yellow-500",
+          divider: "border-yellow-100",
+          cmdBorder: "border-yellow-400",
+          argBorder: "border-yellow-400",
+          borderWidth: "border-2",
+        }
+    : {
+        border: "border-blue-200",
+        bg: "bg-blue-50/50",
+        chevron: "text-blue-400",
+        icon: "text-blue-700",
+        name: "text-blue-900",
+        spinner: "text-blue-500",
+        divider: "border-blue-100",
+        cmdBorder: "border-blue-400",
+        argBorder: "border-blue-400",
+        borderWidth: "border",
+      };
+
+  // Decision badge component
+  const decisionBadge = resolvedDecision ? (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+        resolvedDecision === "approved"
+          ? "bg-green-100 text-green-800"
+          : resolvedDecision === "supplemented"
+            ? "bg-blue-100 text-blue-800"
+            : "bg-red-100 text-red-800",
+      )}
+      data-testid="approval-decision"
+    >
+      {resolvedDecision === "approved"
+        ? "已批准"
+        : resolvedDecision === "supplemented"
+          ? "已补充"
+          : "已拒绝"}
+    </span>
+  ) : null;
 
   return (
     <div
-      className="rounded-lg border border-blue-200 bg-blue-50/50"
-      data-testid="tool-call-card"
+      className={cn("rounded-lg", colors.borderWidth, colors.border, colors.bg)}
+      data-testid={isApproval ? "approval-card" : "tool-call-card"}
+      data-approval-id={approvalId}
     >
-      {/* Header — always visible, clickable to toggle */}
+      {/* Header */}
       <button
         className="flex w-full items-center gap-2 p-3 text-left text-sm"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+          <ChevronDown className={cn("h-3.5 w-3.5 shrink-0", colors.chevron)} />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+          <ChevronRight className={cn("h-3.5 w-3.5 shrink-0", colors.chevron)} />
         )}
-        <Wrench className="h-4 w-4 shrink-0 text-blue-700" />
-        <span className="font-medium text-blue-900" data-testid="tool-name">{name}</span>
+
+        {/* Approval icon */}
+        {isApproval ? (
+          isHigh ? (
+            <AlertTriangle className={cn("h-4 w-4 shrink-0", colors.icon)} />
+          ) : (
+            <ShieldAlert className={cn("h-4 w-4 shrink-0", colors.icon)} />
+          )
+        ) : (
+          <Wrench className={cn("h-4 w-4 shrink-0", colors.icon)} />
+        )}
+
+        <span className={cn("font-medium", colors.name)} data-testid="tool-name">
+          {name}
+        </span>
+
         {badgeLabel && (
           <Badge variant="secondary" className="text-xs">
             {badgeLabel}
           </Badge>
         )}
-        {isExecuting && (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />
+
+        {/* Risk level badge */}
+        {isApproval && riskLevel && (
+          <span
+            className={cn(
+              "inline-block rounded px-2 py-0.5 text-xs font-medium",
+              isHigh ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800",
+            )}
+            data-testid="risk-level"
+          >
+            {riskLevel}
+          </span>
         )}
-        {relativeTime && (
-          <span className="ml-auto text-xs text-muted-foreground">{relativeTime}</span>
-        )}
+
+        {isExecuting && <Loader2 className={cn("h-3.5 w-3.5 animate-spin", colors.spinner)} />}
+
+        {/* Right side: decision badge + relative time */}
+        <span className="ml-auto flex items-center gap-2">
+          {decisionBadge}
+          {relativeTime && (
+            <span className="text-xs text-muted-foreground">{relativeTime}</span>
+          )}
+        </span>
       </button>
 
       {/* Expanded content */}
       {expanded && (
-        <div className="flex flex-col gap-3 border-t border-blue-100 p-3 pt-2">
+        <div className={cn("flex flex-col gap-3 border-t p-3 pt-2", colors.divider)}>
+          {/* High-risk warning */}
+          {isApproval && isHigh && (
+            <div className="rounded border border-red-200 bg-red-100/50 px-3 py-2 text-xs text-red-700">
+              此命令被识别为高危操作，请仔细确认后再审批
+            </div>
+          )}
+
           {/* Command */}
           {command && (
             <ShellCodeBlock
               code={command}
-              showPrompt
-              className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 pl-3 text-xs shadow-sm"
+              showPrompt={!isApproval || !!output}
+              className={cn(
+                "overflow-x-auto rounded bg-background p-2 text-xs shadow-sm",
+                isApproval && !output ? "border-l-0" : cn("border-l-2 pl-3", colors.cmdBorder),
+              )}
             />
           )}
 
           {/* Non-command args */}
           {hasNonCommandArgs && (
-            <pre className="overflow-x-auto rounded border-l-2 border-blue-400 bg-background p-2 pl-3 text-xs shadow-sm">
+            <pre
+              className={cn(
+                "overflow-x-auto rounded border-l-2 bg-background p-2 pl-3 text-xs shadow-sm",
+                colors.argBorder,
+              )}
+            >
               {JSON.stringify(args, null, 2)}
             </pre>
+          )}
+
+          {/* Explanation */}
+          {isApproval && explanation && (
+            <p className="text-sm">
+              <span className="font-medium">说明:</span> {explanation}
+            </p>
           )}
 
           {/* Result */}
@@ -96,6 +276,69 @@ export function ToolCallCard({
               <Markdown content={output} variant="tiny" />
             </div>
           )}
+
+          {/* Approval action buttons */}
+          {isApproval &&
+            approvalId &&
+            !resolvedDecision &&
+            (isExpired ? (
+              <div>
+                <span
+                  className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600"
+                  data-testid="approval-decision"
+                >
+                  已过期
+                </span>
+              </div>
+            ) : isSupplementing ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-blue-600">补充说明中...</span>
+                <button
+                  className="text-xs text-muted-foreground underline hover:text-foreground"
+                  onClick={() => setPendingSupplement(null)}
+                >
+                  取消
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => decideMutation.mutate({ decision: "approved" })}
+                  disabled={decideMutation.isPending}
+                  data-testid="approve-button"
+                >
+                  {decideMutation.isPending &&
+                    decideMutation.variables?.decision === "approved" && (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    )}
+                  批准
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => decideMutation.mutate({ decision: "rejected" })}
+                  disabled={decideMutation.isPending}
+                  data-testid="reject-button"
+                >
+                  {decideMutation.isPending &&
+                    decideMutation.variables?.decision === "rejected" && (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    )}
+                  拒绝
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setPendingSupplement({ approvalId: approvalId! })}
+                  disabled={decideMutation.isPending}
+                  data-testid="supplement-button"
+                >
+                  <MessageSquarePlus className="mr-1 h-3.5 w-3.5" />
+                  补充说明
+                </Button>
+              </div>
+            ))}
         </div>
       )}
     </div>

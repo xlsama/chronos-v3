@@ -11,10 +11,9 @@ import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 import { PhaseSection } from "./phase-section";
-import { TextShimmer } from "@/components/ui/text-shimmer";
+import { TextDotsLoader } from "@/components/ui/loader";
 import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
-import { ApprovalCard } from "./approval-card";
 
 import { SubAgentCard } from "./sub-agent-card";
 import { TimelineDivider } from "./timeline-divider";
@@ -29,7 +28,7 @@ interface EventTimelineProps {
 type TimelineItem =
   | { type: "thinking"; event: SSEEvent }
   | { type: "paired_tool"; toolCall: SSEEvent; toolResult?: SSEEvent }
-  | { type: "approval_required"; event: SSEEvent }
+  | { type: "approval_tool"; approvalEvent: SSEEvent; toolCall?: SSEEvent; toolResult?: SSEEvent }
   | { type: "ask_human"; event: SSEEvent }
   | { type: "error"; event: SSEEvent }
   | { type: "user_message"; event: SSEEvent }
@@ -41,8 +40,10 @@ type TimelineItem =
 
 function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   const items: TimelineItem[] = [];
-  // Map from tool_call_id to the index in items array for pending (unresolved) tool_calls
+  // Map from tool_call_id (run_id) to the index in items array for pending tool_calls
   const pendingTools = new Map<string, number>();
+  // Map from approval_id to the index in items array for approval_tool items
+  const pendingApprovals = new Map<string, number>();
 
   for (const [idx, event] of events.entries()) {
     switch (event.event_type) {
@@ -52,9 +53,27 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
       case "tool_use": {
         const name = event.data.name as string;
         const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
-        const itemIdx = items.length;
-        items.push({ type: "paired_tool", toolCall: event });
-        pendingTools.set(callId, itemIdx);
+        const approvalId = event.data.approval_id as string | undefined;
+
+        // Check if this tool_use carries an approval_id linking to a pending approval
+        const approvalIdx = approvalId ? pendingApprovals.get(approvalId) : undefined;
+        if (approvalIdx !== undefined) {
+          // Merge into the existing approval_tool item
+          const item = items[approvalIdx] as {
+            type: "approval_tool";
+            approvalEvent: SSEEvent;
+            toolCall?: SSEEvent;
+            toolResult?: SSEEvent;
+          };
+          item.toolCall = event;
+          // Also track in pendingTools so tool_result can find it via run_id
+          pendingTools.set(callId, approvalIdx);
+          pendingApprovals.delete(approvalId!);
+        } else {
+          const itemIdx = items.length;
+          items.push({ type: "paired_tool", toolCall: event });
+          pendingTools.set(callId, itemIdx);
+        }
         break;
       }
       case "tool_result": {
@@ -62,20 +81,20 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
         const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
         const pendingIdx = pendingTools.get(callId);
         if (pendingIdx !== undefined) {
-          const item = items[pendingIdx] as {
-            type: "paired_tool";
-            toolCall: SSEEvent;
-            toolResult?: SSEEvent;
-          };
-          item.toolResult = event;
+          (items[pendingIdx] as { toolResult?: SSEEvent }).toolResult = event;
           pendingTools.delete(callId);
         }
-        // If no pending match, ignore (shouldn't happen with ordered events)
         break;
       }
-      case "approval_required":
-        items.push({ type: "approval_required", event });
+      case "approval_required": {
+        const approvalId = event.data.approval_id as string;
+        const itemIdx = items.length;
+        items.push({ type: "approval_tool", approvalEvent: event });
+        if (approvalId) {
+          pendingApprovals.set(approvalId, itemIdx);
+        }
         break;
+      }
       case "ask_human":
         items.push({ type: "ask_human", event });
         break;
@@ -155,7 +174,7 @@ function WaitingIndicator() {
   if (!isWaiting) return null;
   return (
     <div className="animate-in fade-in duration-150 px-1 py-2">
-      <TextShimmer className="text-xs">Agent 思考中...</TextShimmer>
+      <TextDotsLoader text="Agent 思考中" size="sm" />
     </div>
   );
 }
@@ -492,9 +511,10 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                     </div>
                   );
                 }
-                case "approval_required": {
-                  const approvalToolName = item.event.data.tool_name as string | undefined;
-                  const approvalArgs = item.event.data.tool_args as
+                case "approval_tool": {
+                  const approvalData = item.approvalEvent.data;
+                  const approvalToolName = (approvalData.tool_name as string) || "";
+                  const approvalArgs = approvalData.tool_args as
                     | Record<string, unknown>
                     | undefined;
 
@@ -508,14 +528,24 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                     approvalServiceInfo = sid ? serviceMap.get(sid) : undefined;
                   }
 
+                  const approvalRelTime =
+                    baseTimestamp && item.toolCall
+                      ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
+                      : undefined;
+
                   return (
                     <div key={i}>
-                      <ApprovalCard
-                        toolCall={approvalArgs as Record<string, unknown>}
-                        approvalId={item.event.data.approval_id as string}
-                        toolName={approvalToolName}
+                      <ToolCallCard
+                        name={approvalToolName}
+                        args={approvalArgs}
+                        output={item.toolResult?.data.output as string | undefined}
+                        isExecuting={!!item.toolCall && !item.toolResult}
+                        relativeTime={approvalRelTime}
                         serverInfo={approvalServerInfo}
                         serviceInfo={approvalServiceInfo}
+                        approvalId={approvalData.approval_id as string}
+                        riskLevel={approvalArgs?.risk_level as string | undefined}
+                        explanation={approvalArgs?.explanation as string | undefined}
                         incidentStatus={incidentStatus}
                       />
                     </div>
@@ -618,7 +648,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
             {/* Transitional indicator — waiting for first investigation event after context gathering */}
             {isTransitioningToInvestigation && timelineItems.length === 0 && !hasThinking && (
               <div className="px-1 py-2">
-                <TextShimmer className="text-xs">Agent 思考中...</TextShimmer>
+                <TextDotsLoader text="Agent 思考中" size="sm" />
               </div>
             )}
 

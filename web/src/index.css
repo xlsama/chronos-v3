@@ -528,6 +528,17 @@
   margin: 0.375rem !important;
 }
 
+/* ── loading-dots 动画 ── */
+
+@keyframes loading-dots {
+  0%, 80%, 100% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
 /* ── 流动渐变边框（可复用激活态样式） ── */
 
 @keyframes flowing-rotate {
