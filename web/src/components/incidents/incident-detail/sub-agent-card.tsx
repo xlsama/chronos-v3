@@ -233,31 +233,39 @@ export function SubAgentCard({
             {config.subAgentName}
           </span>
         )}
-        <span className="ml-auto text-xs text-blue-600">
-          {statusText}
+        <span className="ml-auto inline-flex shrink-0 items-center gap-4">
+          {status !== "started" && sources.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-xs font-normal text-blue-700">
+              <FileText className="h-3 w-3 shrink-0 opacity-60" />
+              {sources.map((s, i) => (
+                <span key={s.id} className="inline-flex shrink-0 items-center">
+                  {i > 0 && <span className="mx-0.5 opacity-40">&middot;</span>}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="cursor-pointer hover:text-blue-900 hover:underline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewSource(s);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        setPreviewSource(s);
+                      }
+                    }}
+                  >
+                    {s.title || s.filename || s.id.slice(0, 8)}
+                  </span>
+                </span>
+              ))}
+            </span>
+          )}
+          <span className="shrink-0 text-xs text-blue-600">
+            {statusText}
+          </span>
         </span>
       </button>
-
-      {/* Sources row */}
-      {status !== "started" && sources.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1 px-3 pb-2 pl-9 text-xs text-blue-700">
-          <FileText className="h-3 w-3 shrink-0 opacity-60" />
-          {sources.map((s, i) => (
-            <span key={s.id} className="inline-flex items-center">
-              {i > 0 && <span className="mx-1 opacity-40">&middot;</span>}
-              <button
-                className="hover:text-blue-900 hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPreviewSource(s);
-                }}
-              >
-                {s.title || s.filename || s.id.slice(0, 8)}
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
 
       {expanded && (hasEvents || status === "started") && (
         <div
