@@ -11,6 +11,7 @@ import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 import { PhaseSection } from "./phase-section";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
 import { ApprovalCard } from "./approval-card";
@@ -151,7 +152,7 @@ function WaitingIndicator() {
   if (!isWaiting) return null;
   return (
     <div className="animate-in fade-in duration-150 px-1 py-2">
-      <span className="text-xs text-muted-foreground animate-pulse">Agent 思考中...</span>
+      <TextShimmer className="text-xs">Agent 思考中...</TextShimmer>
     </div>
   );
 }
@@ -586,7 +587,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
             {/* Transitional indicator — waiting for first investigation event after context gathering */}
             {isTransitioningToInvestigation && timelineItems.length === 0 && !hasThinking && (
               <div className="px-1 py-2">
-                <span className="text-xs text-muted-foreground animate-pulse">Agent 思考中...</span>
+                <TextShimmer className="text-xs">Agent 思考中...</TextShimmer>
               </div>
             )}
 
