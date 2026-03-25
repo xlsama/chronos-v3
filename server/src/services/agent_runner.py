@@ -38,6 +38,9 @@ class AgentRunner:
         self._ask_human_streamed = False
         # Thinking content log buffer
         self._thinking_content_log_buffer = ""
+        # Active approval context (set by resume(), consumed by _process_event)
+        self._active_approval_id = ""
+        self._active_approval_tool_name = ""
 
     @staticmethod
     def _build_human_message(text: str, image_attachments: list[dict] | None = None) -> HumanMessage:
@@ -211,19 +214,25 @@ class AgentRunner:
         self._reset_answer_stream_state()
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
-        # Store approval context so _process_event can inject approval_id into tool events
-        self._active_approval_id = approval_id
-        self._active_approval_tool_name = approval_tool_name
         sid = incident_id[:8]
         log = get_logger(component="main", sid=sid)
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
 
-        log.info("Resuming agent (approval)", thread_id=thread_id, decision=approval_result.get("decision"))
-
         from langgraph.types import Command
 
         decision = approval_result.get("decision", "approved")
+        log.info("Resuming agent (approval)", thread_id=thread_id, decision=decision)
+
+        # Only inject approval_id into tool events when approved;
+        # rejected/supplemented flows re-enter main_agent and may call the same
+        # tool_name with different args — must not tag those with this approval_id.
+        if decision == "approved":
+            self._active_approval_id = approval_id
+            self._active_approval_tool_name = approval_tool_name
+        else:
+            self._active_approval_id = ""
+            self._active_approval_tool_name = ""
         supplement_text = approval_result.get("supplement_text")
         state_update: dict = {"approval_decision": decision}
         if supplement_text:
