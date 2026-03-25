@@ -95,7 +95,7 @@ flowchart TD
 ### 健康检查
 | 服务 | 端点 | 预期响应 |
 |---|---|---|
-| app-backend | GET :8080/actuator/health | {"status":"UP"} |
+| app-backend | GET :8080/actuator/health | {{"status":"UP"}} |
 
 ````
 
