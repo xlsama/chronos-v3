@@ -27,6 +27,7 @@ async def planner_node(state: OpsState) -> dict:
         base_url=s.llm_base_url,
         api_key=s.dashscope_api_key,
         streaming=True,
+        extra_body={"enable_thinking": s.planner_thinking},
     )
 
     # 发布 planner_started 事件，让前端立即切换到 planning 阶段
