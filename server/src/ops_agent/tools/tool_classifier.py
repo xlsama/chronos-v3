@@ -118,18 +118,10 @@ _BLOCKED_PATTERNS = [
 ]
 
 # Local-only blocked patterns (local=True)
-# Only block privilege escalation and sensitive file access.
-# Service commands (docker/kubectl/systemctl) go through normal
-# DANGEROUS/WRITE/READ classification → approval flow.
+# Block sensitive file access only. sudo/su go through normal classification.
 _LOCAL_BLOCKED_PATTERNS = [
-    r"\bsudo\b",
-    r"\bsu\b\s",
     r"\.env\b",
     r"/etc/(shadow|passwd|sudoers)",
-]
-
-_LOCAL_BLOCKED_PREFIXES = [
-    "sudo", "su ",
 ]
 
 # Dangerous patterns (needs approval + red warning)
@@ -248,41 +240,31 @@ _LOCAL_READ_PREFIXES = [
 
 class ShellSafety:
     @staticmethod
-    def classify(
-        command: str,
-        local: bool = False,
-        sudo_pre_approved: bool = False,
-    ) -> CommandType:
-        """Classify a shell command. local=True enables stricter local execution policy."""
+    def classify(command: str, local: bool = False) -> CommandType:
+        """Classify a shell command. local=True enables stricter local execution policy.
+
+        sudo/su prefixes are stripped before classification — approval is based on
+        the actual operation, not the privilege escalation mechanism.
+        """
         cmd = command.strip()
 
-        # 1. BLOCKED: universal dangerous patterns
+        # 1. BLOCKED: universal dangerous patterns (checked on raw command)
         for pattern in _BLOCKED_PATTERNS:
             if re.search(pattern, cmd):
                 return CommandType.BLOCKED
 
-        # 1b. BLOCKED: local-only patterns
+        # 2. BLOCKED: local-only patterns (sensitive file access)
         if local:
             for pattern in _LOCAL_BLOCKED_PATTERNS:
                 if re.search(pattern, cmd):
                     return CommandType.BLOCKED
-            for prefix in _LOCAL_BLOCKED_PREFIXES:
-                if cmd.startswith(prefix):
-                    return CommandType.BLOCKED
 
-        # 2. DANGEROUS
-        for pattern in _DANGEROUS_PATTERNS:
-            if re.search(pattern, cmd, re.IGNORECASE):
-                return CommandType.DANGEROUS
-
-        # 3. WRITE patterns
-        for pattern in _WRITE_PATTERNS:
-            if re.search(pattern, cmd, re.IGNORECASE):
-                return CommandType.WRITE
-
-        # 4. Split compound commands then pipes — quote-aware
+        # 3. Per-sub-command classification with sudo stripping
+        #    Split compound commands (&&, ||, ;) then pipes (|).
+        #    For each part: strip timeout/sudo, then classify the inner command.
+        #    Return the highest severity across all parts.
         read_prefixes = _LOCAL_READ_PREFIXES if local else _READ_PREFIXES
-        has_sudo = False
+        worst = CommandType.READ
 
         sub_commands = _split_compounds(cmd)
         for sub_cmd in sub_commands:
@@ -290,24 +272,35 @@ class ShellSafety:
             for part in parts:
                 if not part:
                     continue
-                normalized_part = _strip_timeout_wrapper(part)
-                inner, is_sudo = _strip_sudo_prefix(normalized_part)
-                if is_sudo:
-                    has_sudo = True
-                check_part = inner if is_sudo else normalized_part
-                is_read = any(check_part.startswith(prefix) for prefix in read_prefixes)
+                normalized = _strip_timeout_wrapper(part)
+                inner, _ = _strip_sudo_prefix(normalized)
+
+                # DANGEROUS: return immediately (highest actionable severity)
+                for pattern in _DANGEROUS_PATTERNS:
+                    if re.search(pattern, inner, re.IGNORECASE):
+                        return CommandType.DANGEROUS
+
+                # WRITE patterns
+                is_write = False
+                for pattern in _WRITE_PATTERNS:
+                    if re.search(pattern, inner, re.IGNORECASE):
+                        is_write = True
+                        break
+                if is_write:
+                    worst = CommandType.WRITE
+                    continue
+
+                # READ whitelist (prefix match + regex patterns)
+                is_read = any(inner.startswith(prefix) for prefix in read_prefixes)
                 if not is_read:
                     is_read = any(
-                        re.search(p, check_part, re.IGNORECASE)
+                        re.search(p, inner, re.IGNORECASE)
                         for p in _READ_PATTERNS
                     )
                 if not is_read:
-                    return CommandType.WRITE
+                    worst = CommandType.WRITE
 
-        # 5. All parts in whitelist
-        if has_sudo and not sudo_pre_approved:
-            return CommandType.WRITE  # sudo + read-only → medium risk
-        return CommandType.READ
+        return worst
 
 
 # ═══════════════════════════════════════════

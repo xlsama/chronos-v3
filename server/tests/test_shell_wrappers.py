@@ -1,7 +1,7 @@
 from src.ops_agent.ssh import SSHConnector
 from src.ops_agent.tools.bash_tool import _wrap_local_command
 from src.ops_agent.tools.ssh_bash_tool import _strip_stderr_discard
-from src.ops_agent.tools.tool_permissions import CommandType, ShellSafety
+from src.ops_agent.tools.tool_classifier import CommandType, ShellSafety
 
 
 def test_ssh_wrap_command_enables_pipefail_and_path():
@@ -19,9 +19,9 @@ def test_local_wrap_command_enables_pipefail():
     assert "set -o pipefail;" in wrapped
 
 
-def test_remote_sudo_read_is_write_and_local_sudo_is_blocked():
-    assert ShellSafety.classify("sudo docker ps") is CommandType.WRITE
-    assert ShellSafety.classify("sudo docker ps", local=True) is CommandType.BLOCKED
+def test_sudo_read_classified_by_inner_content():
+    assert ShellSafety.classify("sudo docker ps") is CommandType.READ
+    assert ShellSafety.classify("sudo docker ps", local=True) is CommandType.READ
 
 
 def test_prepare_command_uses_sudo_password():

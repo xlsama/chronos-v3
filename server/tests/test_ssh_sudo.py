@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.ops_agent.ssh import SSHConnector
-from src.ops_agent.tools.tool_permissions import CommandType, ShellSafety
+from src.ops_agent.tools.tool_classifier import CommandType, ShellSafety
 from src.services.crypto import CryptoService
 from src.services.server_service import ServerService
 
@@ -71,14 +71,14 @@ class TestPrepareCommand:
 
 
 class TestShellSafetyClassifySudo:
-    """Tests for sudo classification: risk based on underlying command."""
+    """Tests for sudo classification: sudo is stripped, risk based on underlying command."""
 
-    def test_sudo_read_command_is_write(self):
-        """sudo + read-only → WRITE (medium risk)."""
-        assert ShellSafety.classify("sudo docker ps") is CommandType.WRITE
+    def test_sudo_read_command_is_read(self):
+        """sudo + read-only → strip sudo → READ."""
+        assert ShellSafety.classify("sudo docker ps") is CommandType.READ
 
-    def test_sudo_read_with_flags_is_write(self):
-        assert ShellSafety.classify("sudo -u admin docker ps") is CommandType.WRITE
+    def test_sudo_read_with_flags_is_read(self):
+        assert ShellSafety.classify("sudo -u admin docker ps") is CommandType.READ
 
     def test_sudo_dangerous_stays_dangerous(self):
         assert ShellSafety.classify("sudo rm -rf /tmp/x") is CommandType.DANGEROUS
@@ -87,17 +87,38 @@ class TestShellSafetyClassifySudo:
     def test_sudo_write_stays_write(self):
         assert ShellSafety.classify("sudo docker restart web") is CommandType.WRITE
 
-    def test_sudo_local_is_blocked(self):
-        assert ShellSafety.classify("sudo docker ps", local=True) is CommandType.BLOCKED
+    def test_sudo_local_read_is_read(self):
+        """sudo on local + read-only → strip sudo → READ (no longer blocked)."""
+        assert ShellSafety.classify("sudo docker ps", local=True) is CommandType.READ
 
-    def test_compound_sudo_read_is_write(self):
-        assert ShellSafety.classify("sudo docker ps && sudo docker images") is CommandType.WRITE
+    def test_compound_sudo_read_is_read(self):
+        assert ShellSafety.classify("sudo docker ps && sudo docker images") is CommandType.READ
 
     def test_compound_with_sudo_dangerous(self):
         assert ShellSafety.classify("echo hi && sudo systemctl restart nginx") is CommandType.DANGEROUS
 
     def test_su_remote_is_dangerous(self):
         assert ShellSafety.classify("su - root") is CommandType.DANGEROUS
+
+    def test_sudo_cat_is_read(self):
+        """sudo + cat → strip sudo → cat → READ."""
+        assert ShellSafety.classify("sudo cat /var/log/syslog") is CommandType.READ
+
+    def test_sudo_systemctl_restart_is_dangerous(self):
+        """sudo + systemctl restart → strip sudo → DANGEROUS."""
+        assert ShellSafety.classify("sudo systemctl restart nginx") is CommandType.DANGEROUS
+
+    def test_sudo_local_cat_is_read(self):
+        """sudo + cat on local → READ (no longer blocked)."""
+        assert ShellSafety.classify("sudo cat /etc/hosts", local=True) is CommandType.READ
+
+    def test_sudo_local_rm_rf_is_dangerous(self):
+        """sudo + rm -rf on local → strip sudo → DANGEROUS."""
+        assert ShellSafety.classify("sudo rm -rf /tmp/cache", local=True) is CommandType.DANGEROUS
+
+    def test_sudo_su_is_dangerous(self):
+        """sudo su → strip sudo → su → DANGEROUS."""
+        assert ShellSafety.classify("sudo su - root") is CommandType.DANGEROUS
 
 
 class TestGetSudoPassword:

@@ -5,7 +5,7 @@ import uuid
 
 from src.lib.logger import get_logger
 from src.ops_agent.ssh import SSHConnector
-from src.ops_agent.tools.tool_permissions import ShellSafety, CommandType, compress_output
+from src.ops_agent.tools.tool_classifier import ShellSafety, CommandType, compress_output
 
 log = get_logger(component="ssh_bash")
 

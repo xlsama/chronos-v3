@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from src.ops_agent.nodes.main_agent import _build_runtime_hints
-from src.ops_agent.tools.tool_permissions import CommandType, ServiceSafety, ShellSafety
+from src.ops_agent.tools.tool_classifier import CommandType, ServiceSafety, ShellSafety
 
 
 def test_shell_safety_treats_timeout_wrapped_tcp_probe_as_read():

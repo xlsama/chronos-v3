@@ -14,7 +14,7 @@ from src.ops_agent.tools.service_exec_tool import (
     service_exec as _service_exec,
     list_services as _list_services,
 )
-from src.ops_agent.tools.tool_permissions import ShellSafety, ServiceSafety, CommandType
+from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
 from src.services.skill_service import SkillService
 from src.lib.logger import get_logger
 
@@ -39,7 +39,7 @@ def build_tools():
     async def bash(command: str, explanation: str = "") -> dict:
         """在本地执行命令。可以执行 docker/kubectl/systemctl 等服务管理命令（写操作需审批）。
         用于不需要 SSH 到远程服务器的场景：运行本地脚本、curl 调用 API、docker/kubectl 管理容器和集群等。
-        注意：禁止 sudo/su 提权命令。
+        sudo/su 提权不影响审批判定，系统会自动识别实际操作内容。
         - command: 要执行的命令
         - explanation: 可选，写操作时提供操作说明
         """
@@ -380,7 +380,6 @@ async def route_decision(state: OpsState) -> str:
             cmd_type = ShellSafety.classify(
                 tool_call["args"].get("command", ""),
                 local=(name == "bash"),
-                sudo_pre_approved=state.get("sudo_approved", False),
             )
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
                 log.info("route_decision: need_approval", tool=name, cmd_type=cmd_type.name)

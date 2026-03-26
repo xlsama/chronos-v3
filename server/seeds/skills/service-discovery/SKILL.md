@@ -31,7 +31,7 @@ metadata:
 - 在这种情况下，先读取 `docker-container` 技能，再执行 Docker 诊断；不要先跳去看应用进程细节。
 - 如果 `docker ps` 失败，不要立刻认定“没有容器”；要继续区分是 **PATH 缺失**、**daemon 未启动**、还是 **权限问题**。
 - 首轮 Docker / systemd / curl 探测必须保留原始 stderr，不要用 `2>/dev/null` 或 `| head ... || echo ...` 把真实错误吞掉。
-- 如果首轮 Docker 探测报 `permission denied`，先把它识别为权限问题；必要时走审批后改用 `sudo docker ...` 验证，不要把空输出或权限错误当成“没有容器”。
+- 如果首轮 Docker 探测报 `permission denied`，先把它识别为权限问题；必要时改用 `sudo docker ...` 验证，不要把空输出或权限错误当成“没有容器”。
 
 ## 第一步：服务器全貌（必须执行）
 

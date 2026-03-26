@@ -12,7 +12,7 @@ from src.env import get_settings
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.graph import compile_graph
 from src.ops_agent.state import OpsState
-from src.ops_agent.tools.tool_permissions import ShellSafety, ServiceSafety, CommandType
+from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
 from src.db.connection import get_session_factory
 from src.db.models import Incident
 from src.lib.logger import get_logger

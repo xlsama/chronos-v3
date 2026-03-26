@@ -138,7 +138,7 @@ metadata:
 - 未锁定项目、服务、服务器前，不要直接建议重启或回滚
 - 没有容器证据时，不要机械进入 Docker 诊断
 - 有容器证据时，优先切到 `docker-container`，不要先把 JVM / Node 裸进程当默认根因
-- 如果首轮结果出现 `permission denied`、`Operation not permitted`、`access denied`、`docker.sock` 权限错误，不要把它误判成”服务不存在”；**必须立即** `sudo <原命令>` 重试（走审批），不要绕道去做 `ls /var/log`、`find ... -name “*.log”` 等发散探索
+- 如果首轮结果出现 `permission denied`、`Operation not permitted`、`access denied`、`docker.sock` 权限错误，不要把它误判成”服务不存在”；**必须立即** `sudo <原命令>` 重试，不要绕道去做 `ls /var/log`、`find ... -name “*.log”` 等发散探索
 - 特别注意：Docker 命令失败（无论是空输出还是权限错误），都应先 `sudo docker ps -a 2>&1` 确认，再决定是否跳过 Docker 观测面
 
 常见收敛结果：

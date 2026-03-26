@@ -35,7 +35,7 @@ metadata:
   - **禁止** `2>/dev/null`：会吞掉 permission denied
   - **禁止** `|| echo “Docker not available”` 或 `|| echo “Docker not available or no permission”`：会把原始错误替换成你自己写的文本，导致无法判断真实失败原因
   - **正确做法**：统一使用 `2>&1` 保留完整输出
-- 如果错误明确是 `permission denied while trying to connect to the Docker daemon socket`，下一步应走审批后执行 `sudo docker ps` / `sudo docker ps -a` / `sudo docker logs`，而不是继续猜测”非容器部署”。
+- 如果错误明确是 `permission denied while trying to connect to the Docker daemon socket`，下一步应执行 `sudo docker ps` / `sudo docker ps -a` / `sudo docker logs`，而不是继续猜测”非容器部署”。
 - **禁止**在 docker 命令失败后、未完成权限判断前，跑去执行 `ls /var/log`、`find ... -name “*.log”`、`systemctl list-units`、`ps aux | grep` 等发散探索。
 - 对大多数容器化业务，默认链路是：
   1. `docker ps -a 2>&1`（如权限不足则 `sudo docker ps -a 2>&1`）

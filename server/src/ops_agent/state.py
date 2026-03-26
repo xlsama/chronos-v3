@@ -10,7 +10,6 @@ class OpsState(MessagesState):
     pending_tool_call: dict | None
     approval_decision: str | None
     approval_supplement: str | None
-    sudo_approved: bool
     incident_history_summary: str | None
     kb_summary: str | None
     kb_project_ids: list[str]
