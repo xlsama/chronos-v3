@@ -36,6 +36,7 @@ def _load_connector_map():
     from src.ops_agent.tools.service_connectors.hive import HiveConnector
     from src.ops_agent.tools.service_connectors.kubernetes import KubernetesConnector
     from src.ops_agent.tools.service_connectors.docker_conn import DockerConnector
+
     CONNECTOR_MAP = {
         "postgresql": PostgreSQLConnector,
         "mysql": MySQLConnector,
@@ -111,7 +112,9 @@ async def get_service_connector(service_id: str) -> ServiceConnector:
             raise ValueError(f"Service not found: {service_id}")
 
         crypto = CryptoService(key=get_settings().encryption_key)
-        password = crypto.decrypt(service.encrypted_password) if service.encrypted_password else None
+        password = (
+            crypto.decrypt(service.encrypted_password) if service.encrypted_password else None
+        )
         config = service.config or {}
 
         connector = create_connector(

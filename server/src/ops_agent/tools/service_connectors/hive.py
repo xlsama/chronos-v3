@@ -2,7 +2,11 @@ import asyncio
 import re
 
 from src.lib.logger import get_logger
-from src.ops_agent.tools.service_connectors.base import ServiceConnector, ServiceResult, format_as_table
+from src.ops_agent.tools.service_connectors.base import (
+    ServiceConnector,
+    ServiceResult,
+    format_as_table,
+)
 
 log = get_logger(component="service_exec")
 

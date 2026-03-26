@@ -4,13 +4,14 @@ from src.ops_agent.nodes.main_agent import _build_runtime_hints
 from src.ops_agent.tools.tool_classifier import CommandType, ServiceSafety, ShellSafety
 
 
-def test_shell_safety_treats_timeout_wrapped_tcp_probe_as_read():
+def test_shell_safety_treats_timeout_wrapped_tcp_probe_as_write():
+    """bash -c can execute arbitrary code, so it requires approval even for TCP probes."""
     command = (
         "timeout 5 bash -c 'echo > /dev/tcp/10.200.100.85/8082' 2>&1 "
         '&& echo "Port 8082 is open" || echo "Port 8082 connection failed"'
     )
 
-    assert ShellSafety.classify(command, local=True) is CommandType.READ
+    assert ShellSafety.classify(command, local=True) is CommandType.WRITE
 
 
 def test_shell_safety_treats_pwd_and_readlink_as_read():

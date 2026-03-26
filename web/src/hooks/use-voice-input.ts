@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { transcribeAudio } from "@/api/asr";
@@ -31,9 +31,11 @@ export function useVoiceInput({
   const chunksRef = useRef<Blob[]>([]);
   const cancelledRef = useRef(false);
   const onTranscriptRef = useRef(onTranscript);
-  onTranscriptRef.current = onTranscript;
   const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+    onCancelRef.current = onCancel;
+  });
 
   const cleanup = useCallback(() => {
     if (streamRef.current) {

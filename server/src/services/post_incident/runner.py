@@ -94,7 +94,9 @@ async def _build_service_map(messages: list[Message], session) -> dict[str, str]
     return {str(r.id): f"{r.name} ({r.service_type})" for r in result.all()}
 
 
-async def run_post_incident_tasks(incident_id: str, kb_project_ids: list[str] | None = None) -> None:
+async def run_post_incident_tasks(
+    incident_id: str, kb_project_ids: list[str] | None = None
+) -> None:
     """后台执行所有事件后任务。从 AgentRunner._post_run() 通过 asyncio.create_task 调用。"""
     sid = incident_id[:8]
     log = get_logger(component="post_incident", sid=sid)
@@ -157,6 +159,7 @@ async def run_post_incident_tasks(incident_id: str, kb_project_ids: list[str] | 
         if summary_md:
             try:
                 from src.services.incident_history_service import _generate_title_and_severity
+
                 summary_title, new_severity = await _generate_title_and_severity(summary_md)
                 log.info(
                     "Step 3: generated title and severity",
@@ -192,8 +195,11 @@ async def run_post_incident_tasks(incident_id: str, kb_project_ids: list[str] | 
             severity=severity,
         )
         from src.services.notification_service import notify_fire_and_forget
+
         notify_fire_and_forget(
-            "resolved", incident_id, summary_title or description[:80],
+            "resolved",
+            incident_id,
+            summary_title or description[:80],
             severity=severity,
         )
         step4_elapsed = time.monotonic() - t_step
@@ -204,17 +210,25 @@ async def run_post_incident_tasks(incident_id: str, kb_project_ids: list[str] | 
         log.info("Step 5: starting parallel sub-tasks")
         await asyncio.gather(
             _safe_run(auto_save_history(incident_id, summary_md), "history", sid),
-            _safe_run(auto_update_agents_md(
-                incident_id=incident_id,
-                summary_md=summary_md,
-                conversation_text=conversation_text_topo,
-                kb_project_ids=kb_project_ids,
-            ), "agents_md", sid),
-            _safe_run(auto_evolve_skills(
-                incident_id=incident_id,
-                summary_md=summary_md,
-                conversation_text=conversation_text,
-            ), "skill_evolution", sid),
+            _safe_run(
+                auto_update_agents_md(
+                    incident_id=incident_id,
+                    summary_md=summary_md,
+                    conversation_text=conversation_text_topo,
+                    kb_project_ids=kb_project_ids,
+                ),
+                "agents_md",
+                sid,
+            ),
+            _safe_run(
+                auto_evolve_skills(
+                    incident_id=incident_id,
+                    summary_md=summary_md,
+                    conversation_text=conversation_text,
+                ),
+                "skill_evolution",
+                sid,
+            ),
         )
 
         step5_elapsed = time.monotonic() - t_step
@@ -230,11 +244,10 @@ async def _generate_summary(conversation_text: str, severity: str, sid: str) -> 
     log = get_logger(component="post_incident", sid=sid)
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
+
         llm = get_mini_llm()
         human_content = (
-            f"请根据以下完整对话历史生成排查报告：\n\n"
-            f"严重程度: {severity}\n\n"
-            f"{conversation_text}"
+            f"请根据以下完整对话历史生成排查报告：\n\n严重程度: {severity}\n\n{conversation_text}"
         )
         log.info(
             "Generating summary: calling LLM",
@@ -243,10 +256,12 @@ async def _generate_summary(conversation_text: str, severity: str, sid: str) -> 
             system_prompt_len=len(SUMMARIZE_SYSTEM_PROMPT),
             human_content_len=len(human_content),
         )
-        resp = await llm.ainvoke([
-            SystemMessage(content=SUMMARIZE_SYSTEM_PROMPT),
-            HumanMessage(content=human_content),
-        ])
+        resp = await llm.ainvoke(
+            [
+                SystemMessage(content=SUMMARIZE_SYSTEM_PROMPT),
+                HumanMessage(content=human_content),
+            ]
+        )
         log.info(
             "Generating summary: LLM responded",
             resp_content_type=type(resp.content).__name__,
@@ -258,7 +273,7 @@ async def _generate_summary(conversation_text: str, severity: str, sid: str) -> 
         return summary or "报告生成失败"
     except Exception:
         log.error("Summary generation failed", exc_info=True)
-        return f"报告生成失败"
+        return "报告生成失败"
 
 
 async def _safe_run(coro, task_name: str, sid: str) -> None:

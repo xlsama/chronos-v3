@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import json
-import time
 import uuid
 
 import orjson
@@ -11,7 +10,6 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from src.env import get_settings
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.graph import compile_graph
-from src.ops_agent.state import OpsState
 from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
 from src.db.connection import get_session_factory
 from src.db.models import Incident
@@ -22,7 +20,9 @@ from src.services.post_incident import run_post_incident_tasks
 
 
 class AgentRunner:
-    def __init__(self, publisher: EventPublisher, checkpointer=None, redis: aioredis.Redis | None = None):
+    def __init__(
+        self, publisher: EventPublisher, checkpointer=None, redis: aioredis.Redis | None = None
+    ):
         self.publisher = publisher
         self.redis = redis
         self.graph = compile_graph(checkpointer=checkpointer)
@@ -43,7 +43,9 @@ class AgentRunner:
         self._active_approval_tool_name = ""
 
     @staticmethod
-    def _build_human_message(text: str, image_attachments: list[dict] | None = None) -> HumanMessage:
+    def _build_human_message(
+        text: str, image_attachments: list[dict] | None = None
+    ) -> HumanMessage:
         """Build a HumanMessage, optionally with multimodal image content."""
         if not image_attachments:
             return HumanMessage(content=text)
@@ -51,10 +53,12 @@ class AgentRunner:
         for img in image_attachments[:5]:  # limit to 5 images
             b64 = base64.b64encode(img["bytes"]).decode()
             mime = img.get("content_type") or "image/png"
-            content_blocks.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{b64}"},
-            })
+            content_blocks.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"},
+                }
+            )
         return HumanMessage(content=content_blocks)
 
     @staticmethod
@@ -104,7 +108,10 @@ class AgentRunner:
         thread_id = str(uuid.uuid4())
         channel = EventPublisher.channel_for_incident(incident_id)
 
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": get_settings().agent_recursion_limit,
+        }
 
         human_msg = self._build_human_message(f"事件描述: {description}", image_attachments)
         initial_state = {
@@ -125,11 +132,18 @@ class AgentRunner:
         }
 
         log.info("===== Agent lifecycle started =====")
-        log.info("Agent config", thread_id=thread_id, severity=severity, recursion_limit=config["recursion_limit"])
+        log.info(
+            "Agent config",
+            thread_id=thread_id,
+            severity=severity,
+            recursion_limit=config["recursion_limit"],
+        )
 
         cancelled = False
         try:
-            async for event in self.graph.astream_events(initial_state, config=config, version="v2"):
+            async for event in self.graph.astream_events(
+                initial_state, config=config, version="v2"
+            ):
                 cancel_reason = await self._check_cancelled(incident_id)
                 if cancel_reason:
                     log.info("Agent cancelled", reason=cancel_reason)
@@ -161,7 +175,10 @@ class AgentRunner:
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
         channel = EventPublisher.channel_for_incident(incident_id)
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": get_settings().agent_recursion_limit,
+        }
 
         sid = incident_id[:8]
         log = get_logger(component="main", sid=sid)
@@ -188,12 +205,16 @@ class AgentRunner:
             async for event in self.graph.astream_events(resume_input, config=config, version="v2"):
                 cancel_reason = await self._check_cancelled(incident_id)
                 if cancel_reason:
-                    get_logger(component="main").info("Agent cancelled", incident_id=incident_id, reason=cancel_reason)
+                    get_logger(component="main").info(
+                        "Agent cancelled", incident_id=incident_id, reason=cancel_reason
+                    )
                     cancelled = True
                     break
                 await self._process_event(channel, event)
         except Exception as e:
-            get_logger(component="main").error("Agent resume (human input) error", incident_id=incident_id, error=str(e))
+            get_logger(component="main").error(
+                "Agent resume (human input) error", incident_id=incident_id, error=str(e)
+            )
             await self.publisher.publish(channel, "error", {"message": self._format_agent_error(e)})
             raise
 
@@ -217,7 +238,10 @@ class AgentRunner:
         sid = incident_id[:8]
         log = get_logger(component="main", sid=sid)
         channel = EventPublisher.channel_for_incident(incident_id)
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": get_settings().agent_recursion_limit,
+        }
 
         from langgraph.types import Command
 
@@ -244,12 +268,16 @@ class AgentRunner:
             async for event in self.graph.astream_events(resume_input, config=config, version="v2"):
                 cancel_reason = await self._check_cancelled(incident_id)
                 if cancel_reason:
-                    get_logger(component="main").info("Agent cancelled", incident_id=incident_id, reason=cancel_reason)
+                    get_logger(component="main").info(
+                        "Agent cancelled", incident_id=incident_id, reason=cancel_reason
+                    )
                     cancelled = True
                     break
                 await self._process_event(channel, event)
         except Exception as e:
-            get_logger(component="main").error("Agent resume error", incident_id=incident_id, error=str(e))
+            get_logger(component="main").error(
+                "Agent resume error", incident_id=incident_id, error=str(e)
+            )
             await self.publisher.publish(channel, "error", {"message": self._format_agent_error(e)})
             raise
 
@@ -273,7 +301,10 @@ class AgentRunner:
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
         channel = EventPublisher.channel_for_incident(incident_id)
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": get_settings().agent_recursion_limit}
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": get_settings().agent_recursion_limit,
+        }
 
         sid = incident_id[:8]
         log = get_logger(component="main", sid=sid)
@@ -290,15 +321,18 @@ class AgentRunner:
             last_msg = messages[-1]
             if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
                 answered_ids = {
-                    m.tool_call_id for m in messages
+                    m.tool_call_id
+                    for m in messages
                     if hasattr(m, "tool_call_id") and m.tool_call_id
                 }
                 for tc in last_msg.tool_calls:
                     if tc["id"] not in answered_ids:
-                        update_messages.append(ToolMessage(
-                            content="操作已被用户中断。",
-                            tool_call_id=tc["id"],
-                        ))
+                        update_messages.append(
+                            ToolMessage(
+                                content="操作已被用户中断。",
+                                tool_call_id=tc["id"],
+                            )
+                        )
 
         # Add human message
         human_msg = self._build_human_message(human_input, image_attachments)
@@ -358,11 +392,13 @@ class AgentRunner:
         state = await self.graph.aget_state(config)
         vals = state.values
 
-        log.info("Post-run",
-                 next_nodes=state.next,
-                 is_complete=vals.get("is_complete"),
-                 tool_call_retry_count=vals.get("tool_call_retry_count", 0),
-                 ask_human_count=vals.get("ask_human_count", 0))
+        log.info(
+            "Post-run",
+            next_nodes=state.next,
+            is_complete=vals.get("is_complete"),
+            tool_call_retry_count=vals.get("tool_call_retry_count", 0),
+            ask_human_count=vals.get("ask_human_count", 0),
+        )
 
         if "human_approval" in (state.next or ()):
             pending = self._extract_pending_tool_call(vals)
@@ -375,13 +411,19 @@ class AgentRunner:
                     cmd_type = ShellSafety.classify(command, local=(tool_name == "bash"))
                 elif tool_name == "service_exec":
                     from src.ops_agent.nodes.main_agent import _get_service_type
+
                     service_type = await _get_service_type(args.get("service_id", ""))
                     cmd_type = ServiceSafety.classify(service_type, command)
                 else:
                     cmd_type = CommandType.WRITE
 
                 risk_level = "HIGH" if cmd_type == CommandType.DANGEROUS else "MEDIUM"
-                log.info("human_approval interrupt", tool=tool_name, cmd_type=cmd_type.name, risk=risk_level)
+                log.info(
+                    "human_approval interrupt",
+                    tool=tool_name,
+                    cmd_type=cmd_type.name,
+                    risk=risk_level,
+                )
                 log.debug("approval command", command=command)
                 async with get_session_factory()() as session:
                     approval = await ApprovalService(session).create(
@@ -392,14 +434,19 @@ class AgentRunner:
                         explanation=args.get("explanation"),
                     )
                 log.info("Approval created", approval_id=str(approval.id))
-                await self.publisher.publish(channel, "approval_required", {
-                    "approval_id": str(approval.id),
-                    "tool_name": pending["name"],
-                    "tool_args": {**args, "risk_level": risk_level},
-                    "tool_call_id": pending.get("id", ""),
-                })
+                await self.publisher.publish(
+                    channel,
+                    "approval_required",
+                    {
+                        "approval_id": str(approval.id),
+                        "tool_name": pending["name"],
+                        "tool_args": {**args, "risk_level": risk_level},
+                        "tool_call_id": pending.get("id", ""),
+                    },
+                )
                 notify_fire_and_forget(
-                    "need_approval", incident_id,
+                    "need_approval",
+                    incident_id,
                     vals.get("description", "")[:80],
                     severity=vals.get("severity", ""),
                     command=command,
@@ -410,15 +457,24 @@ class AgentRunner:
         if "ask_human" in (state.next or ()):
             question = self._extract_ask_human_question(vals)
             if question:
-                log.info("ask_human interrupt", question_len=len(question), streamed=self._ask_human_streamed)
+                log.info(
+                    "ask_human interrupt",
+                    question_len=len(question),
+                    streamed=self._ask_human_streamed,
+                )
                 log.debug("ask_human interrupt", question=question)
                 if not self._ask_human_streamed:
-                    await self.publisher.publish(channel, "ask_human", {
-                        "question": question,
-                    })
+                    await self.publisher.publish(
+                        channel,
+                        "ask_human",
+                        {
+                            "question": question,
+                        },
+                    )
                     await self.publisher.publish(channel, "ask_human_done", {})
                 notify_fire_and_forget(
-                    "ask_human", incident_id,
+                    "ask_human",
+                    incident_id,
                     vals.get("description", "")[:80],
                     severity=vals.get("severity", ""),
                     question=question,
@@ -438,10 +494,12 @@ class AgentRunner:
 
             await self.publisher.publish(channel, "done", {})
 
-            asyncio.create_task(run_post_incident_tasks(
-                incident_id,
-                kb_project_ids=vals.get("kb_project_ids", []),
-            ))
+            asyncio.create_task(
+                run_post_incident_tasks(
+                    incident_id,
+                    kb_project_ids=vals.get("kb_project_ids", []),
+                )
+            )
 
     _APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
 
@@ -493,7 +551,7 @@ class AgentRunner:
             try:
                 parsed = json.loads(self._answer_args_buffer + suffix)
                 content = parsed.get("answer_md", "")
-                delta = content[self._answer_published_len:]
+                delta = content[self._answer_published_len :]
                 self._answer_published_len = len(content)
                 return delta if delta else None
             except (json.JSONDecodeError, ValueError):
@@ -506,7 +564,7 @@ class AgentRunner:
             try:
                 parsed = json.loads(self._ask_human_args_buffer + suffix)
                 content = parsed.get("question", "")
-                delta = content[self._ask_human_published_len:]
+                delta = content[self._ask_human_published_len :]
                 self._ask_human_published_len = len(content)
                 return delta if delta else None
             except (json.JSONDecodeError, ValueError):
@@ -546,11 +604,19 @@ class AgentRunner:
                         self._answer_args_buffer = ""
                         self._answer_published_len = 0
                         if not self._thinking_done_sent:
-                            await self.publisher.publish(channel, "thinking_done", {
-                                "phase": phase, "agent": agent,
-                            })
+                            await self.publisher.publish(
+                                channel,
+                                "thinking_done",
+                                {
+                                    "phase": phase,
+                                    "agent": agent,
+                                },
+                            )
                             self._thinking_done_sent = True
-                        stream_log.info("Answer stream started", thinking_chars=len(self._thinking_content_log_buffer))
+                        stream_log.info(
+                            "Answer stream started",
+                            thinking_chars=len(self._thinking_content_log_buffer),
+                        )
 
                     if tcc.get("name") == "ask_human":
                         self._ask_human_stream_active = True
@@ -558,35 +624,60 @@ class AgentRunner:
                         self._ask_human_published_len = 0
                         self._ask_human_streamed = True
                         if not self._thinking_done_sent:
-                            await self.publisher.publish(channel, "thinking_done", {
-                                "phase": phase, "agent": agent,
-                            })
+                            await self.publisher.publish(
+                                channel,
+                                "thinking_done",
+                                {
+                                    "phase": phase,
+                                    "agent": agent,
+                                },
+                            )
                             self._thinking_done_sent = True
-                        stream_log.info("Ask_human stream started", thinking_chars=len(self._thinking_content_log_buffer))
+                        stream_log.info(
+                            "Ask_human stream started",
+                            thinking_chars=len(self._thinking_content_log_buffer),
+                        )
 
                     if self._answer_stream_active and tcc.get("args"):
                         self._answer_args_buffer += tcc["args"]
                         delta = self._extract_answer_delta()
                         if delta:
-                            await self.publisher.publish(channel, "answer", {
-                                "content": delta, "phase": phase,
-                            })
+                            await self.publisher.publish(
+                                channel,
+                                "answer",
+                                {
+                                    "content": delta,
+                                    "phase": phase,
+                                },
+                            )
 
                     if self._ask_human_stream_active and tcc.get("args"):
                         self._ask_human_args_buffer += tcc["args"]
                         delta = self._extract_ask_human_delta()
                         if delta:
-                            await self.publisher.publish(channel, "ask_human", {
-                                "question": delta,
-                            })
+                            await self.publisher.publish(
+                                channel,
+                                "ask_human",
+                                {
+                                    "question": delta,
+                                },
+                            )
 
-            if chunk.content and not self._answer_stream_active and not self._ask_human_stream_active:
+            if (
+                chunk.content
+                and not self._answer_stream_active
+                and not self._ask_human_stream_active
+            ):
                 self._thinking_content_log_buffer += chunk.content
-                await self.publisher.publish(channel, "thinking", {
-                    "content": chunk.content,
-                    "phase": phase,
-                    "agent": agent,
-                })
+                await self.publisher.publish(
+                    channel,
+                    "thinking",
+                    {
+                        "content": chunk.content,
+                        "phase": phase,
+                        "agent": agent,
+                    },
+                )
 
         elif kind == "on_chat_model_end":
             output = event["data"].get("output")
@@ -618,18 +709,30 @@ class AgentRunner:
                 stream_log.info("Thinking done (no tool_call)", thinking_chars=thinking_len)
                 stream_log.debug("Thinking content", content=self._thinking_content_log_buffer)
                 self._thinking_content_log_buffer = ""
-                await self.publisher.publish(channel, "thinking_done", {
-                    "phase": phase, "agent": agent,
-                })
+                await self.publisher.publish(
+                    channel,
+                    "thinking_done",
+                    {
+                        "phase": phase,
+                        "agent": agent,
+                    },
+                )
                 if hasattr(output, "tool_calls") and output.tool_calls:
                     for tc in output.tool_calls:
                         if tc["name"] == "complete":
                             answer_md = tc["args"].get("answer_md", "")
                             if answer_md:
-                                await self.publisher.publish(channel, "answer", {
-                                    "content": answer_md, "phase": phase,
-                                })
-                                await self.publisher.publish(channel, "answer_done", {"phase": phase})
+                                await self.publisher.publish(
+                                    channel,
+                                    "answer",
+                                    {
+                                        "content": answer_md,
+                                        "phase": phase,
+                                    },
+                                )
+                                await self.publisher.publish(
+                                    channel, "answer_done", {"phase": phase}
+                                )
                             break
 
         elif kind == "on_tool_start":
@@ -663,20 +766,26 @@ class AgentRunner:
                 output = str(event["data"].get("output", ""))
                 success = not output.startswith("未找到")
                 path = args.get("path", "")
-                skill_log.info("read_skill done", path=path, success=success, content_len=len(output))
+                skill_log.info(
+                    "read_skill done", path=path, success=success, content_len=len(output)
+                )
                 skill_log.debug("read_skill content", content=output)
                 parts = path.split("/", 1)
                 skill_slug = parts[0]
                 file_path = parts[1] if len(parts) > 1 else None
                 skill_name = file_path or skill_slug
-                await self.publisher.publish(channel, "skill_read", {
-                    "skill_slug": skill_slug,
-                    "skill_name": skill_name,
-                    "content": output,
-                    "success": success,
-                    "phase": phase,
-                    "agent": agent,
-                })
+                await self.publisher.publish(
+                    channel,
+                    "skill_read",
+                    {
+                        "skill_slug": skill_slug,
+                        "skill_name": skill_name,
+                        "content": output,
+                        "success": success,
+                        "phase": phase,
+                        "agent": agent,
+                    },
+                )
                 return
             run_id = event.get("run_id", "")
             output_str = str(event["data"].get("output", ""))

@@ -46,7 +46,7 @@ async def list_projects(
     items = await service.list_all()
     # Apply pagination manually (service.list already orders by created_at desc)
     start = (page - 1) * page_size
-    paged_items = items[start:start + page_size]
+    paged_items = items[start : start + page_size]
     return PaginatedResponse(items=paged_items, total=total, page=page, page_size=page_size)
 
 

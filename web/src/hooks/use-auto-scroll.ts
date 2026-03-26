@@ -18,9 +18,10 @@ export function useAutoScroll(
 ): UseAutoScrollReturn {
   const { enabled = true, threshold = 100, smooth = false } = options;
 
+  const scrollElRef = useRef<HTMLDivElement | null>(null);
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const scrollRef = useCallback(
-    (node: HTMLDivElement | null) => setScrollEl(node),
+    (node: HTMLDivElement | null) => { scrollElRef.current = node; setScrollEl(node); },
     [],
   );
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -84,13 +85,13 @@ export function useAutoScroll(
     });
 
     // 初始滚动到底部
-    scrollEl.scrollTop = scrollEl.scrollHeight;
+    if (scrollElRef.current) scrollElRef.current.scrollTop = scrollElRef.current.scrollHeight;
 
     return () => {
       observer.disconnect();
       if (mutationTimerId.current) clearTimeout(mutationTimerId.current);
     };
-  }, [scrollEl, enabled]);
+  }, [scrollEl, enabled, threshold]);
 
   // ResizeObserver：当容器自身高度变化时，也保持底部对齐。
   // 这能覆盖 header/sources 行插入后，可视区缩小但子树内容本身未变的情况。
@@ -118,17 +119,17 @@ export function useAutoScroll(
       observer.disconnect();
       if (resizeRafId.current) cancelAnimationFrame(resizeRafId.current);
     };
-  }, [scrollEl, enabled]);
+  }, [scrollEl, enabled, threshold]);
 
   const scrollToBottom = useCallback(() => {
     shouldAutoScroll.current = true;
     setIsAtBottom(true);
     if (smooth) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    } else if (scrollEl) {
-      scrollEl.scrollTop = scrollEl.scrollHeight;
+    } else if (scrollElRef.current) {
+      scrollElRef.current.scrollTop = scrollElRef.current.scrollHeight;
     }
-  }, [smooth, scrollEl]);
+  }, [smooth]);
 
   return { scrollRef, bottomRef, isAtBottom, scrollToBottom };
 }

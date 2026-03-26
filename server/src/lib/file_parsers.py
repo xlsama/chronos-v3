@@ -70,10 +70,12 @@ def _pptx_segments(doc: "DoclingDocument") -> list[ParsedSegment]:
     for page_no in sorted(doc.pages.keys()):
         md = doc.export_to_markdown(page_no=page_no)
         if md.strip():
-            segments.append(ParsedSegment(
-                content=f"### Slide {page_no}\n\n{md}",
-                metadata={"slide": page_no},
-            ))
+            segments.append(
+                ParsedSegment(
+                    content=f"### Slide {page_no}\n\n{md}",
+                    metadata={"slide": page_no},
+                )
+            )
     return segments
 
 
@@ -83,10 +85,12 @@ def _xlsx_segments(doc: "DoclingDocument") -> list[ParsedSegment]:
     for page_no in sorted(doc.pages.keys()):
         md = doc.export_to_markdown(page_no=page_no)
         if md.strip():
-            segments.append(ParsedSegment(
-                content=f"### Sheet {page_no}\n\n{md}",
-                metadata={"sheet": page_no},
-            ))
+            segments.append(
+                ParsedSegment(
+                    content=f"### Sheet {page_no}\n\n{md}",
+                    metadata={"sheet": page_no},
+                )
+            )
     return segments
 
 
@@ -137,7 +141,7 @@ def parse_csv(file_bytes: bytes, _filename: str = "") -> str:
     for row in rows[1:]:
         # Pad row to match header length
         padded = row + [""] * (len(header) - len(row))
-        lines.append("| " + " | ".join(padded[:len(header)]) + " |")
+        lines.append("| " + " | ".join(padded[: len(header)]) + " |")
     return "\n".join(lines)
 
 

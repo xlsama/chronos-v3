@@ -59,6 +59,7 @@ export function SkillViewer({ skillSlug, onClose, autoEdit, readOnly }: SkillVie
       autoEditApplied.current = true;
       startEditing();
     }
+    // oxlint-disable-next-line react/exhaustive-deps -- only trigger on autoEdit/skill change
   }, [autoEdit, skill]);
 
   useEffect(() => {

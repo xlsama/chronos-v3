@@ -57,9 +57,7 @@ class ServiceService:
     async def get(self, service_id: uuid.UUID) -> Service | None:
         return await self.session.get(Service, service_id)
 
-    async def list_all(
-        self, service_type: str | None = None
-    ) -> list[Service]:
+    async def list_all(self, service_type: str | None = None) -> list[Service]:
         stmt = select(Service).order_by(Service.created_at.desc())
         if service_type:
             stmt = stmt.where(Service.service_type == service_type)
@@ -82,6 +80,7 @@ class ServiceService:
         await self.session.refresh(service)
 
         from src.ops_agent.tools.service_exec_tool import invalidate_service_connector
+
         await invalidate_service_connector(str(service.id))
 
         return service
@@ -92,13 +91,16 @@ class ServiceService:
         await self.session.commit()
 
         from src.ops_agent.tools.service_exec_tool import invalidate_service_connector
+
         await invalidate_service_connector(service_id)
 
     async def test_connection(self, service: Service) -> tuple[bool, str]:
         """Test connectivity using real protocol-level probe (not just TCP port check)."""
         from src.ops_agent.tools.service_exec_tool import create_connector
 
-        password = self.crypto.decrypt(service.encrypted_password) if service.encrypted_password else None
+        password = (
+            self.crypto.decrypt(service.encrypted_password) if service.encrypted_password else None
+        )
         config = service.config or {}
 
         try:
@@ -142,7 +144,15 @@ def _friendly_error(service_type: str, exc: Exception) -> str:
         return "K8s 认证失败：kubeconfig 中的凭证无效"
 
     # Authentication failures
-    if any(kw in msg for kw in ("password authentication failed", "auth", "access denied", "authentication failed")):
+    if any(
+        kw in msg
+        for kw in (
+            "password authentication failed",
+            "auth",
+            "access denied",
+            "authentication failed",
+        )
+    ):
         return "认证失败：用户名或密码错误"
 
     # Database does not exist
@@ -154,7 +164,10 @@ def _friendly_error(service_type: str, exc: Exception) -> str:
         return f"连接被拒绝：{service_type} 服务未启动或地址/端口错误"
 
     # DNS / hostname resolution
-    if any(kw in msg for kw in ("nodename nor servname", "name or service not known", "getaddrinfo", "resolve")):
+    if any(
+        kw in msg
+        for kw in ("nodename nor servname", "name or service not known", "getaddrinfo", "resolve")
+    ):
         return "主机名无法解析，请检查 host 配置"
 
     # Timeout

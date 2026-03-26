@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import ContentVersion
@@ -45,9 +45,7 @@ class VersionService:
         await self.session.flush()
         return version
 
-    async def list_versions(
-        self, entity_type: str, entity_id: str
-    ) -> list[ContentVersion]:
+    async def list_versions(self, entity_type: str, entity_id: str) -> list[ContentVersion]:
         """按 version_number DESC 返回所有版本"""
         result = await self.session.execute(
             select(ContentVersion)

@@ -36,12 +36,9 @@ class Project(Base):
     )
 
 
-
 class Server(Base):
     __tablename__ = "servers"
-    __table_args__ = (
-        UniqueConstraint("name", name="uq_servers_name"),
-    )
+    __table_args__ = (UniqueConstraint("name", name="uq_servers_name"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255))
@@ -100,10 +97,13 @@ class Incident(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    messages: Mapped[list["Message"]] = relationship(back_populates="incident", order_by="Message.created_at")
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="incident", order_by="Message.created_at"
+    )
     approval_requests: Mapped[list["ApprovalRequest"]] = relationship(back_populates="incident")
-    attachments: Mapped[list["Attachment"]] = relationship(back_populates="incident", cascade="all, delete-orphan")
-
+    attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="incident", cascade="all, delete-orphan"
+    )
 
 
 class Attachment(Base):
@@ -111,7 +111,10 @@ class Attachment(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     incident_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("incidents.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     filename: Mapped[str] = mapped_column(String(500))
     stored_filename: Mapped[str] = mapped_column(String(500))
@@ -159,7 +162,9 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text)
     embedding = mapped_column(Vector(1024), nullable=True)
-    chunk_metadata: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, server_default=text("'{}'"))
+    chunk_metadata: Mapped[dict] = mapped_column(
+        "metadata", JSONB, default=dict, server_default=text("'{}'")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped["ProjectDocument"] = relationship(back_populates="chunks")
@@ -167,9 +172,7 @@ class DocumentChunk(Base):
 
 class Message(Base):
     __tablename__ = "messages"
-    __table_args__ = (
-        Index("ix_messages_incident_created", "incident_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_messages_incident_created", "incident_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     incident_id: Mapped[uuid.UUID] = mapped_column(
@@ -219,7 +222,6 @@ class NotificationSetting(Base):
     )
 
 
-
 class ContentVersion(Base):
     __tablename__ = "content_versions"
     __table_args__ = (
@@ -244,4 +246,6 @@ class IncidentHistory(Base):
     embedding = mapped_column(Vector(1024), nullable=True)
     occurrence_count: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

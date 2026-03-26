@@ -12,9 +12,7 @@ class TestPrepareCommand:
     """Tests for SSHConnector._prepare_command() sudo handling."""
 
     def _make_connector(self, sudo_password: str | None = None) -> SSHConnector:
-        return SSHConnector(
-            host="10.0.0.1", password="ssh_pass", sudo_password=sudo_password
-        )
+        return SSHConnector(host="10.0.0.1", password="ssh_pass", sudo_password=sudo_password)
 
     def test_no_sudo_returns_unchanged(self):
         c = self._make_connector(sudo_password="secret")
@@ -63,9 +61,7 @@ class TestPrepareCommand:
 
     def test_sudo_password_takes_priority_over_ssh_password(self):
         """sudo_password is used, not the SSH password."""
-        c = SSHConnector(
-            host="10.0.0.1", password="ssh_pass", sudo_password="sudo_pass"
-        )
+        c = SSHConnector(host="10.0.0.1", password="ssh_pass", sudo_password="sudo_pass")
         cmd, stdin = c._prepare_command("sudo docker ps")
         assert stdin == "sudo_pass\n"
 
@@ -95,7 +91,9 @@ class TestShellSafetyClassifySudo:
         assert ShellSafety.classify("sudo docker ps && sudo docker images") is CommandType.READ
 
     def test_compound_with_sudo_dangerous(self):
-        assert ShellSafety.classify("echo hi && sudo systemctl restart nginx") is CommandType.DANGEROUS
+        assert (
+            ShellSafety.classify("echo hi && sudo systemctl restart nginx") is CommandType.DANGEROUS
+        )
 
     def test_su_remote_is_dangerous(self):
         assert ShellSafety.classify("su - root") is CommandType.DANGEROUS
@@ -126,6 +124,7 @@ class TestGetSudoPassword:
 
     def _make_crypto(self) -> CryptoService:
         import base64
+
         key = base64.b64encode(b"0" * 32).decode()
         return CryptoService(key=key)
 
@@ -152,17 +151,13 @@ class TestGetSudoPassword:
 
     def test_ssh_password_fallback_when_enabled(self):
         crypto = self._make_crypto()
-        server = self._make_server(
-            crypto, password="ssh_pw", use_ssh_password_for_sudo=True
-        )
+        server = self._make_server(crypto, password="ssh_pw", use_ssh_password_for_sudo=True)
         service = ServerService(session=MagicMock(), crypto=crypto)
         assert service.get_sudo_password(server) == "ssh_pw"
 
     def test_returns_none_when_fallback_disabled(self):
         crypto = self._make_crypto()
-        server = self._make_server(
-            crypto, password="ssh_pw", use_ssh_password_for_sudo=False
-        )
+        server = self._make_server(crypto, password="ssh_pw", use_ssh_password_for_sudo=False)
         service = ServerService(session=MagicMock(), crypto=crypto)
         assert service.get_sudo_password(server) is None
 
@@ -213,9 +208,7 @@ class TestExecuteSudoWithPassword:
     @pytest.mark.asyncio
     async def test_execute_sudo_without_password_uses_sudo_n(self):
         """Without password → sudo -n, fails fast."""
-        connector = SSHConnector(
-            host="10.200.100.85", username="admin", password="some_pw"
-        )
+        connector = SSHConnector(host="10.200.100.85", username="admin", password="some_pw")
 
         mock_result = MagicMock()
         mock_result.exit_status = 1

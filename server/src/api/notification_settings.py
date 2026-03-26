@@ -27,7 +27,9 @@ def _get_crypto() -> CryptoService:
 @router.post("/test/webhook", response_model=WebhookTestResponse)
 async def test_webhook(body: WebhookTestRequest):
     try:
-        await send_feishu_message(body.webhook_url, "Chronos 测试消息 - 通知配置成功！", body.sign_key)
+        await send_feishu_message(
+            body.webhook_url, "Chronos 测试消息 - 通知配置成功！", body.sign_key
+        )
         return WebhookTestResponse(success=True, message="测试消息发送成功")
     except Exception as e:
         log.warning("Webhook test failed", error=str(e))

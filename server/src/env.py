@@ -43,9 +43,13 @@ class Settings(BaseSettings):
         """Return warnings if default secrets are still in use."""
         warnings = []
         if self.encryption_key == "dGVzdC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVz":
-            warnings.append("ENCRYPTION_KEY is using the default dev value — set a unique key in production")
+            warnings.append(
+                "ENCRYPTION_KEY is using the default dev value — set a unique key in production"
+            )
         if self.jwt_secret == "dev-jwt-secret":
-            warnings.append("JWT_SECRET is using the default dev value — set a unique secret in production")
+            warnings.append(
+                "JWT_SECRET is using the default dev value — set a unique secret in production"
+            )
         return warnings
 
 

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsgo && vite build",
-    "lint": "eslint .",
+    "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -50,7 +50,6 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@tanstack/router-cli": "^1.166.19",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
@@ -58,13 +57,10 @@
     "@typescript/native-preview": "^7.0.0-dev.20260325.1",
     "@vitejs/devtools": "^0.1.11",
     "@vitejs/plugin-react": "^6.0.1",
-    "eslint": "^10.1.0",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.4.0",
+    "oxlint": "^1.57.0",
+    "oxlint-tsgolint": "^0.17.4",
     "shiki": "^4.0.2",
     "typescript": "~6.0.2",
-    "typescript-eslint": "^8.57.2",
     "vite": "^8.0.2"
   }
 }

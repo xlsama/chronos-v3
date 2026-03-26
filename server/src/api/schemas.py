@@ -117,10 +117,19 @@ class ServiceCreate(BaseModel):
     name: str
     description: str | None = None
     service_type: Literal[
-        "mysql", "postgresql", "redis", "prometheus",
-        "mongodb", "elasticsearch",
-        "doris", "starrocks", "jenkins", "kettle", "hive",
-        "kubernetes", "docker",
+        "mysql",
+        "postgresql",
+        "redis",
+        "prometheus",
+        "mongodb",
+        "elasticsearch",
+        "doris",
+        "starrocks",
+        "jenkins",
+        "kettle",
+        "hive",
+        "kubernetes",
+        "docker",
     ]
     host: str
     port: int
@@ -150,7 +159,6 @@ class ServiceResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-
 
 
 class IncidentCreate(BaseModel):
@@ -355,10 +363,19 @@ class ExtractedConnections(BaseModel):
 
 class InlineServiceTest(BaseModel):
     service_type: Literal[
-        "mysql", "postgresql", "redis", "prometheus",
-        "mongodb", "elasticsearch",
-        "doris", "starrocks", "jenkins", "kettle", "hive",
-        "kubernetes", "docker",
+        "mysql",
+        "postgresql",
+        "redis",
+        "prometheus",
+        "mongodb",
+        "elasticsearch",
+        "doris",
+        "starrocks",
+        "jenkins",
+        "kettle",
+        "hive",
+        "kubernetes",
+        "docker",
     ]
     host: str
     port: int

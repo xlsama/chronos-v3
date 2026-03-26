@@ -174,7 +174,7 @@ async def auto_evolve_skills(
     # 去除可能的代码块标记
     content = extracted.strip("`").strip()
     if content.startswith("markdown\n"):
-        content = content[len("markdown\n"):]
+        content = content[len("markdown\n") :]
     if content.startswith("```\n"):
         content = content[4:]
     if content.endswith("\n```"):
@@ -187,6 +187,7 @@ async def auto_evolve_skills(
         parts = content.split("---", 2)
         if len(parts) >= 3:
             import yaml
+
             fm = yaml.safe_load(parts[1]) or {}
             new_name = fm.get("name", "")
             new_description = fm.get("description", "")
@@ -199,10 +200,10 @@ async def auto_evolve_skills(
 
     # Step 2: 与现有 skills 匹配
     all_skills = service.list_skills()  # 包含 draft
-    skills_list = "\n".join(
-        f"- {s.slug}: {s.name} — {s.description}"
-        for s in all_skills
-    ) or "（暂无现有技能）"
+    skills_list = (
+        "\n".join(f"- {s.slug}: {s.name} — {s.description}" for s in all_skills)
+        or "（暂无现有技能）"
+    )
 
     match_prompt = _MATCH_PROMPT.format(
         new_name=new_name,
@@ -266,7 +267,7 @@ async def auto_evolve_skills(
         # Clean up merged content
         merged_content = merged.strip("`").strip()
         if merged_content.startswith("markdown\n"):
-            merged_content = merged_content[len("markdown\n"):]
+            merged_content = merged_content[len("markdown\n") :]
         if merged_content.startswith("```\n"):
             merged_content = merged_content[4:]
         if merged_content.endswith("\n```"):
@@ -278,11 +279,14 @@ async def auto_evolve_skills(
 
         from src.db.connection import get_session_factory
         from src.services.version_service import VersionService
+
         async with get_session_factory()() as vs_session:
             vs = VersionService(vs_session)
             await vs.save_version(
-                entity_type="skill", entity_id=slug,
-                content=merged_content, change_source="auto",
+                entity_type="skill",
+                entity_id=slug,
+                content=merged_content,
+                change_source="auto",
             )
             await vs_session.commit()
         log.info("Updated existing skill", slug=slug)
@@ -294,6 +298,7 @@ async def auto_evolve_skills(
 
         # 确保 slug 合法
         import re
+
         if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", slug) or len(slug) > 64:
             slug = "auto-" + incident_id[:8]
 

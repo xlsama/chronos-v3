@@ -4,6 +4,7 @@ Revision ID: e6b2d4f8a1c3
 Revises: d5a1b3c7e9f0
 Create Date: 2026-03-17 20:00:00.000000
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -26,7 +27,9 @@ def upgrade() -> None:
     )
     op.add_column(
         "incident_history",
-        sa.Column("last_seen_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "last_seen_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
 
 

@@ -59,9 +59,7 @@ class JenkinsConnector(ServiceConnector):
             kwargs: dict = {}
             if self._auth:
                 kwargs["auth"] = self._auth
-            resp = await client.get(
-                f"{self._base_url}/crumbIssuer/api/json", **kwargs
-            )
+            resp = await client.get(f"{self._base_url}/crumbIssuer/api/json", **kwargs)
             if resp.status_code == 200:
                 data = resp.json()
                 self._crumb = (data["crumbRequestField"], data["crumb"])

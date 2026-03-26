@@ -240,6 +240,7 @@ export function ServerForm({
       }
 
       // Build API payload (strip use_bastion, auth_method, bastion_auth_method)
+      // oxlint-disable-next-line typescript/no-unused-vars -- strip form-only fields from API payload
       const { use_bastion, auth_method, bastion_auth_method, ...apiData } = result.data;
       const apiPayload = {
         ...apiData,

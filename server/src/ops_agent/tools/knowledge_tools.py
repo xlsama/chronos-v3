@@ -57,9 +57,7 @@ def _format_source(filename: str, metadata: dict) -> str:
 async def list_projects_for_matching() -> str:
     """List all projects as JSON with descriptions and AGENTS.md preview for matching."""
     async with get_session_ctx() as session:
-        result = await session.execute(
-            select(Project).order_by(Project.created_at.desc())
-        )
+        result = await session.execute(select(Project).order_by(Project.created_at.desc()))
         projects = list(result.scalars().all())
         log.info("list_projects_for_matching", project_count=len(projects))
         if not projects:
@@ -68,21 +66,27 @@ async def list_projects_for_matching() -> str:
         items = []
         for project in projects:
             agents_result = await session.execute(
-                select(ProjectDocument).where(
+                select(ProjectDocument)
+                .where(
                     ProjectDocument.project_id == project.id,
                     ProjectDocument.doc_type == "agents_config",
-                ).limit(1)
+                )
+                .limit(1)
             )
             agents_doc = agents_result.scalar_one_or_none()
             has_agents_md = bool(agents_doc and agents_doc.content.strip())
 
-            items.append({
-                "project_id": str(project.id),
-                "project_name": project.name,
-                "description": project.description or "",
-                "has_agents_md": has_agents_md,
-                "agents_md_preview": (agents_doc.content[:300] + "...") if has_agents_md else "",
-            })
+            items.append(
+                {
+                    "project_id": str(project.id),
+                    "project_name": project.name,
+                    "description": project.description or "",
+                    "has_agents_md": has_agents_md,
+                    "agents_md_preview": (agents_doc.content[:300] + "...")
+                    if has_agents_md
+                    else "",
+                }
+            )
         result_json = orjson.dumps(items).decode()
         log.debug("list_projects_for_matching result", result=result_json)
         return result_json
@@ -136,7 +140,12 @@ async def search_knowledge_base(query: str) -> tuple[str, list[dict]]:
                 item["relevance_score"] = rr.relevance_score
                 results.append(item)
             top_scores = [f"{r['relevance_score']:.2f}" for r in results]
-            log.info("Rerank completed", elapsed=f"{rerank_elapsed:.2f}s", result_count=len(results), scores=top_scores)
+            log.info(
+                "Rerank completed",
+                elapsed=f"{rerank_elapsed:.2f}s",
+                result_count=len(results),
+                scores=top_scores,
+            )
             for idx, r in enumerate(results):
                 log.debug(
                     "Rerank result",
@@ -151,7 +160,9 @@ async def search_knowledge_base(query: str) -> tuple[str, list[dict]]:
 
         if not results:
             total_elapsed = time.monotonic() - t_total
-            log.info("search_knowledge_base completed", elapsed=f"{total_elapsed:.2f}s", result_count=0)
+            log.info(
+                "search_knowledge_base completed", elapsed=f"{total_elapsed:.2f}s", result_count=0
+            )
             return ("没有找到与查询相关的知识库内容。", [])
 
         # Group results by project
@@ -202,7 +213,11 @@ async def search_knowledge_base(query: str) -> tuple[str, list[dict]]:
 
         formatted_text = "\n\n---\n\n".join(sections)
         total_elapsed = time.monotonic() - t_total
-        log.info("search_knowledge_base completed", elapsed=f"{total_elapsed:.2f}s", project_count=len(by_project))
+        log.info(
+            "search_knowledge_base completed",
+            elapsed=f"{total_elapsed:.2f}s",
+            project_count=len(by_project),
+        )
         log.debug("search_knowledge_base formatted_text", formatted_text=formatted_text)
         return (formatted_text, sources)
 
@@ -223,9 +238,7 @@ async def get_agents_md(project_ids: list[str]) -> str:
     async with get_session_ctx() as session:
         uuids = [uuid.UUID(pid) for pid in project_ids]
         # Fetch projects
-        project_result = await session.execute(
-            select(Project).where(Project.id.in_(uuids))
-        )
+        project_result = await session.execute(select(Project).where(Project.id.in_(uuids)))
         projects = {p.id: p for p in project_result.scalars().all()}
 
         # Fetch AGENTS.md documents
@@ -242,7 +255,13 @@ async def get_agents_md(project_ids: list[str]) -> str:
             project = projects.get(pid_uuid)
             if not project:
                 sections.append(f"## 项目: 未找到 (ID: {pid_uuid})\n[项目不存在]")
-                log.info("get_agents_md project", project_id=str(pid_uuid), project_name="NOT_FOUND", content_len=0, is_empty=True)
+                log.info(
+                    "get_agents_md project",
+                    project_id=str(pid_uuid),
+                    project_name="NOT_FOUND",
+                    content_len=0,
+                    is_empty=True,
+                )
                 continue
 
             doc = agents_docs.get(pid_uuid)

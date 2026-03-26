@@ -10,16 +10,18 @@ from src.ops_agent.tools.tool_classifier import ShellSafety, CommandType, compre
 log = get_logger(component="ssh_bash")
 
 # 匹配 2>/dev/null 和 2> /dev/null（含前导空白）
-_STDERR_DISCARD_RE = re.compile(r'\s*2>\s*/dev/null')
+_STDERR_DISCARD_RE = re.compile(r"\s*2>\s*/dev/null")
 
 
 def _strip_stderr_discard(command: str) -> str:
     """去除命令中的 2>/dev/null，确保 stderr 始终被保留。"""
-    return _STDERR_DISCARD_RE.sub('', command)
+    return _STDERR_DISCARD_RE.sub("", command)
 
 
 # Registry of connectors by server ID with TTL and capacity management
-_connector_registry: dict[str, tuple[SSHConnector, float]] = {}  # server_id -> (connector, last_used_time)
+_connector_registry: dict[
+    str, tuple[SSHConnector, float]
+] = {}  # server_id -> (connector, last_used_time)
 _registry_lock = asyncio.Lock()
 _CONNECTOR_TTL = 600  # 10 minutes
 _CONNECTOR_MAX_SIZE = 100
@@ -174,7 +176,13 @@ async def ssh_bash(server_id: str, command: str) -> dict:
         }
 
     stdout_compressed = compress_output(result.stdout)
-    log.info("Result", elapsed=f"{exec_elapsed:.2f}s", exit_code=result.exit_code, stdout_len=len(stdout_compressed), stderr_len=len(result.stderr))
+    log.info(
+        "Result",
+        elapsed=f"{exec_elapsed:.2f}s",
+        exit_code=result.exit_code,
+        stdout_len=len(stdout_compressed),
+        stderr_len=len(result.stderr),
+    )
     log.debug("stdout", stdout=stdout_compressed)
     if result.stderr:
         log.debug("stderr", stderr=result.stderr)

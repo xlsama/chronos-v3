@@ -59,7 +59,9 @@ async def _index_document_background(
             if segments:
                 chunks_with_meta = chunk_segments(segments)
             else:
-                chunks_with_meta = [ChunkWithMetadata(content=c, metadata={}) for c in chunk_text(content)]
+                chunks_with_meta = [
+                    ChunkWithMetadata(content=c, metadata={}) for c in chunk_text(content)
+                ]
 
             texts = [c.content for c in chunks_with_meta]
             embeddings = await embedder.embed_texts(texts)
@@ -80,7 +82,11 @@ async def _index_document_background(
             doc.status = "indexed"
             doc.error_message = None
             await session.commit()
-            log.info("Document indexed successfully", document_id=str(document_id), chunks=len(chunk_models))
+            log.info(
+                "Document indexed successfully",
+                document_id=str(document_id),
+                chunks=len(chunk_models),
+            )
         except Exception as e:
             await session.rollback()
             async with factory() as err_session:
@@ -93,7 +99,12 @@ async def _index_document_background(
 
 
 class DocumentService:
-    def __init__(self, session: AsyncSession, embedder: Embedder, image_describer: ImageDescriber | None = None):
+    def __init__(
+        self,
+        session: AsyncSession,
+        embedder: Embedder,
+        image_describer: ImageDescriber | None = None,
+    ):
         self.session = session
         self.embedder = embedder
         self.image_describer = image_describer
@@ -140,7 +151,9 @@ class DocumentService:
         if segments:
             chunks_with_meta = chunk_segments(segments)
         else:
-            chunks_with_meta = [ChunkWithMetadata(content=c, metadata={}) for c in chunk_text(content)]
+            chunks_with_meta = [
+                ChunkWithMetadata(content=c, metadata={}) for c in chunk_text(content)
+            ]
 
         texts = [c.content for c in chunks_with_meta]
         embeddings = await self.embedder.embed_texts(texts)

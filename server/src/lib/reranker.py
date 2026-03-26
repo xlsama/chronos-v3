@@ -18,14 +18,9 @@ class Reranker:
         self.base_url = s.rerank_base_url
         self.model = s.rerank_model
 
-    async def rerank(
-        self, query: str, documents: list[str], top_n: int = 5
-    ) -> list[RerankResult]:
+    async def rerank(self, query: str, documents: list[str], top_n: int = 5) -> list[RerankResult]:
         if not documents or len(documents) <= top_n:
-            return [
-                RerankResult(index=i, relevance_score=1.0)
-                for i in range(len(documents))
-            ]
+            return [RerankResult(index=i, relevance_score=1.0) for i in range(len(documents))]
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(

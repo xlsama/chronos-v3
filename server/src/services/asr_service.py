@@ -55,10 +55,12 @@ async def transcribe_audio(audio_data: bytes, filename: str) -> str:
         # Stream PCM chunks
         for offset in range(0, len(pcm_data), CHUNK_BYTES):
             chunk = pcm_data[offset : offset + CHUNK_BYTES]
-            msg = json.dumps({
-                "type": "input_audio_buffer.append",
-                "audio": base64.b64encode(chunk).decode("ascii"),
-            })
+            msg = json.dumps(
+                {
+                    "type": "input_audio_buffer.append",
+                    "audio": base64.b64encode(chunk).decode("ascii"),
+                }
+            )
             await ws.send(msg)
 
         # Signal end of audio

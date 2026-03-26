@@ -43,15 +43,26 @@ class KubernetesConnector(ServiceConnector):
 
     # Cluster-scoped resource prefixes — skip namespace injection for these
     _CLUSTER_SCOPED_PREFIXES = (
-        "get nodes", "get node", "describe node",
-        "top node", "top nodes",
-        "get namespaces", "get namespace", "get ns",
-        "get clusterrole", "get clusterrolebinding",
-        "get pv ", "get pv\n", "get persistentvolume",
-        "get storageclass", "get sc ",
+        "get nodes",
+        "get node",
+        "describe node",
+        "top node",
+        "top nodes",
+        "get namespaces",
+        "get namespace",
+        "get ns",
+        "get clusterrole",
+        "get clusterrolebinding",
+        "get pv ",
+        "get pv\n",
+        "get persistentvolume",
+        "get storageclass",
+        "get sc ",
         "get ingressclass",
-        "api-resources", "api-versions",
-        "cluster-info", "version",
+        "api-resources",
+        "api-versions",
+        "cluster-info",
+        "version",
     )
 
     def _wrap_command(self, command: str) -> str:
@@ -60,7 +71,7 @@ class KubernetesConnector(ServiceConnector):
 
         # Extract the part after "kubectl "
         if cmd.startswith("kubectl "):
-            rest = cmd[len("kubectl "):]
+            rest = cmd[len("kubectl ") :]
         else:
             return cmd
 

@@ -17,8 +17,10 @@ EventCallback = Callable[[str, dict], Coroutine[Any, Any, None]]
 def _build_callback(channel: str, agent: str) -> tuple[EventCallback, EventPublisher | None]:
     """Build an event callback that publishes to Redis with phase/agent metadata."""
     if not channel:
+
         async def noop(event_type: str, data: dict) -> None:
             pass
+
         return noop, None
 
     redis = get_redis()
@@ -81,7 +83,11 @@ async def gather_context_node(state: OpsState) -> dict:
         kb_cb("agent_status", {"status": "failed" if kb_failed else "completed"}),
     )
 
-    log.info("Sub-agents completed", history="FAILED" if history_failed else "OK", kb="FAILED" if kb_failed else "OK")
+    log.info(
+        "Sub-agents completed",
+        history="FAILED" if history_failed else "OK",
+        kb="FAILED" if kb_failed else "OK",
+    )
 
     if isinstance(history_result, str) and not history_failed:
         log.info("history_summary", chars=len(history_result))

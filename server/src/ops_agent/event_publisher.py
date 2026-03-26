@@ -29,6 +29,10 @@ _EVENT_ROLE = {
     "agent_interrupted": "system",
     "confirm_resolution_required": "system",
     "resolution_confirmed": "system",
+    "plan_generated": "system",
+    "plan_updated": "system",
+    "evaluation_started": "system",
+    "evaluation_completed": "system",
 }
 
 
@@ -36,7 +40,9 @@ class EventPublisher:
     def __init__(self, redis: aioredis.Redis, session_factory: async_sessionmaker | None = None):
         self.redis = redis
         self.session_factory = session_factory
-        self._thinking_buffer: dict[tuple[str, str, str], dict] = {}  # (channel, phase, agent) -> {content, phase, agent}
+        self._thinking_buffer: dict[
+            tuple[str, str, str], dict
+        ] = {}  # (channel, phase, agent) -> {content, phase, agent}
         self._answer_buffer: dict[str, dict] = {}  # channel -> {content, phase}
         self._ask_human_buffer: dict[str, dict] = {}  # channel -> {question}
 
@@ -106,7 +112,9 @@ class EventPublisher:
         if buf and buf["question"]:
             await self._persist(channel, "ask_human", buf, ts)
 
-    async def _flush_thinking(self, channel: str, phase: str = "", agent: str = "", ts: datetime | None = None) -> None:
+    async def _flush_thinking(
+        self, channel: str, phase: str = "", agent: str = "", ts: datetime | None = None
+    ) -> None:
         buf = self._thinking_buffer.pop((channel, phase, agent), None)
         if buf and buf["content"]:
             await self._persist(channel, "thinking", buf, ts or datetime.now(timezone.utc))
@@ -147,12 +155,14 @@ class EventPublisher:
             log.error("Failed to persist event", event_type=event_type, error=str(e))
 
     async def _publish_sse(self, channel: str, event_type: str, data: dict, ts: datetime) -> None:
-        payload = orjson.dumps({
-            "event_id": str(uuid.uuid4()),
-            "event_type": event_type,
-            "data": data,
-            "timestamp": ts.isoformat(),
-        }).decode()
+        payload = orjson.dumps(
+            {
+                "event_id": str(uuid.uuid4()),
+                "event_type": event_type,
+                "data": data,
+                "timestamp": ts.isoformat(),
+            }
+        ).decode()
 
         await self.redis.publish(channel, payload)
 

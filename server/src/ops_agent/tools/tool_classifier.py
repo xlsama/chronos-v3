@@ -3,10 +3,10 @@ from enum import Enum
 
 
 class CommandType(str, Enum):
-    READ = "read"           # Read-only, auto-execute
-    WRITE = "write"         # Write operation, needs approval (MEDIUM)
-    DANGEROUS = "dangerous" # High-risk operation, needs approval + red warning (HIGH)
-    BLOCKED = "blocked"     # Absolutely forbidden, reject immediately
+    READ = "read"  # Read-only, auto-execute
+    WRITE = "write"  # Write operation, needs approval (MEDIUM)
+    DANGEROUS = "dangerous"  # High-risk operation, needs approval + red warning (HIGH)
+    BLOCKED = "blocked"  # Absolutely forbidden, reject immediately
 
 
 def compress_output(output: str, max_chars: int = 10000) -> str:
@@ -24,6 +24,7 @@ def compress_output(output: str, max_chars: int = 10000) -> str:
 # Internal helpers: quote-aware command splitting
 # ═══════════════════════════════════════════
 
+
 def _split_outside_quotes(cmd: str, delimiters: list[str]) -> list[str]:
     """Split *cmd* on any of *delimiters*, but only outside single/double quotes.
 
@@ -37,7 +38,7 @@ def _split_outside_quotes(cmd: str, delimiters: list[str]) -> list[str]:
     i = 0
     while i < len(cmd):
         ch = cmd[i]
-        if ch == '\\' and i + 1 < len(cmd):
+        if ch == "\\" and i + 1 < len(cmd):
             current.append(ch)
             current.append(cmd[i + 1])
             i += 2
@@ -49,8 +50,8 @@ def _split_outside_quotes(cmd: str, delimiters: list[str]) -> list[str]:
         if not in_single and not in_double:
             matched = False
             for delim in delimiters:
-                if cmd[i:i + len(delim)] == delim:
-                    parts.append(''.join(current).strip())
+                if cmd[i : i + len(delim)] == delim:
+                    parts.append("".join(current).strip())
                     current = []
                     i += len(delim)
                     matched = True
@@ -59,13 +60,13 @@ def _split_outside_quotes(cmd: str, delimiters: list[str]) -> list[str]:
                 continue
         current.append(ch)
         i += 1
-    parts.append(''.join(current).strip())
+    parts.append("".join(current).strip())
     return [p for p in parts if p]
 
 
 def _split_compounds(cmd: str) -> list[str]:
-    """Split on ``||``, ``&&``, ``;`` outside quotes."""
-    return _split_outside_quotes(cmd, ["||", "&&", ";"])
+    """Split on ``||``, ``&&``, ``;``, newline outside quotes."""
+    return _split_outside_quotes(cmd, ["||", "&&", ";", "\n"])
 
 
 def _split_pipes(cmd: str) -> list[str]:
@@ -104,141 +105,346 @@ def _strip_sudo_prefix(cmd: str) -> tuple[str, bool]:
     return " ".join(tokens[i:]), True
 
 
+def _unquoted_text(cmd: str) -> str:
+    """Return *cmd* with quoted content replaced by spaces, for metacharacter scanning."""
+    out: list[str] = []
+    in_sq = in_dq = False
+    i = 0
+    while i < len(cmd):
+        ch = cmd[i]
+        if ch == "\\" and i + 1 < len(cmd) and not in_sq:
+            out.append("  ")
+            i += 2
+            continue
+        if ch == "'" and not in_dq:
+            in_sq = not in_sq
+            i += 1
+            continue
+        if ch == '"' and not in_sq:
+            in_dq = not in_dq
+            i += 1
+            continue
+        out.append(ch if (not in_sq and not in_dq) else " ")
+        i += 1
+    return "".join(out)
+
+
 # ═══════════════════════════════════════════
 # Shell Safety (ssh_bash + bash shared)
 # ═══════════════════════════════════════════
 
 # Absolutely forbidden (never execute) — pre-compiled, single alternation
-_BLOCKED_RE = regex.compile(r"|".join([
-    r"rm\s+(-[a-zA-Z]*)?r[a-zA-Z]*f[a-zA-Z]*\s+/\s*$",  # rm -rf /
-    r"rm\s+(-[a-zA-Z]*)?r[a-zA-Z]*f[a-zA-Z]*\s+/\*",     # rm -rf /*
-    r"rm\s+.*--no-preserve-root",                          # rm --no-preserve-root
-    r":\(\)\s*\{",                                          # fork bomb
-    r">\s*/dev/sd",                                         # redirect to block device
-]))
+_BLOCKED_RE = regex.compile(
+    r"|".join(
+        [
+            r"rm\s+(-[a-zA-Z]*)?r[a-zA-Z]*f[a-zA-Z]*\s+/\s*$",  # rm -rf /
+            r"rm\s+(-[a-zA-Z]*)?r[a-zA-Z]*f[a-zA-Z]*\s+/\*",  # rm -rf /*
+            r"rm\s+.*--no-preserve-root",  # rm --no-preserve-root
+            r":\(\)\s*\{",  # fork bomb
+            r">\s*/dev/sd",  # redirect to block device
+        ]
+    )
+)
 
 # Local-only blocked patterns (local=True)
 # Block sensitive file access only. sudo/su go through normal classification.
-_LOCAL_BLOCKED_RE = regex.compile(r"|".join([
-    r"\.env\b",
-    r"/etc/(shadow|passwd|sudoers)",
-]))
+_LOCAL_BLOCKED_RE = regex.compile(
+    r"|".join(
+        [
+            r"\.env\b",
+            r"/etc/(shadow|passwd|sudoers)",
+        ]
+    )
+)
 
 # Dangerous patterns (needs approval + red warning) — pre-compiled, IGNORECASE
-_DANGEROUS_RE = regex.compile(r"|".join([
-    r"(^|[;&|]\s*)su\b",
-    r"rm\s+-rf\b",
-    r"mkfs\.",
-    r"dd\s+.*of=/dev/",
-    r"DROP\s+(TABLE|DATABASE)",
-    r"TRUNCATE\b",
-    r"kill\s+-9\b",
-    r"kubectl\s+delete\b",
-    r"\bredis-cli\b.*\b(FLUSHALL|FLUSHDB|SHUTDOWN)\b",
-    r"\bdocker\s+rm\s+",
-    r"\bdocker\s+rmi\s",
-    r"\bdocker\s+system\s+prune\b",
-    r"\biptables\b",
-    r"\bcrontab\s+-[er]\b",
-    r"\bsystemctl\s+(stop|restart|disable|enable)\b",
-    r"\bdocker\s+compose\s+(down|rm)\b",
-    r"\bkubectl\s+(apply|patch|scale|rollout)\b",
-]), regex.IGNORECASE)
+_DANGEROUS_RE = regex.compile(
+    r"|".join(
+        [
+            r"(^|[;&|]\s*)su\b",
+            r"rm\s+-rf\b",
+            r"mkfs\.",
+            r"dd\s+.*of=/dev/",
+            r"DROP\s+(TABLE|DATABASE)",
+            r"TRUNCATE\b",
+            r"kill\s+-9\b",
+            r"kubectl\s+delete\b",
+            r"\bredis-cli\b.*\b(FLUSHALL|FLUSHDB|SHUTDOWN)\b",
+            r"\bdocker\s+rm\s+",
+            r"\bdocker\s+rmi\s",
+            r"\bdocker\s+system\s+prune\b",
+            r"\biptables\b",
+            r"\bcrontab\s+-[er]\b",
+            r"\bsystemctl\s+(stop|restart|disable|enable)\b",
+            r"\bdocker\s+compose\s+(down|rm)\b",
+            r"\bkubectl\s+(apply|patch|scale|rollout)\b",
+        ]
+    ),
+    regex.IGNORECASE,
+)
 
 # Write patterns (needs approval, MEDIUM) — pre-compiled, IGNORECASE
-_WRITE_RE = regex.compile(r"|".join([
-    r"\bsed\s+.*-i\b",
-    r"\bsed\s+.*--in-place\b",
-    r"\bcurl\s+.*-X\s*(POST|PUT|DELETE|PATCH)\b",
-    r"\bcurl\s+.*--request\s*(POST|PUT|DELETE|PATCH)\b",
-    r"\bcurl\s+.*(-d\s|--data|--data-raw|--data-binary)",
-    r"\bwget\s",
-    r"\btee\s+\S",
-    r"\b(mysql|mariadb|psql)\b.*\b(INSERT|UPDATE|DELETE|ALTER|CREATE|GRANT|REVOKE)\b",
-]), regex.IGNORECASE)
+_WRITE_RE = regex.compile(
+    r"|".join(
+        [
+            r"\bsed\s+.*-i\b",
+            r"\bsed\s+.*--in-place\b",
+            r"\bcurl\s+.*-X\s*(POST|PUT|DELETE|PATCH)\b",
+            r"\bcurl\s+.*--request\s*(POST|PUT|DELETE|PATCH)\b",
+            r"\bcurl\s+.*(-d\s|--data|--data-raw|--data-binary)",
+            r"\bcurl\s+.*(-F\s|--form[\s=]|-T\s|--upload-file[\s=])",
+            r"\bwget\s",
+            r"\btee\s+\S",
+            r"\b(mysql|mariadb|psql)\b.*\b(INSERT|UPDATE|DELETE|ALTER|CREATE|GRANT|REVOKE)\b",
+        ]
+    ),
+    regex.IGNORECASE,
+)
+
+# Shell metacharacter patterns — command substitution and redirection escalate to WRITE
+_CMD_SUBSTITUTION_RE = regex.compile(r"\$\(|`")
+_REDIRECT_WRITE_RE = regex.compile(r"\d*>{1,2}\s*(?!/dev/null\b)(?!&)\S")
+_HEREDOC_RE = regex.compile(r'<<-?\s*\\?[\'"]?\w+')
 
 # Read-only patterns for service CLIs — pre-compiled, IGNORECASE
 # Redis-cli patterns consolidated into single alternation
-_READ_RE = regex.compile(r"|".join([
-    r"\bredis-cli\b.*\b("
-        r"GET|MGET|HGET|HGETALL|HMGET|HKEYS|HVALS|HLEN|HEXISTS"
-        r"|LRANGE|LLEN|LINDEX"
-        r"|SMEMBERS|SCARD|SISMEMBER|SRANDMEMBER"
-        r"|ZRANGE|ZREVRANGE|ZCARD|ZSCORE|ZRANK|ZCOUNT"
-        r"|KEYS|SCAN|TYPE|TTL|PTTL|EXISTS|DBSIZE|STRLEN|OBJECT|RANDOMKEY"
-        r"|INFO|PING|TIME"
-    r")\b",
-    r"\bredis-cli\b.*\b(CONFIG\s+GET|CLIENT\s+LIST|SLOWLOG\s+(GET|LEN))\b",
-    r"\bredis-cli\b.*\b(CLUSTER\s+(INFO|NODES)|MEMORY\s+(USAGE|STATS))\b",
-    r"\bredis-cli\s+.*--(scan|bigkeys|stat|latency)\b",
-    r"\b(mysql|mariadb)\b.*-e\s+[\"']\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b",
-    r"\bpsql\b.*-c\s+[\"']\s*(SELECT|SHOW|EXPLAIN)\b",
-    r"\bpsql\b\s+.*(-l|--list)\b",
-    r"^java\s+-version\b",
-    r"^node\s+(-v|--version)\b",
-    r"^npm\s+(-v|--version)\b",
-    r"^yarn\s+(-v|--version)\b",
-    r"\betcdctl\s+(get|endpoint\s+(health|status)|member\s+list|alarm\s+list|version)\b",
-    r"\brabbitmqctl\s+(status|cluster_status|list_queues|list_exchanges|list_bindings"
-        r"|list_connections|list_channels|list_consumers|list_users|list_vhosts"
-        r"|list_permissions)\b",
-]), regex.IGNORECASE)
+_READ_RE = regex.compile(
+    r"|".join(
+        [
+            r"\bredis-cli\b.*\b("
+            r"GET|MGET|HGET|HGETALL|HMGET|HKEYS|HVALS|HLEN|HEXISTS"
+            r"|LRANGE|LLEN|LINDEX"
+            r"|SMEMBERS|SCARD|SISMEMBER|SRANDMEMBER"
+            r"|ZRANGE|ZREVRANGE|ZCARD|ZSCORE|ZRANK|ZCOUNT"
+            r"|KEYS|SCAN|TYPE|TTL|PTTL|EXISTS|DBSIZE|STRLEN|OBJECT|RANDOMKEY"
+            r"|INFO|PING|TIME"
+            r")\b",
+            r"\bredis-cli\b.*\b(CONFIG\s+GET|CLIENT\s+LIST|SLOWLOG\s+(GET|LEN))\b",
+            r"\bredis-cli\b.*\b(CLUSTER\s+(INFO|NODES)|MEMORY\s+(USAGE|STATS))\b",
+            r"\bredis-cli\s+.*--(scan|bigkeys|stat|latency)\b",
+            r"\b(mysql|mariadb)\b.*-e\s+[\"']\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b",
+            r"\bpsql\b.*-c\s+[\"']\s*(SELECT|SHOW|EXPLAIN)\b",
+            r"\bpsql\b\s+.*(-l|--list)\b",
+            r"^java\s+-version\b",
+            r"^node\s+(-v|--version)\b",
+            r"^npm\s+(-v|--version)\b",
+            r"^yarn\s+(-v|--version)\b",
+            r"\betcdctl\s+(get|endpoint\s+(health|status)|member\s+list|alarm\s+list|version)\b",
+            r"\brabbitmqctl\s+(status|cluster_status|list_queues|list_exchanges|list_bindings"
+            r"|list_connections|list_channels|list_consumers|list_users|list_vhosts"
+            r"|list_permissions)\b",
+        ]
+    ),
+    regex.IGNORECASE,
+)
 
 # SSH read-only command prefixes (whitelist)
 _READ_PREFIXES = [
-    "ls", "cat", "head", "tail", "less", "more", "grep", "awk", "sed",
-    "echo", "nproc", "command", "sleep",
-    "find", "which", "whereis", "whoami", "hostname", "uname", "pwd", "readlink",
-    "df", "du", "free", "top", "htop", "vmstat", "iostat", "sar",
-    "ps", "pgrep", "lsof", "ss", "netstat", "ip", "ifconfig",
-    "ping", "traceroute", "dig", "nslookup", "curl",
-    "uptime", "w", "who", "last", "dmesg", "journalctl",
-    "systemctl status", "systemctl is-active", "systemctl list-units",
-    "docker ps", "docker logs", "docker inspect", "docker stats",
-    "docker version", "docker info", "docker top", "docker port",
-    "docker network ls", "docker network inspect",
-    "docker volume ls", "docker images", "docker system df",
-    "docker compose ps", "docker compose logs", "docker compose top",
-    "docker compose config", "docker compose images", "docker compose version",
-    "kubectl get", "kubectl describe", "kubectl logs", "kubectl top",
-    "date", "timedatectl", "env", "printenv", "id", "groups",
-    "xargs",
-    "file", "stat", "wc", "sort", "uniq", "cut", "tr",
-    "mount", "lsblk", "blkid", "fdisk -l",
-    "nginx -t", "nginx -T",
+    "ls",
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "more",
+    "grep",
+    "awk",
+    "sed",
+    "echo",
+    "nproc",
+    "command",
+    "sleep",
+    "find",
+    "which",
+    "whereis",
+    "whoami",
+    "hostname",
+    "uname",
+    "pwd",
+    "readlink",
+    "df",
+    "du",
+    "free",
+    "top",
+    "htop",
+    "vmstat",
+    "iostat",
+    "sar",
+    "ps",
+    "pgrep",
+    "lsof",
+    "ss",
+    "netstat",
+    "ip",
+    "ifconfig",
+    "ping",
+    "traceroute",
+    "dig",
+    "nslookup",
+    "curl",
+    "uptime",
+    "w",
+    "who",
+    "last",
+    "dmesg",
+    "journalctl",
+    "systemctl status",
+    "systemctl is-active",
+    "systemctl list-units",
+    "docker ps",
+    "docker logs",
+    "docker inspect",
+    "docker stats",
+    "docker version",
+    "docker info",
+    "docker top",
+    "docker port",
+    "docker network ls",
+    "docker network inspect",
+    "docker volume ls",
+    "docker images",
+    "docker system df",
+    "docker compose ps",
+    "docker compose logs",
+    "docker compose top",
+    "docker compose config",
+    "docker compose images",
+    "docker compose version",
+    "kubectl get",
+    "kubectl describe",
+    "kubectl logs",
+    "kubectl top",
+    "date",
+    "timedatectl",
+    "env",
+    "printenv",
+    "id",
+    "groups",
+    "file",
+    "stat",
+    "wc",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "mount",
+    "lsblk",
+    "blkid",
+    "fdisk -l",
+    "nginx -t",
+    "nginx -T",
     "supervisorctl status",
-    "pm2 list", "pm2 ls", "pm2 status", "pm2 logs", "pm2 show", "pm2 info",
+    "pm2 list",
+    "pm2 ls",
+    "pm2 status",
+    "pm2 logs",
+    "pm2 show",
+    "pm2 info",
     "crontab -l",
 ]
 
 # Local read-only command prefixes (aligned with SSH _READ_PREFIXES)
 _LOCAL_READ_PREFIXES = [
-    "ls", "cat", "head", "tail", "less", "more", "grep", "awk", "sed",
-    "echo", "nproc", "command", "sleep",
-    "find", "which", "whereis", "whoami", "hostname", "uname", "pwd", "readlink",
-    "df", "du", "free", "top", "htop", "vmstat", "iostat", "sar",
-    "ps", "pgrep", "lsof", "ss", "netstat", "ip", "ifconfig",
-    "ping", "traceroute", "dig", "nslookup", "curl",
-    "uptime", "w", "who", "last", "dmesg", "journalctl",
-    "systemctl status", "systemctl is-active", "systemctl list-units",
-    "docker ps", "docker logs", "docker inspect", "docker stats",
-    "docker version", "docker info", "docker top", "docker port",
-    "docker network ls", "docker network inspect",
-    "docker volume ls", "docker images", "docker system df",
-    "docker compose ps", "docker compose logs", "docker compose top",
-    "docker compose config", "docker compose images", "docker compose version",
-    "kubectl get", "kubectl describe", "kubectl logs", "kubectl top",
-    "date", "timedatectl", "env", "printenv", "id", "groups",
-    "xargs",
-    "file", "stat", "wc", "sort", "uniq", "cut", "tr",
-    "mount", "lsblk", "blkid", "fdisk -l",
-    "nginx -t", "nginx -T",
+    "ls",
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "more",
+    "grep",
+    "awk",
+    "sed",
+    "echo",
+    "nproc",
+    "command",
+    "sleep",
+    "find",
+    "which",
+    "whereis",
+    "whoami",
+    "hostname",
+    "uname",
+    "pwd",
+    "readlink",
+    "df",
+    "du",
+    "free",
+    "top",
+    "htop",
+    "vmstat",
+    "iostat",
+    "sar",
+    "ps",
+    "pgrep",
+    "lsof",
+    "ss",
+    "netstat",
+    "ip",
+    "ifconfig",
+    "ping",
+    "traceroute",
+    "dig",
+    "nslookup",
+    "curl",
+    "uptime",
+    "w",
+    "who",
+    "last",
+    "dmesg",
+    "journalctl",
+    "systemctl status",
+    "systemctl is-active",
+    "systemctl list-units",
+    "docker ps",
+    "docker logs",
+    "docker inspect",
+    "docker stats",
+    "docker version",
+    "docker info",
+    "docker top",
+    "docker port",
+    "docker network ls",
+    "docker network inspect",
+    "docker volume ls",
+    "docker images",
+    "docker system df",
+    "docker compose ps",
+    "docker compose logs",
+    "docker compose top",
+    "docker compose config",
+    "docker compose images",
+    "docker compose version",
+    "kubectl get",
+    "kubectl describe",
+    "kubectl logs",
+    "kubectl top",
+    "date",
+    "timedatectl",
+    "env",
+    "printenv",
+    "id",
+    "groups",
+    "file",
+    "stat",
+    "wc",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "mount",
+    "lsblk",
+    "blkid",
+    "fdisk -l",
+    "nginx -t",
+    "nginx -T",
     "supervisorctl status",
-    "pm2 list", "pm2 ls", "pm2 status", "pm2 logs", "pm2 show", "pm2 info",
+    "pm2 list",
+    "pm2 ls",
+    "pm2 status",
+    "pm2 logs",
+    "pm2 show",
+    "pm2 info",
     "crontab -l",
     # Local-specific
-    "python", "python3",
-    "bash", "sh",
     "jq",
 ]
 
@@ -286,6 +492,18 @@ class ShellSafety:
                     worst = CommandType.WRITE
                     continue
 
+                # Shell metacharacter escalation (checked outside quotes only)
+                unquoted = _unquoted_text(inner)
+                if _CMD_SUBSTITUTION_RE.search(unquoted):
+                    worst = CommandType.WRITE
+                    continue
+                if _REDIRECT_WRITE_RE.search(unquoted):
+                    worst = CommandType.WRITE
+                    continue
+                if _HEREDOC_RE.search(unquoted):
+                    worst = CommandType.WRITE
+                    continue
+
                 # READ whitelist (prefix match + regex patterns)
                 is_read = any(inner.startswith(prefix) for prefix in read_prefixes)
                 if not is_read:
@@ -308,48 +526,110 @@ _SQL_DELETE_RE = regex.compile(r"^DELETE\b")
 _SQL_WRITE_RE = regex.compile(r"^(INSERT|UPDATE|DELETE|CREATE|ALTER|GRANT|REVOKE)\b")
 
 
-def _classify_sql(command: str) -> CommandType:
-    """Classify a SQL command."""
-    cmd = command.strip()
-    upper = cmd.upper()
+def _classify_single_sql(stmt: str) -> CommandType:
+    """Classify a single SQL statement (no semicolons)."""
+    upper = stmt.strip().upper()
+    if not upper:
+        return CommandType.READ
 
-    # READ: SELECT, SHOW, EXPLAIN, DESCRIBE/DESC, WITH...SELECT (CTE)
     if _SQL_READ_RE.match(upper):
         return CommandType.READ
     if _SQL_CTE_READ_RE.match(upper):
         return CommandType.READ
-
-    # DANGEROUS: DROP, TRUNCATE, DELETE without WHERE
     if _SQL_DANGEROUS_RE.match(upper):
         return CommandType.DANGEROUS
     if _SQL_DELETE_RE.match(upper) and "WHERE" not in upper:
         return CommandType.DANGEROUS
-
-    # WRITE: INSERT, UPDATE, DELETE (with WHERE), CREATE, ALTER, GRANT, REVOKE
     if _SQL_WRITE_RE.match(upper):
         return CommandType.WRITE
-
-    # Default: WRITE (conservative)
     return CommandType.WRITE
 
 
+def _classify_sql(command: str) -> CommandType:
+    """Classify a SQL command. Handles multi-statement (;-separated)."""
+    cmd = command.strip().rstrip(";")
+    statements = [s.strip() for s in cmd.split(";") if s.strip()]
+    if not statements:
+        return CommandType.WRITE
+
+    worst = CommandType.READ
+    for stmt in statements:
+        level = _classify_single_sql(stmt)
+        if level in (CommandType.DANGEROUS, CommandType.BLOCKED):
+            return level
+        if level == CommandType.WRITE:
+            worst = CommandType.WRITE
+    return worst
+
+
 _REDIS_READ = {
-    "GET", "MGET", "HGET", "HGETALL", "HMGET", "HKEYS", "HVALS", "HLEN", "HEXISTS",
-    "LRANGE", "LLEN", "LINDEX",
-    "SMEMBERS", "SCARD", "SISMEMBER",
-    "ZRANGE", "ZREVRANGE", "ZCARD", "ZSCORE", "ZRANK", "ZCOUNT",
-    "KEYS", "SCAN", "TYPE", "TTL", "PTTL", "EXISTS", "DBSIZE", "STRLEN",
-    "INFO", "PING", "TIME", "OBJECT", "RANDOMKEY", "MEMORY", "CLIENT", "SLOWLOG", "CLUSTER", "CONFIG",
+    "GET",
+    "MGET",
+    "HGET",
+    "HGETALL",
+    "HMGET",
+    "HKEYS",
+    "HVALS",
+    "HLEN",
+    "HEXISTS",
+    "LRANGE",
+    "LLEN",
+    "LINDEX",
+    "SMEMBERS",
+    "SCARD",
+    "SISMEMBER",
+    "ZRANGE",
+    "ZREVRANGE",
+    "ZCARD",
+    "ZSCORE",
+    "ZRANK",
+    "ZCOUNT",
+    "KEYS",
+    "SCAN",
+    "TYPE",
+    "TTL",
+    "PTTL",
+    "EXISTS",
+    "DBSIZE",
+    "STRLEN",
+    "INFO",
+    "PING",
+    "TIME",
+    "OBJECT",
+    "RANDOMKEY",
+    "MEMORY",
+    "CLIENT",
+    "SLOWLOG",
+    "CLUSTER",
+    "CONFIG",
 }
 
 _REDIS_DANGEROUS = {"FLUSHDB", "FLUSHALL", "SHUTDOWN", "DEBUG"}
 
 _REDIS_WRITE = {
-    "SET", "MSET", "DEL", "HSET", "HDEL",
-    "LPUSH", "RPUSH", "LPOP", "RPOP",
-    "SADD", "SREM", "ZADD", "ZREM",
-    "EXPIRE", "PERSIST", "RENAME", "MOVE", "COPY",
-    "INCR", "DECR", "APPEND", "SETEX", "SETNX",
+    "SET",
+    "MSET",
+    "DEL",
+    "HSET",
+    "HDEL",
+    "LPUSH",
+    "RPUSH",
+    "LPOP",
+    "RPOP",
+    "SADD",
+    "SREM",
+    "ZADD",
+    "ZREM",
+    "EXPIRE",
+    "PERSIST",
+    "RENAME",
+    "MOVE",
+    "COPY",
+    "INCR",
+    "DECR",
+    "APPEND",
+    "SETEX",
+    "SETNX",
 }
 
 
@@ -386,18 +666,37 @@ def _classify_prometheus(_command: str) -> CommandType:
 
 
 _MONGO_READ = {
-    "find", "count", "countdocuments", "listcollections", "listdatabases",
-    "aggregate", "dbstats", "collstats", "explain", "distinct", "ping",
-    "getmore", "serverstatus", "buildinfo", "connectionstatus",
+    "find",
+    "count",
+    "countdocuments",
+    "listcollections",
+    "listdatabases",
+    "aggregate",
+    "dbstats",
+    "collstats",
+    "explain",
+    "distinct",
+    "ping",
+    "getmore",
+    "serverstatus",
+    "buildinfo",
+    "connectionstatus",
 }
 
 _MONGO_DANGEROUS = {
-    "dropdatabase", "drop", "dropindexes",
+    "dropdatabase",
+    "drop",
+    "dropindexes",
 }
 
 _MONGO_WRITE = {
-    "insert", "update", "delete", "findandmodify",
-    "createindexes", "create", "renamecollection",
+    "insert",
+    "update",
+    "delete",
+    "findandmodify",
+    "createindexes",
+    "create",
+    "renamecollection",
 }
 
 
@@ -460,9 +759,7 @@ def _classify_elasticsearch(command: str) -> CommandType:
 
 
 # Pre-compiled Jenkins/Kettle path patterns
-_JENKINS_DANGEROUS_PATH_RE = regex.compile(
-    r"/(stop|delete|doDelete|disable)\b", regex.IGNORECASE
-)
+_JENKINS_DANGEROUS_PATH_RE = regex.compile(r"/(stop|delete|doDelete|disable)\b", regex.IGNORECASE)
 _KETTLE_START_RE = regex.compile(r"/(start|run|execute)", regex.IGNORECASE)
 _KETTLE_STOP_RE = regex.compile(r"/(stop|remove|clean)", regex.IGNORECASE)
 
@@ -523,20 +820,42 @@ def _classify_kettle(command: str) -> CommandType:
 
 
 _K8S_READ_SUBCOMMANDS = {
-    "get", "describe", "logs", "top", "explain",
-    "api-resources", "api-versions", "cluster-info",
-    "version", "auth",
+    "get",
+    "describe",
+    "logs",
+    "top",
+    "explain",
+    "api-resources",
+    "api-versions",
+    "cluster-info",
+    "version",
+    "auth",
 }
 
 _K8S_DANGEROUS_SUBCOMMANDS = {
-    "delete", "drain", "cordon", "taint",
+    "delete",
+    "drain",
+    "cordon",
+    "taint",
 }
 
 _K8S_WRITE_SUBCOMMANDS = {
-    "apply", "create", "patch", "replace", "set",
-    "scale", "autoscale", "rollout",
-    "label", "annotate", "uncordon",
-    "edit", "expose", "run", "cp", "exec",
+    "apply",
+    "create",
+    "patch",
+    "replace",
+    "set",
+    "scale",
+    "autoscale",
+    "rollout",
+    "label",
+    "annotate",
+    "uncordon",
+    "edit",
+    "expose",
+    "run",
+    "cp",
+    "exec",
 }
 
 _K8S_BLOCKED_SUBCOMMANDS = {
@@ -557,7 +876,7 @@ def _classify_kubernetes(command: str) -> CommandType:
     cmd = command.strip()
 
     if cmd.startswith("kubectl "):
-        rest = cmd[len("kubectl "):]
+        rest = cmd[len("kubectl ") :]
     elif cmd == "kubectl":
         return CommandType.READ
     else:
@@ -602,14 +921,31 @@ def _classify_kubernetes(command: str) -> CommandType:
 
 
 _DOCKER_READ_SUBCOMMANDS = {
-    "ps", "inspect", "logs", "top", "stats", "diff",
-    "images", "version", "info", "port",
+    "ps",
+    "inspect",
+    "logs",
+    "top",
+    "stats",
+    "diff",
+    "images",
+    "version",
+    "info",
+    "port",
 }
 _DOCKER_WRITE_SUBCOMMANDS = {
-    "start", "stop", "restart", "pause", "unpause", "exec", "pull",
+    "start",
+    "stop",
+    "restart",
+    "pause",
+    "unpause",
+    "exec",
+    "pull",
 }
 _DOCKER_DANGEROUS_SUBCOMMANDS = {
-    "rm", "rmi", "kill", "prune",
+    "rm",
+    "rmi",
+    "kill",
+    "prune",
 }
 
 
@@ -618,7 +954,7 @@ def _classify_docker(command: str) -> CommandType:
     cmd = command.strip()
 
     if cmd.startswith("docker "):
-        rest = cmd[len("docker "):]
+        rest = cmd[len("docker ") :]
     elif cmd == "docker":
         return CommandType.READ
     else:

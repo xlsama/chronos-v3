@@ -80,6 +80,7 @@ function SkillDetailPage() {
   // When file data loads and we're in edit mode, initialize draft if not yet set
   useEffect(() => {
     if (fileData && editing && selectedFile && !drafts.has(selectedFile)) {
+      // oxlint-disable-next-line react/set-state-in-effect -- sync query data into local draft state
       setDrafts((prev) => new Map(prev).set(selectedFile, fileData.content));
       setOriginals((prev) => new Map(prev).set(selectedFile, fileData.content));
     }
@@ -88,6 +89,7 @@ function SkillDetailPage() {
   // When selecting a new non-existing file in edit mode, initialize with empty
   useEffect(() => {
     if (selectedFile && !isExistingFile && editing && !drafts.has(selectedFile)) {
+      // oxlint-disable-next-line react/set-state-in-effect -- init empty draft for new file
       setDrafts((prev) => new Map(prev).set(selectedFile, ""));
       setOriginals((prev) => new Map(prev).set(selectedFile, ""));
     }

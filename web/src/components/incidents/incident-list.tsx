@@ -70,6 +70,7 @@ export function IncidentList({ statusFilter, severityFilter }: IncidentListProps
   const pageSize = 20;
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- reset pagination when filters change
     setPage(1);
   }, [statusFilter, severityFilter]);
 

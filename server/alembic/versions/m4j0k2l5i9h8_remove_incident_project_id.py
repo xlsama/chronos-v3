@@ -4,6 +4,7 @@ Revision ID: m4j0k2l5i9h8
 Revises: l3i9j1k4h8g7
 Create Date: 2026-03-18 12:00:00.000000
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -30,8 +31,12 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.add_column("incidents", sa.Column("project_id", UUID(as_uuid=True), nullable=True))
     op.create_index("ix_incidents_project_id", "incidents", ["project_id"])
-    op.create_foreign_key("incidents_project_id_fkey", "incidents", "projects", ["project_id"], ["id"])
+    op.create_foreign_key(
+        "incidents_project_id_fkey", "incidents", "projects", ["project_id"], ["id"]
+    )
 
     op.add_column("incident_history", sa.Column("project_id", UUID(as_uuid=True), nullable=True))
     op.create_index("ix_incident_history_project_id", "incident_history", ["project_id"])
-    op.create_foreign_key("incident_history_project_id_fkey", "incident_history", "projects", ["project_id"], ["id"])
+    op.create_foreign_key(
+        "incident_history_project_id_fkey", "incident_history", "projects", ["project_id"], ["id"]
+    )

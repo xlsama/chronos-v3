@@ -26,7 +26,9 @@ async def human_approval_node(state: OpsState) -> dict:
             # Inject a ToolMessage telling the LLM the command was rejected
             supplement = state.get("approval_supplement")
             if decision == "supplemented" and supplement:
-                content = f"用户拒绝了该命令并补充说明: {supplement}\n请根据用户的补充信息重新思考方案。"
+                content = (
+                    f"用户拒绝了该命令并补充说明: {supplement}\n请根据用户的补充信息重新思考方案。"
+                )
             else:
                 content = "用户拒绝了该命令，请换一个方案继续排查。"
 
@@ -41,7 +43,12 @@ async def human_approval_node(state: OpsState) -> dict:
                                 tool_call_id=tc["id"],
                             )
                         )
-            log.info("Rejected", decision=decision, has_supplement=bool(supplement), injected_messages=len(tool_messages))
+            log.info(
+                "Rejected",
+                decision=decision,
+                has_supplement=bool(supplement),
+                injected_messages=len(tool_messages),
+            )
             return {
                 "messages": tool_messages,
                 "needs_approval": False,
@@ -61,9 +68,7 @@ async def human_approval_node(state: OpsState) -> dict:
 
     # Initial entry: extract pending tool call that needs approval
     last_message = state["messages"][-1]
-    approval_calls = [
-        tc for tc in last_message.tool_calls if tc["name"] in _APPROVAL_TOOLS
-    ]
+    approval_calls = [tc for tc in last_message.tool_calls if tc["name"] in _APPROVAL_TOOLS]
 
     for tc in approval_calls:
         cmd_preview = tc.get("args", {}).get("command", "")[:200]

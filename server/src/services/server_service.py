@@ -54,9 +54,7 @@ class ServerService:
             encrypted_bastion_private_key=(
                 self.crypto.encrypt(bastion_private_key) if bastion_private_key else None
             ),
-            encrypted_sudo_password=(
-                self.crypto.encrypt(sudo_password) if sudo_password else None
-            ),
+            encrypted_sudo_password=(self.crypto.encrypt(sudo_password) if sudo_password else None),
             use_ssh_password_for_sudo=use_ssh_password_for_sudo,
         )
         self.session.add(server)
@@ -77,8 +75,14 @@ class ServerService:
 
         # Plain fields
         for field in (
-            "name", "description", "host", "port", "username",
-            "bastion_host", "bastion_port", "bastion_username",
+            "name",
+            "description",
+            "host",
+            "port",
+            "username",
+            "bastion_host",
+            "bastion_port",
+            "bastion_username",
             "use_ssh_password_for_sudo",
         ):
             if field in kwargs:
@@ -106,17 +110,14 @@ class ServerService:
 
         # Invalidate SSH connector cache so new credentials take effect
         from src.ops_agent.tools.ssh_bash_tool import invalidate_connector
+
         await invalidate_connector(str(server.id))
 
         return server
 
-    def get_decrypted_credentials(
-        self, server: Server
-    ) -> tuple[str | None, str | None]:
+    def get_decrypted_credentials(self, server: Server) -> tuple[str | None, str | None]:
         password = (
-            self.crypto.decrypt(server.encrypted_password)
-            if server.encrypted_password
-            else None
+            self.crypto.decrypt(server.encrypted_password) if server.encrypted_password else None
         )
         private_key = (
             self.crypto.decrypt(server.encrypted_private_key)
@@ -125,9 +126,7 @@ class ServerService:
         )
         return password, private_key
 
-    def get_decrypted_bastion_credentials(
-        self, server: Server
-    ) -> tuple[str | None, str | None]:
+    def get_decrypted_bastion_credentials(self, server: Server) -> tuple[str | None, str | None]:
         password = (
             self.crypto.decrypt(server.encrypted_bastion_password)
             if server.encrypted_bastion_password

@@ -9,9 +9,9 @@ RETRY_MARKER = "[RETRY_TOOL_CALL]"
 RETRY_MESSAGE = (
     f"{RETRY_MARKER}\n"
     "你刚才的回复没有调用任何工具。你必须始终以工具调用结束每一轮回复。\n"
-    "- 需要向用户提问 → 调用 ask_human(question=\"你的具体问题\")\n"
+    '- 需要向用户提问 → 调用 ask_human(question="你的具体问题")\n'
     "- 需要执行命令排查 → 调用对应的执行工具\n"
-    "- 排查已完成 → 调用 complete(answer_md=\"...\")\n"
+    '- 排查已完成 → 调用 complete(answer_md="...")\n'
     "请重新回复，这次必须调用一个工具。"
 )
 

@@ -19,6 +19,8 @@ import { SubAgentCard } from "./sub-agent-card";
 import { TimelineDivider } from "./timeline-divider";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
+import { PlannerContent } from "./planner-phase-section";
+import { EvaluatorContent } from "./evaluator-phase-section";
 
 interface EventTimelineProps {
   incidentId: string;
@@ -347,7 +349,9 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     !!kbAgentState.thinkingContent ||
     kbAgentState.status !== "idle";
   const hasGatherContext = hasHistory || hasKB;
-  const hasBothContextCards = hasHistory && hasKB;
+
+  const plannerPlan = useIncidentStreamStore((s) => s.plannerPlan);
+  const evaluationResult = useIncidentStreamStore((s) => s.evaluationResult);
 
   const hasSubAgentContent =
     historyAgentState.events.length > 0 ||
@@ -380,8 +384,10 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   // Phase visibility
   const showContextGathering =
     hasGatherContext || phaseState.contextGathering !== "pending" || isActiveIncident;
+  const showPlanning = !!plannerPlan || phaseState.planning !== "pending";
   const showInvestigation =
     hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation;
+  const showEvaluation = !!evaluationResult || phaseState.evaluation !== "pending";
 
   // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(mainEvents), [mainEvents]);
@@ -419,7 +425,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           subtitle={contextSubtitle}
           status={phaseState.contextGathering}
           defaultExpanded={phaseState.investigation === "pending" || undefined}
-          isLast={!showInvestigation}
+          isLast={!showPlanning && !showInvestigation && !showEvaluation}
           contentClassName={cn(
             shouldUseFixedContextLayout && [
               "overflow-hidden",
@@ -462,14 +468,25 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
         </PhaseSection>
       )}
 
-      {/* Phase 2: Investigation */}
+      {/* Phase 2: Planning */}
+      {showPlanning && (
+        <PhaseSection
+          title="调查规划"
+          status={phaseState.planning}
+          isLast={!showInvestigation && !showEvaluation}
+        >
+          <PlannerContent />
+        </PhaseSection>
+      )}
+
+      {/* Phase 3: Investigation */}
       {showInvestigation && (
         <PhaseSection
           title="排查处置"
           subtitle={phaseSubtitle}
           status={isTransitioningToInvestigation ? "active" : phaseState.investigation}
           defaultExpanded
-          isLast
+          isLast={!showEvaluation}
         >
           <div className="space-y-3">
             {timelineItems.map((item, i) => {
@@ -667,6 +684,17 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
             {/* Resolution confirm card */}
             <ResolutionConfirmCard incidentId={incidentId} incidentStatus={incidentStatus} />
           </div>
+        </PhaseSection>
+      )}
+
+      {/* Phase 4: Evaluation */}
+      {showEvaluation && (
+        <PhaseSection
+          title="自动验证"
+          status={phaseState.evaluation}
+          isLast
+        >
+          <EvaluatorContent />
         </PhaseSection>
       )}
     </div>

@@ -21,9 +21,7 @@ def _parse_http_command(command: str) -> tuple[str, str, dict | None]:
     cmd = command.strip()
     m = re.match(r"^(GET|POST|PUT|DELETE|HEAD)\s+(\S+)(.*)", cmd, re.DOTALL | re.IGNORECASE)
     if not m:
-        raise ValueError(
-            "无法解析命令，格式: METHOD /path\n示例: GET /kettle/status"
-        )
+        raise ValueError("无法解析命令，格式: METHOD /path\n示例: GET /kettle/status")
 
     method = m.group(1).upper()
     path = m.group(2)

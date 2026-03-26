@@ -83,7 +83,9 @@ async def _send_notification(
 
         crypto = CryptoService(get_settings().encryption_key)
         webhook_url = crypto.decrypt(setting.encrypted_webhook_url)
-        sign_key = crypto.decrypt(setting.encrypted_sign_key) if setting.encrypted_sign_key else None
+        sign_key = (
+            crypto.decrypt(setting.encrypted_sign_key) if setting.encrypted_sign_key else None
+        )
 
         label, color = EVENT_TYPE_MAP.get(event_type, (event_type, "blue"))
 

@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class ServiceResult:
     success: bool
-    output: str           # Formatted plain text
+    output: str  # Formatted plain text
     error: str | None = None
     row_count: int | None = None
 
@@ -41,9 +41,11 @@ def format_as_table(columns: list[str], rows: list[tuple]) -> str:
 
     lines = [header, separator]
     for row in str_rows:
-        line = "| " + " | ".join(
-            (row[i] if i < len(row) else "").ljust(w) for i, w in enumerate(widths)
-        ) + " |"
+        line = (
+            "| "
+            + " | ".join((row[i] if i < len(row) else "").ljust(w) for i, w in enumerate(widths))
+            + " |"
+        )
         lines.append(line)
 
     lines.append(f"\n({len(str_rows)} rows)")

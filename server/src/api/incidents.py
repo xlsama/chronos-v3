@@ -53,7 +53,9 @@ async def _start_agent_background(
                 await session.commit()
                 log.info("Status updated", sid=sid, status="investigating")
                 notify_fire_and_forget(
-                    "investigating", incident_id, description[:80],
+                    "investigating",
+                    incident_id,
+                    description[:80],
                     severity=severity,
                 )
 
@@ -63,19 +65,20 @@ async def _start_agent_background(
         image_attachments: list[dict] = []
         async with factory() as session:
             result = await session.execute(
-                select(Attachment)
-                .where(Attachment.incident_id == uuid.UUID(incident_id))
+                select(Attachment).where(Attachment.incident_id == uuid.UUID(incident_id))
             )
             for a in result.scalars():
                 ext = Path(a.filename).suffix.lower()
                 if ext in IMAGE_EXTENSIONS:
                     file_path = uploads_dir() / a.stored_filename
                     if file_path.exists():
-                        image_attachments.append({
-                            "filename": a.filename,
-                            "bytes": file_path.read_bytes(),
-                            "content_type": a.content_type,
-                        })
+                        image_attachments.append(
+                            {
+                                "filename": a.filename,
+                                "bytes": file_path.read_bytes(),
+                                "content_type": a.content_type,
+                            }
+                        )
                 elif a.parsed_content:
                     description = f"{description}\n\n## 附件内容\n\n### 附件: {a.filename}\n\n{a.parsed_content}"
 
@@ -98,9 +101,13 @@ async def _start_agent_background(
         try:
             channel = EventPublisher.channel_for_incident(incident_id)
             publisher = EventPublisher(get_redis())
-            await publisher.publish(channel, "error", {
-                "message": AgentRunner._format_agent_error(e),
-            })
+            await publisher.publish(
+                channel,
+                "error",
+                {
+                    "message": AgentRunner._format_agent_error(e),
+                },
+            )
         except Exception:
             log.error("Failed to publish error event", incident_id=incident_id)
         # Update incident status to error
@@ -139,7 +146,9 @@ async def create_incident(
     )
 
     notify_fire_and_forget(
-        "open", str(incident.id), body.description[:80],
+        "open",
+        str(incident.id),
+        body.description[:80],
         severity=body.severity,
     )
 
@@ -154,14 +163,19 @@ async def list_incidents(
     page_size: int = 20,
     session: AsyncSession = Depends(get_session),
 ):
-    count_query = select(func.count()).select_from(Incident).where(Incident.is_archived == False)
+    count_query = select(func.count()).select_from(Incident).where(Incident.is_archived.is_(False))
     if status:
         count_query = count_query.where(Incident.status == status)
     if severity:
         count_query = count_query.where(Incident.severity == severity)
     total = await session.scalar(count_query) or 0
 
-    query = select(Incident).options(selectinload(Incident.attachments)).where(Incident.is_archived == False).order_by(Incident.created_at.desc())
+    query = (
+        select(Incident)
+        .options(selectinload(Incident.attachments))
+        .where(Incident.is_archived.is_(False))
+        .order_by(Incident.created_at.desc())
+    )
     if status:
         query = query.where(Incident.status == status)
     if severity:
@@ -179,7 +193,9 @@ async def get_incident(
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
-        select(Incident).options(selectinload(Incident.attachments)).where(Incident.id == incident_id)
+        select(Incident)
+        .options(selectinload(Incident.attachments))
+        .where(Incident.id == incident_id)
     )
     incident = result.scalar_one_or_none()
     if not incident:
@@ -193,9 +209,7 @@ async def get_incident_messages(
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
-        select(Message)
-        .where(Message.incident_id == incident_id)
-        .order_by(Message.created_at)
+        select(Message).where(Message.incident_id == incident_id).order_by(Message.created_at)
     )
     return result.scalars().all()
 
@@ -259,9 +273,7 @@ async def get_incident_events(
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
-        select(Message)
-        .where(Message.incident_id == incident_id)
-        .order_by(Message.created_at)
+        select(Message).where(Message.incident_id == incident_id).order_by(Message.created_at)
     )
     return [_message_to_event(m) for m in result.scalars()]
 
@@ -354,13 +366,17 @@ async def send_user_message(
             if ext in IMAGE_EXTENSIONS:
                 file_path = uploads_dir() / attachment.stored_filename
                 if file_path.exists():
-                    msg_image_attachments.append({
-                        "filename": attachment.filename,
-                        "bytes": file_path.read_bytes(),
-                        "content_type": attachment.content_type,
-                    })
+                    msg_image_attachments.append(
+                        {
+                            "filename": attachment.filename,
+                            "bytes": file_path.read_bytes(),
+                            "content_type": attachment.content_type,
+                        }
+                    )
             elif attachment.parsed_content:
-                attachment_texts.append(f"[附件: {attachment.filename}]\n{attachment.parsed_content}")
+                attachment_texts.append(
+                    f"[附件: {attachment.filename}]\n{attachment.parsed_content}"
+                )
         await session.flush()
 
         metadata["attachment_ids"] = [str(aid) for aid in body.attachment_ids]
@@ -429,7 +445,6 @@ async def send_user_message(
         )
 
     return message
-
 
 
 @router.post("/{incident_id}/confirm-resolution")
@@ -534,13 +549,17 @@ async def stop_incident(
     await runner.publisher.publish(channel, "incident_stopped", {"reason": "stopped"})
 
     notify_fire_and_forget(
-        "stopped", str(incident_id), incident.summary_title or incident.description[:80],
+        "stopped",
+        str(incident_id),
+        incident.summary_title or incident.description[:80],
         severity=incident.severity or "",
     )
 
     # Re-fetch with all columns and attachments to avoid lazy-load MissingGreenlet
     result = await session.execute(
-        select(Incident).options(selectinload(Incident.attachments)).where(Incident.id == incident_id)
+        select(Incident)
+        .options(selectinload(Incident.attachments))
+        .where(Incident.id == incident_id)
     )
     return result.scalar_one()
 
@@ -551,7 +570,9 @@ async def archive_incident(
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
-        select(Incident).options(selectinload(Incident.attachments)).where(Incident.id == incident_id)
+        select(Incident)
+        .options(selectinload(Incident.attachments))
+        .where(Incident.id == incident_id)
     )
     incident = result.scalar_one_or_none()
     if not incident:

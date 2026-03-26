@@ -23,7 +23,6 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
     resolutionConfirmRequired,
     resolutionConfirmResolved,
     setResolutionConfirmRequired,
-    setResolutionConfirmResolved,
     pendingSupplement,
     setPendingSupplement,
     setApprovalDecided,

@@ -25,10 +25,12 @@ async def confirm_resolution_node(state: OpsState) -> dict:
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             for tc in msg.tool_calls:
                 if tc["name"] == "complete":
-                    new_messages.append(ToolMessage(
-                        content="用户表示问题未解决，需要继续排查。",
-                        tool_call_id=tc["id"],
-                    ))
+                    new_messages.append(
+                        ToolMessage(
+                            content="用户表示问题未解决，需要继续排查。",
+                            tool_call_id=tc["id"],
+                        )
+                    )
             break
     new_messages.append(HumanMessage(content=user_response))
     return {"messages": new_messages, "is_complete": False}

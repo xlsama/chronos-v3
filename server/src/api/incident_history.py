@@ -20,7 +20,9 @@ async def list_incident_history(
 ):
     service = IncidentHistoryService(session=session)
     items, total = await service.list_all(
-        page=page, page_size=page_size, query=query,
+        page=page,
+        page_size=page_size,
+        query=query,
     )
     return IncidentHistoryListResponse(items=items, total=total, page=page, page_size=page_size)
 

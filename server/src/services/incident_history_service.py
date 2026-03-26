@@ -29,19 +29,23 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
         summary_md_len=len(summary_md),
         input_len=min(len(summary_md), 3000),
     )
-    resp = await llm.ainvoke([
-        SystemMessage(content=(
-            "你是一个事件分析器。根据以下事件排查报告，生成标题和严重等级。\n\n"
-            "严重等级判定标准：\n"
-            "- P0: 核心业务完全不可用，影响大量用户\n"
-            "- P1: 核心业务严重受损，部分功能不可用\n"
-            "- P2: 非核心功能异常，有 workaround\n"
-            "- P3: 轻微问题、信息查询类、无业务影响\n\n"
-            '请输出 JSON 格式：{"title": "简短中文标题（15-30字）", "severity": "P0|P1|P2|P3"}\n'
-            "只输出 JSON，不要输出其他内容。"
-        )),
-        HumanMessage(content=summary_md[:3000]),
-    ])
+    resp = await llm.ainvoke(
+        [
+            SystemMessage(
+                content=(
+                    "你是一个事件分析器。根据以下事件排查报告，生成标题和严重等级。\n\n"
+                    "严重等级判定标准：\n"
+                    "- P0: 核心业务完全不可用，影响大量用户\n"
+                    "- P1: 核心业务严重受损，部分功能不可用\n"
+                    "- P2: 非核心功能异常，有 workaround\n"
+                    "- P3: 轻微问题、信息查询类、无业务影响\n\n"
+                    '请输出 JSON 格式：{"title": "简短中文标题（15-30字）", "severity": "P0|P1|P2|P3"}\n'
+                    "只输出 JSON，不要输出其他内容。"
+                )
+            ),
+            HumanMessage(content=summary_md[:3000]),
+        ]
+    )
     raw = resp.content.strip()
     log.info(
         "LLM raw response for title/severity",
@@ -76,13 +80,17 @@ async def _generate_filename(title: str) -> str:
 
     llm = get_mini_llm()
     log.info("Generating filename", title=title)
-    resp = await llm.ainvoke([
-        SystemMessage(content=(
-            "将以下中文标题翻译为英文文件名，使用 kebab-case 格式，3-8 个单词，"
-            "只输出文件名，不要加扩展名或其他格式。"
-        )),
-        HumanMessage(content=title),
-    ])
+    resp = await llm.ainvoke(
+        [
+            SystemMessage(
+                content=(
+                    "将以下中文标题翻译为英文文件名，使用 kebab-case 格式，3-8 个单词，"
+                    "只输出文件名，不要加扩展名或其他格式。"
+                )
+            ),
+            HumanMessage(content=title),
+        ]
+    )
     log.info("LLM raw response for filename", raw=resp.content)
     name = resp.content.strip().strip("\"'").lower()
     name = re.sub(r"[^a-z0-9-]", "-", name)
@@ -99,19 +107,23 @@ async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
 
     llm = get_mini_llm()
     log.info("Merging summaries", existing_len=len(existing_md), new_len=len(new_md))
-    resp = await llm.ainvoke([
-        SystemMessage(content=(
-            "你是一个事件记录合并助手。你需要对比两份事件排查报告，将新报告中有价值的信息补充到已有报告中。\n\n"
-            "规则：\n"
-            "1. 以「已有报告」为基础，保持其整体结构和格式\n"
-            "2. 从「新报告」中提取真实的、有价值的新增信息，补充到对应章节中\n"
-            "3. 可补充的信息包括：不同的触发条件、额外的排查步骤、补充的根因细节、替代的修复方案\n"
-            "4. 不要编造任何信息，只补充新报告中实际记录的内容\n"
-            "5. 如果新报告没有任何值得补充的新信息，只输出 \"NO_CHANGE\"\n"
-            "6. 输出完整的合并后报告（Markdown 格式），不要输出解释说明"
-        )),
-        HumanMessage(content=f"## 已有报告\n\n{existing_md}\n\n## 新报告\n\n{new_md}"),
-    ])
+    resp = await llm.ainvoke(
+        [
+            SystemMessage(
+                content=(
+                    "你是一个事件记录合并助手。你需要对比两份事件排查报告，将新报告中有价值的信息补充到已有报告中。\n\n"
+                    "规则：\n"
+                    "1. 以「已有报告」为基础，保持其整体结构和格式\n"
+                    "2. 从「新报告」中提取真实的、有价值的新增信息，补充到对应章节中\n"
+                    "3. 可补充的信息包括：不同的触发条件、额外的排查步骤、补充的根因细节、替代的修复方案\n"
+                    "4. 不要编造任何信息，只补充新报告中实际记录的内容\n"
+                    '5. 如果新报告没有任何值得补充的新信息，只输出 "NO_CHANGE"\n'
+                    "6. 输出完整的合并后报告（Markdown 格式），不要输出解释说明"
+                )
+            ),
+            HumanMessage(content=f"## 已有报告\n\n{existing_md}\n\n## 新报告\n\n{new_md}"),
+        ]
+    )
     result = resp.content.strip()
     log.info("LLM responded for merge", resp_len=len(result))
     log.debug("LLM responded for merge", result=result)
@@ -123,10 +135,10 @@ async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
 
 
 def _sanitize_filename(title: str, max_length: int = 80) -> str:
-    name = re.sub(r'[<>:"/\\|?*\n\r\t]', '_', title)
-    name = re.sub(r'_+', '_', name).strip('_. ')
+    name = re.sub(r'[<>:"/\\|?*\n\r\t]', "_", title)
+    name = re.sub(r"_+", "_", name).strip("_. ")
     if len(name) > max_length:
-        name = name[:max_length].rstrip('_. ')
+        name = name[:max_length].rstrip("_. ")
     return name or "untitled"
 
 
@@ -248,8 +260,10 @@ class IncidentHistoryService:
 
                     vs = VersionService(self.session)
                     await vs.save_version(
-                        entity_type="incident_history", entity_id=str(best.id),
-                        content=merged, change_source="auto",
+                        entity_type="incident_history",
+                        entity_id=str(best.id),
+                        content=merged,
+                        change_source="auto",
                     )
                     log.info("Merge result: content updated")
                 else:
@@ -275,8 +289,10 @@ class IncidentHistoryService:
         # Save initial version
         vs = VersionService(self.session)
         await vs.save_version(
-            entity_type="incident_history", entity_id=str(record.id),
-            content=summary_md, change_source="init",
+            entity_type="incident_history",
+            entity_id=str(record.id),
+            content=summary_md,
+            change_source="init",
         )
         await self.session.commit()
         await self.session.refresh(record)
@@ -298,9 +314,7 @@ class IncidentHistoryService:
         if query:
             base = base.where(IncidentHistory.title.ilike(f"%{query}%"))
 
-        count_result = await self.session.execute(
-            select(func.count()).select_from(base.subquery())
-        )
+        count_result = await self.session.execute(select(func.count()).select_from(base.subquery()))
         total = count_result.scalar() or 0
 
         stmt = (

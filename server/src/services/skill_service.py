@@ -60,9 +60,19 @@ class SkillService:
         scripts_dir = skill_dir / "scripts"
         refs_dir = skill_dir / "references"
         assets_dir = skill_dir / "assets"
-        script_files = sorted(f.name for f in scripts_dir.iterdir() if f.is_file()) if scripts_dir.is_dir() else []
-        reference_files = sorted(f.name for f in refs_dir.iterdir() if f.is_file()) if refs_dir.is_dir() else []
-        asset_files = sorted(f.name for f in assets_dir.iterdir() if f.is_file()) if assets_dir.is_dir() else []
+        script_files = (
+            sorted(f.name for f in scripts_dir.iterdir() if f.is_file())
+            if scripts_dir.is_dir()
+            else []
+        )
+        reference_files = (
+            sorted(f.name for f in refs_dir.iterdir() if f.is_file()) if refs_dir.is_dir() else []
+        )
+        asset_files = (
+            sorted(f.name for f in assets_dir.iterdir() if f.is_file())
+            if assets_dir.is_dir()
+            else []
+        )
 
         return SkillMeta(
             slug=slug,
@@ -91,7 +101,9 @@ class SkillService:
         if len(slug) > 64:
             errors.append("Slug 长度不能超过 64 字符")
         if not _SLUG_RE.match(slug):
-            errors.append("Slug 只能包含小写字母、数字和连字符，不能以连字符开头/结尾，不能有连续连字符")
+            errors.append(
+                "Slug 只能包含小写字母、数字和连字符，不能以连字符开头/结尾，不能有连续连字符"
+            )
         return errors
 
     def _validate_skill(self, slug: str, fm: dict, body: str) -> list[str]:
@@ -259,14 +271,16 @@ class SkillService:
             if fm.get("draft", False):
                 continue
             meta = self._build_meta(skill_dir.name, fm, skill_dir)
-            result.append({
-                "slug": meta.slug,
-                "name": meta.name,
-                "description": meta.description,
-                "has_scripts": meta.has_scripts,
-                "has_references": meta.has_references,
-                "has_assets": meta.has_assets,
-            })
+            result.append(
+                {
+                    "slug": meta.slug,
+                    "name": meta.name,
+                    "description": meta.description,
+                    "has_scripts": meta.has_scripts,
+                    "has_references": meta.has_references,
+                    "has_assets": meta.has_assets,
+                }
+            )
         log.info("get_available_skills returning", count=len(result))
         return result
 
@@ -285,7 +299,12 @@ class SkillService:
 
         if rel_path:
             content = self.read_skill_file(slug, rel_path)
-            log.info("read_file returning file content", slug=slug, file=rel_path, content_len=len(content))
+            log.info(
+                "read_file returning file content",
+                slug=slug,
+                file=rel_path,
+                content_len=len(content),
+            )
             log.debug("read_file content", content=content)
             return content
 
@@ -295,14 +314,16 @@ class SkillService:
 
         has_files = any(files[k] for k in files)
         file_count = sum(len(files[k]) for k in files)
-        log.info("read_file returning SKILL.md", slug=slug, body_len=len(body), attached_files=file_count)
+        log.info(
+            "read_file returning SKILL.md", slug=slug, body_len=len(body), attached_files=file_count
+        )
         log.debug("read_file SKILL.md body", body=body)
 
         if not has_files:
             return body
 
         lines = [body.rstrip(), "", "---", "## 附属文件"]
-        lines.append("以下文件可通过 read_skill(\"{slug}/{path}\") 获取：")
+        lines.append('以下文件可通过 read_skill("{slug}/{path}") 获取：')
         for subdir in ("scripts", "references", "assets"):
             if files[subdir]:
                 lines.append(f"\n### {subdir}/")

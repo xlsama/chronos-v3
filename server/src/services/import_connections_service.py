@@ -104,7 +104,8 @@ class ImportConnectionsService:
 
         # Filter out agents_config and empty documents
         docs_with_content = [
-            doc for doc in documents
+            doc
+            for doc in documents
             if doc.doc_type != "agents_config" and doc.content and doc.content.strip()
         ]
 
@@ -150,7 +151,9 @@ class ImportConnectionsService:
         doc_sections = []
         for doc in docs_with_content:
             doc_sections.append(f"--- 文档: {doc.filename} ---\n{doc.content}")
-        user_prompt = "请从以下项目文档中提取所有服务和服务器连接信息：\n\n" + "\n\n".join(doc_sections)
+        user_prompt = "请从以下项目文档中提取所有服务和服务器连接信息：\n\n" + "\n\n".join(
+            doc_sections
+        )
 
         log.info(
             "[2/4] Prompt 构建完成",

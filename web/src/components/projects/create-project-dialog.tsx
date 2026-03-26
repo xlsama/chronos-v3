@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
-import { toast } from "sonner";
 import { createProject } from "@/api/projects";
 import { Button } from "@/components/ui/button";
 import {

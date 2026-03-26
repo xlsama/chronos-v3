@@ -32,7 +32,9 @@ class KBProjectInfo(BaseModel):
     source_categories: list[str] = Field(default_factory=list, description="命中的资料类型")
     service_keywords: list[str] = Field(default_factory=list, description="候选服务关键词")
     server_keywords: list[str] = Field(default_factory=list, description="候选服务器关键词")
-    entrypoint_hints: list[str] = Field(default_factory=list, description="接口、URL、端口等入口线索")
+    entrypoint_hints: list[str] = Field(
+        default_factory=list, description="接口、URL、端口等入口线索"
+    )
 
 
 class KBAgentOutput(BaseModel):
@@ -85,7 +87,9 @@ def _categorize_source(filename: str) -> str:
         return "接口文档"
     if any(marker in lower for marker in ("deploy", "docker", "compose", "k8s", "helm", "systemd")):
         return "部署说明"
-    if any(marker in lower for marker in ("incident", "history", "postmortem", "故障", "事故", "复盘")):
+    if any(
+        marker in lower for marker in ("incident", "history", "postmortem", "故障", "事故", "复盘")
+    ):
         return "事故记录"
     return "知识文档"
 
@@ -143,7 +147,9 @@ def _extract_server_keywords(text: str) -> list[str]:
 
 def _extract_entrypoint_hints(text: str) -> list[str]:
     urls = re.findall(r"https?://[^\s)>\]]+", text)
-    method_paths = re.findall(r"\b(?:GET|POST|PUT|DELETE|PATCH)\s+(/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=-]+)", text)
+    method_paths = re.findall(
+        r"\b(?:GET|POST|PUT|DELETE|PATCH)\s+(/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=-]+)", text
+    )
     common_paths = re.findall(
         r"(/(?:health|healthz|ready|readyz|live|livez|status|metrics|api(?:/[A-Za-z0-9._-]+){0,4}))",
         text,
@@ -202,10 +208,10 @@ def _parse_search_results_by_project(search_result: str) -> dict[str, dict]:
     """
     result: dict[str, dict] = {}
     # Split by project sections: ## 项目: xxx (ID: uuid)
-    parts = re.split(r'\n*---\n*', search_result)
+    parts = re.split(r"\n*---\n*", search_result)
     for part in parts:
         match = re.match(
-            r'## 项目:\s*(.+?)\s*\(ID:\s*([0-9a-f-]+)\)',
+            r"## 项目:\s*(.+?)\s*\(ID:\s*([0-9a-f-]+)\)",
             part.strip(),
         )
         if not match:
@@ -214,21 +220,21 @@ def _parse_search_results_by_project(search_result: str) -> dict[str, dict]:
         project_id = match.group(2)
 
         # Extract description if present
-        desc_match = re.search(r'^描述:\s*(.+)$', part, re.MULTILINE)
+        desc_match = re.search(r"^描述:\s*(.+)$", part, re.MULTILINE)
         project_description = desc_match.group(1).strip() if desc_match else ""
 
         # The rest after header/description is the business context (chunk content)
         # Remove the header line and description line
-        lines = part.strip().split('\n')
+        lines = part.strip().split("\n")
         context_lines = []
         skip_header = True
         for line in lines:
             if skip_header:
-                if line.startswith('## 项目:') or line.startswith('描述:'):
+                if line.startswith("## 项目:") or line.startswith("描述:"):
                     continue
                 skip_header = False
             context_lines.append(line)
-        business_context = '\n'.join(context_lines).strip()
+        business_context = "\n".join(context_lines).strip()
 
         result[project_id] = {
             "project_name": project_name,
@@ -244,10 +250,10 @@ def _parse_agents_md_result(agents_md_text: str) -> dict[str, dict]:
     Returns dict: project_id -> {"project_name": ..., "agents_md_content": ..., "agents_md_empty": bool}
     """
     result: dict[str, dict] = {}
-    parts = re.split(r'\n*---\n*', agents_md_text)
+    parts = re.split(r"\n*---\n*", agents_md_text)
     for part in parts:
         match = re.match(
-            r'## 项目:\s*(.+?)\s*\(ID:\s*([0-9a-f-]+)\)',
+            r"## 项目:\s*(.+?)\s*\(ID:\s*([0-9a-f-]+)\)",
             part.strip(),
         )
         if not match:
@@ -256,7 +262,7 @@ def _parse_agents_md_result(agents_md_text: str) -> dict[str, dict]:
         project_id = match.group(2)
 
         # Extract AGENTS.md content (after ### AGENTS.md header)
-        md_match = re.search(r'### AGENTS\.md\n(.*)', part, re.DOTALL)
+        md_match = re.search(r"### AGENTS\.md\n(.*)", part, re.DOTALL)
         agents_md_content = md_match.group(1).strip() if md_match else ""
         agents_md_empty = not agents_md_content or "[空" in agents_md_content
 
@@ -327,10 +333,13 @@ async def run_kb_agent(
         for tc in full_response.tool_calls:
             tool_name = tc["name"]
             iter_log.info("Tool call", tool=tool_name, args=tc["args"])
-            await event_callback("tool_use", {
-                "name": tool_name,
-                "args": tc["args"],
-            })
+            await event_callback(
+                "tool_use",
+                {
+                    "name": tool_name,
+                    "args": tc["args"],
+                },
+            )
 
             matching_tool = next(t for t in tools if t.name == tool_name)
             t_tool = time.monotonic()
@@ -423,19 +432,21 @@ async def run_kb_agent(
         server_keywords = _extract_server_keywords(combined_text)
         entrypoint_hints = _extract_entrypoint_hints(combined_text)
 
-        project_infos.append(KBProjectInfo(
-            project_id=pid,
-            project_name=project_name,
-            project_description=project_description,
-            agents_md_content=agents_md_content,
-            agents_md_empty=agents_md_empty,
-            business_context=business_context,
-            match_confidence=match_confidence,
-            source_categories=source_categories,
-            service_keywords=service_keywords,
-            server_keywords=server_keywords,
-            entrypoint_hints=entrypoint_hints,
-        ))
+        project_infos.append(
+            KBProjectInfo(
+                project_id=pid,
+                project_name=project_name,
+                project_description=project_description,
+                agents_md_content=agents_md_content,
+                agents_md_empty=agents_md_empty,
+                business_context=business_context,
+                match_confidence=match_confidence,
+                source_categories=source_categories,
+                service_keywords=service_keywords,
+                server_keywords=server_keywords,
+                entrypoint_hints=entrypoint_hints,
+            )
+        )
 
     output = KBAgentOutput(projects=project_infos)
 

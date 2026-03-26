@@ -21,7 +21,7 @@ def _parse_es_command(command: str) -> tuple[str, str, dict | None]:
     # Match: METHOD /path [optional body]
     m = re.match(r"^(GET|POST|PUT|DELETE|HEAD)\s+(\S+)(.*)", cmd, re.DOTALL | re.IGNORECASE)
     if not m:
-        raise ValueError(f"无法解析命令，格式: METHOD /path [json_body]\n示例: GET /_cat/indices?v")
+        raise ValueError("无法解析命令，格式: METHOD /path [json_body]\n示例: GET /_cat/indices?v")
 
     method = m.group(1).upper()
     path = m.group(2)

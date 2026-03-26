@@ -85,16 +85,18 @@ export function AttachmentPreviewDialog({
 
   useEffect(() => {
     if (!open || !attachment || !needsFetch) {
-      setTextContent("");
       return;
     }
+    let cancelled = false;
+    // oxlint-disable-next-line react/set-state-in-effect -- loading indicator for async fetch
     setLoading(true);
     fetch(fileUrl)
       .then((res) => res.text())
-      .then((text) => setTextContent(text))
-      .catch(() => setTextContent("加载失败"))
-      .finally(() => setLoading(false));
-  }, [open, attachment?.id, needsFetch, fileUrl]);
+      .then((text) => { if (!cancelled) setTextContent(text); })
+      .catch(() => { if (!cancelled) setTextContent("加载失败"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; setTextContent(""); };
+  }, [open, attachment, needsFetch, fileUrl]);
 
   if (!attachment || !open) return null;
 

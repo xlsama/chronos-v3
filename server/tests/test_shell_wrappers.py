@@ -9,7 +9,9 @@ def test_ssh_wrap_command_enables_pipefail_and_path():
 
     assert "bash -lc" in wrapped
     assert "set -o pipefail;" in wrapped
-    assert "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH;" in wrapped
+    assert (
+        "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH;" in wrapped
+    )
 
 
 def test_local_wrap_command_enables_pipefail():
@@ -25,7 +27,9 @@ def test_sudo_read_classified_by_inner_content():
 
 
 def test_prepare_command_uses_sudo_password():
-    connector = SSHConnector(host="example.com", username="admin", password="ssh_pw", sudo_password="secret")
+    connector = SSHConnector(
+        host="example.com", username="admin", password="ssh_pw", sudo_password="secret"
+    )
 
     prepared, stdin_input = connector._prepare_command("sudo docker ps")
 
@@ -44,18 +48,21 @@ def test_prepare_command_uses_non_interactive_sudo_without_password():
 
 class TestStripStderrDiscard:
     def test_strips_basic_pattern(self):
-        assert _strip_stderr_discard('docker ps -a 2>/dev/null || echo "no"') == 'docker ps -a || echo "no"'
+        assert (
+            _strip_stderr_discard('docker ps -a 2>/dev/null || echo "no"')
+            == 'docker ps -a || echo "no"'
+        )
 
     def test_strips_with_space(self):
-        assert _strip_stderr_discard('docker ps 2> /dev/null') == 'docker ps'
+        assert _strip_stderr_discard("docker ps 2> /dev/null") == "docker ps"
 
     def test_strips_multiple_occurrences(self):
-        result = _strip_stderr_discard('cmd1 2>/dev/null; cmd2 2> /dev/null')
-        assert result == 'cmd1; cmd2'
+        result = _strip_stderr_discard("cmd1 2>/dev/null; cmd2 2> /dev/null")
+        assert result == "cmd1; cmd2"
 
     def test_preserves_command_without_pattern(self):
-        cmd = 'docker ps -a 2>&1'
+        cmd = "docker ps -a 2>&1"
         assert _strip_stderr_discard(cmd) == cmd
 
     def test_preserves_empty_command(self):
-        assert _strip_stderr_discard('') == ''
+        assert _strip_stderr_discard("") == ""

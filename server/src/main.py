@@ -14,6 +14,11 @@ from src.api.incidents import router as incidents_router
 from src.api.servers import router as servers_router
 from src.api.projects import router as projects_router
 from src.api.asr import router as asr_router
+from src.api.incident_history import router as incident_history_router
+from src.api.notification_settings import router as notification_settings_router
+from src.api.skills import router as skills_router
+from src.api.services import router as services_router
+from src.api.versions import router as versions_router
 from src.env import get_settings
 from src.lib.errors import AppError
 from src.lib.logger import get_logger
@@ -63,7 +68,9 @@ async def lifespan(app: FastAPI):
 
     # Initialize EventPublisher + AgentRunner
     publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
-    app.state.agent_runner = AgentRunner(publisher=publisher, checkpointer=checkpointer, redis=get_redis())
+    app.state.agent_runner = AgentRunner(
+        publisher=publisher, checkpointer=checkpointer, redis=get_redis()
+    )
 
     log.info("Agent runner initialized")
 
@@ -97,12 +104,6 @@ async def app_error_handler(request: Request, exc: AppError):
 async def health():
     return {"status": "ok"}
 
-
-from src.api.incident_history import router as incident_history_router
-from src.api.notification_settings import router as notification_settings_router
-from src.api.skills import router as skills_router
-from src.api.services import router as services_router
-from src.api.versions import router as versions_router
 
 app.include_router(servers_router)
 app.include_router(incidents_router)

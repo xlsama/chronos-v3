@@ -138,7 +138,13 @@ class SSHConnector:
 
         async def _run() -> SSHResult:
             if self.bastion_host:
-                log.info("Connecting via bastion", bastion_host=self.bastion_host, bastion_port=self.bastion_port, target_host=self.host, target_port=self.port)
+                log.info(
+                    "Connecting via bastion",
+                    bastion_host=self.bastion_host,
+                    bastion_port=self.bastion_port,
+                    target_host=self.host,
+                    target_port=self.port,
+                )
                 bastion_opts = self._build_connect_opts(
                     host=self.bastion_host,
                     port=self.bastion_port,
@@ -158,9 +164,7 @@ class SSHConnector:
                 target_port = target_opts.pop("port")
 
                 async with asyncssh.connect(**bastion_opts) as tunnel:
-                    async with tunnel.connect_ssh(
-                        target_host, target_port, **target_opts
-                    ) as conn:
+                    async with tunnel.connect_ssh(target_host, target_port, **target_opts) as conn:
                         result = await conn.run(wrapped_command, input=stdin_input)
                         return SSHResult(
                             exit_code=result.exit_status or 0,

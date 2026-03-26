@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -138,15 +138,8 @@ export function SubAgentCard({
   fixedLayout,
   className,
 }: SubAgentCardProps) {
-  const [localExpanded, setLocalExpanded] = useState(!!forceExpanded);
-
-  useEffect(() => {
-    if (forceExpanded) {
-      setLocalExpanded(true);
-    }
-  }, [forceExpanded]);
-
-  const expanded = localExpanded;
+  const [userExpanded, setUserExpanded] = useState(!!forceExpanded);
+  const expanded = forceExpanded || userExpanded;
 
   const { scrollRef: scrollContainerRef } = useAutoScroll({
     enabled: forceExpanded,
@@ -219,7 +212,7 @@ export function SubAgentCard({
     >
       <button
         className="flex w-full items-center gap-2 p-3 text-left text-sm font-medium text-blue-800"
-        onClick={() => setLocalExpanded(!localExpanded)}
+        onClick={() => setUserExpanded(!expanded)}
       >
         {expanded ? (
           <ChevronDown className="h-4 w-4" />

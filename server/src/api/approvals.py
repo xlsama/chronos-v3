@@ -64,6 +64,7 @@ async def decide_approval(
         # Clear stale cancel flags before resuming to prevent old interrupt
         # requests from immediately cancelling the new run
         from src.lib.redis import get_redis
+
         redis = get_redis()
         await redis.delete(f"incident:{approval.incident_id}:cancel")
 

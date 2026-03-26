@@ -45,7 +45,9 @@ async def upload_files(
             try:
                 parsed_content = await asyncio.to_thread(parse_file, content, fname)
                 if parsed_content and len(parsed_content) > MAX_PARSED_CONTENT_LEN:
-                    parsed_content = parsed_content[:MAX_PARSED_CONTENT_LEN] + "\n\n[内容过长，已截断]"
+                    parsed_content = (
+                        parsed_content[:MAX_PARSED_CONTENT_LEN] + "\n\n[内容过长，已截断]"
+                    )
             except Exception as e:
                 log.warning("Failed to parse attachment", filename=fname, error=str(e))
 

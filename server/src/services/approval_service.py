@@ -40,11 +40,7 @@ class ApprovalService:
         decision: str,
         decided_by: str,
     ) -> ApprovalRequest:
-        stmt = (
-            select(ApprovalRequest)
-            .where(ApprovalRequest.id == approval_id)
-            .with_for_update()
-        )
+        stmt = select(ApprovalRequest).where(ApprovalRequest.id == approval_id).with_for_update()
         result = await self.session.execute(stmt)
         approval = result.scalar_one_or_none()
         if approval is None:

@@ -27,10 +27,12 @@ def _build_multimodal_content(text: str, images: list[dict]) -> list[dict]:
     for img in images[:5]:
         b64 = base64.b64encode(img["bytes"]).decode()
         mime = img.get("content_type") or "image/png"
-        blocks.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:{mime};base64,{b64}"},
-        })
+        blocks.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            }
+        )
     return blocks
 
 
@@ -52,21 +54,28 @@ async def ask_human_node(state: OpsState) -> dict:
         for tc in last_msg.tool_calls:
             if tc["name"] == "ask_human":
                 question = tc["args"].get("question", "")
-                log.info("Interrupt (explicit ask_human tool call)",
-                         question=question[:200],
-                         ask_human_count=current_count + 1,
-                         tool_call_retry_count=state.get("tool_call_retry_count", 0))
+                log.info(
+                    "Interrupt (explicit ask_human tool call)",
+                    question=question[:200],
+                    ask_human_count=current_count + 1,
+                    tool_call_retry_count=state.get("tool_call_retry_count", 0),
+                )
                 user_response = interrupt({"question": question})
                 log.info("Resume", response_len=len(str(user_response)))
-                log.info("Resetting tool_call_retry_count", from_count=state.get("tool_call_retry_count", 0))
+                log.info(
+                    "Resetting tool_call_retry_count",
+                    from_count=state.get("tool_call_retry_count", 0),
+                )
 
                 text, images = _parse_resume(user_response)
                 messages = [ToolMessage(content=text, tool_call_id=tc["id"])]
                 # Append a multimodal HumanMessage if images are present
                 if images:
-                    messages.append(HumanMessage(
-                        content=_build_multimodal_content("用户补充了以下截图：", images),
-                    ))
+                    messages.append(
+                        HumanMessage(
+                            content=_build_multimodal_content("用户补充了以下截图：", images),
+                        )
+                    )
 
                 return {
                     "messages": messages,
@@ -75,12 +84,18 @@ async def ask_human_node(state: OpsState) -> dict:
                 }
 
     # Case 2: plain text response (no tool calls) — fallback after retry exhausted
-    question = last_msg.content if hasattr(last_msg, "content") and last_msg.content else "请补充更多信息以便继续排查。"
+    question = (
+        last_msg.content
+        if hasattr(last_msg, "content") and last_msg.content
+        else "请补充更多信息以便继续排查。"
+    )
     retry_count = state.get("tool_call_retry_count", 0)
-    log.info("Interrupt (fallback after retry exhaustion)",
-             question=question[:200],
-             ask_human_count=current_count + 1,
-             tool_call_retry_count=retry_count)
+    log.info(
+        "Interrupt (fallback after retry exhaustion)",
+        question=question[:200],
+        ask_human_count=current_count + 1,
+        tool_call_retry_count=retry_count,
+    )
     user_response = interrupt({"question": question})
     log.info("Resume", response_len=len(str(user_response)))
     log.info("Resetting tool_call_retry_count", from_count=state.get("tool_call_retry_count", 0))

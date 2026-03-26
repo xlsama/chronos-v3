@@ -229,16 +229,60 @@ def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> A
     if not unknown_tools:
         return response
 
-    get_logger(component="main").warning("LLM returned unknown tool(s), stripping invalid calls",
-                                         tools=unknown_tools,
-                                         stripped_count=len(unknown_tools),
-                                         kept_count=len(tool_calls) - len(unknown_tools))
+    get_logger(component="main").warning(
+        "LLM returned unknown tool(s), stripping invalid calls",
+        tools=unknown_tools,
+        stripped_count=len(unknown_tools),
+        kept_count=len(tool_calls) - len(unknown_tools),
+    )
     return AIMessage(content=response.content or "")
 
 
 def _build_runtime_hints(state: OpsState) -> str:
     # Procedural guidance belongs in reusable skills instead of runtime hints.
     return ""
+
+
+def _build_plan_context(state: OpsState) -> str:
+    """格式化调查计划为 system prompt 段落。"""
+    plan = state.get("investigation_plan")
+    if not plan:
+        return ""
+
+    version = state.get("plan_version", 1)
+    lines = [f"## 当前调查计划 (v{version})\n"]
+    lines.append(f"- 症状分类: {plan.get('symptom_category', '未知')}")
+    lines.append(f"- 影响范围: {plan.get('target_scope', '未知')}")
+    lines.append(f"- 当前阶段: {plan.get('current_phase', '未知')}")
+
+    hypotheses = plan.get("hypotheses", [])
+    if hypotheses:
+        lines.append("\n### 假设列表")
+        for h in hypotheses:
+            status_icon = {
+                "pending": "⏳",
+                "investigating": "🔍",
+                "confirmed": "✅",
+                "eliminated": "❌",
+            }.get(h.get("status", "pending"), "⏳")
+            lines.append(
+                f"- {status_icon} [{h.get('id', '?')}] {h.get('description', '')}"
+                f" (优先级: {h.get('priority', '?')}, 观测面: {', '.join(h.get('observation_surfaces', []))})"
+            )
+            if h.get("evidence_for"):
+                lines.append(f"  支持证据: {'; '.join(h['evidence_for'])}")
+            if h.get("evidence_against"):
+                lines.append(f"  反对证据: {'; '.join(h['evidence_against'])}")
+
+    null_hyp = plan.get("null_hypothesis")
+    if null_hyp:
+        lines.append(f"\n### 空假设\n{null_hyp}")
+
+    next_action = plan.get("next_action")
+    if next_action:
+        lines.append(f"\n### 下一步\n{next_action}")
+
+    return "\n".join(lines)
 
 
 async def main_agent_node(state: OpsState) -> dict:
@@ -276,13 +320,14 @@ async def main_agent_node(state: OpsState) -> dict:
         history_summary,
         state["description"],
     )
+    plan_context = _build_plan_context(state)
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         description=state["description"],
         severity=state["severity"],
         incident_history_context=history_context,
         kb_context=kb_context,
         skills_context=skills_context,
-        runtime_hints_context="",
+        runtime_hints_context=plan_context,
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
@@ -315,10 +360,19 @@ async def main_agent_node(state: OpsState) -> dict:
 
     safe_response = _sanitize_llm_response(response, set(tool_names))
     if safe_response is not response:
-        log.info("Sanitized LLM response: stripped invalid tool_calls",
-                 original_tool_calls=len(tool_calls),
-                 content_len=len(safe_response.content or ""))
-    return {"messages": [safe_response]}
+        log.info(
+            "Sanitized LLM response: stripped invalid tool_calls",
+            original_tool_calls=len(tool_calls),
+            content_len=len(safe_response.content or ""),
+        )
+
+    # 递增 plan 更新计数器
+    plan_counter = state.get("tool_call_count_since_plan_update", 0) + 1
+
+    return {
+        "messages": [safe_response],
+        "tool_call_count_since_plan_update": plan_counter,
+    }
 
 
 async def _get_service_type(service_id: str) -> str:
@@ -356,10 +410,18 @@ async def route_decision(state: OpsState) -> str:
         max_retries = get_settings().tool_call_max_retries
         retry_count = state.get("tool_call_retry_count", 0)
         if retry_count >= max_retries:
-            log.info("route_decision: no tool_calls after retries -> ask_human (fallback)", retries=retry_count, content_preview=content_preview)
+            log.info(
+                "route_decision: no tool_calls after retries -> ask_human (fallback)",
+                retries=retry_count,
+                content_preview=content_preview,
+            )
             return "ask_human"
 
-        log.info("route_decision: no tool_calls -> retry_tool_call", attempt=f"{retry_count + 1}/{max_retries}", content_preview=content_preview)
+        log.info(
+            "route_decision: no tool_calls -> retry_tool_call",
+            attempt=f"{retry_count + 1}/{max_retries}",
+            content_preview=content_preview,
+        )
         return "retry_tool_call"
 
     for tool_call in last_message.tool_calls:
@@ -388,7 +450,9 @@ async def route_decision(state: OpsState) -> str:
             service_type = await _get_service_type(tool_call["args"].get("service_id", ""))
             cmd_type = ServiceSafety.classify(service_type, tool_call["args"].get("command", ""))
             if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
-                log.info("route_decision: need_approval", tool="service_exec", cmd_type=cmd_type.name)
+                log.info(
+                    "route_decision: need_approval", tool="service_exec", cmd_type=cmd_type.name
+                )
                 return "need_approval"
 
     log.info("route_decision: -> continue")

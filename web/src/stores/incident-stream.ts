@@ -5,7 +5,35 @@ export type PhaseStatus = "pending" | "active" | "completed";
 
 export interface PhaseState {
   contextGathering: PhaseStatus;
+  planning: PhaseStatus;
   investigation: PhaseStatus;
+  evaluation: PhaseStatus;
+}
+
+export interface InvestigationPlan {
+  symptom_category: string;
+  target_scope: string;
+  hypotheses: {
+    id: string;
+    description: string;
+    status: "pending" | "investigating" | "confirmed" | "eliminated";
+    priority: number;
+    observation_surfaces: string[];
+    evidence_for: string[];
+    evidence_against: string[];
+  }[];
+  null_hypothesis: string | null;
+  current_phase: string;
+  next_action: string;
+}
+
+export interface EvaluationResult {
+  outcome_type: string;
+  verification_passed: boolean;
+  confidence: string;
+  evidence_summary: string;
+  concerns: string[];
+  recommendation: string;
 }
 
 interface SubAgentState {
@@ -18,6 +46,8 @@ interface IncidentStreamState {
   events: SSEEvent[];
   historyAgentState: SubAgentState;
   kbAgentState: SubAgentState;
+  plannerPlan: InvestigationPlan | null;
+  evaluationResult: EvaluationResult | null;
   phaseState: PhaseState;
   isConnected: boolean;
   thinkingContent: string;
@@ -31,6 +61,8 @@ interface IncidentStreamState {
   pendingSupplement: { approvalId: string } | null;
   scrollToBottomTrigger: number;
   addEvent: (event: SSEEvent) => void;
+  setPlannerPlan: (plan: InvestigationPlan) => void;
+  setEvaluationResult: (result: EvaluationResult | null) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
   appendAnswer: (content: string) => void;
@@ -62,13 +94,17 @@ const emptySubAgent = (): SubAgentState => ({
 
 const initialPhaseState = (): PhaseState => ({
   contextGathering: "pending",
+  planning: "pending",
   investigation: "pending",
+  evaluation: "pending",
 });
 
 export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   events: [],
   historyAgentState: emptySubAgent(),
   kbAgentState: emptySubAgent(),
+  plannerPlan: null,
+  evaluationResult: null,
   phaseState: initialPhaseState(),
   isConnected: false,
   isWaitingForAgent: false,
@@ -174,17 +210,30 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       };
     }),
 
+  setPlannerPlan: (plan) => set({ plannerPlan: plan }),
+
+  setEvaluationResult: (result) => set({ evaluationResult: result }),
+
   updatePhase: (phase) =>
     set((state) => {
       const ps = { ...state.phaseState };
       if (phase === "gather_context") {
         if (ps.contextGathering === "pending") ps.contextGathering = "active";
+      } else if (phase === "planning") {
+        if (ps.contextGathering === "active") ps.contextGathering = "completed";
+        if (ps.planning === "pending") ps.planning = "active";
       } else if (phase === "investigation") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
+        if (ps.planning === "active") ps.planning = "completed";
         if (ps.investigation === "pending") ps.investigation = "active";
+      } else if (phase === "evaluation") {
+        if (ps.investigation === "active") ps.investigation = "completed";
+        if (ps.evaluation === "pending") ps.evaluation = "active";
       } else if (phase === "summary_complete") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
+        if (ps.planning === "active") ps.planning = "completed";
         if (ps.investigation === "active") ps.investigation = "completed";
+        if (ps.evaluation === "active") ps.evaluation = "completed";
       }
       return { phaseState: ps };
     }),
@@ -221,6 +270,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     let kbStatus: "idle" | "started" | "completed" | "failed" = "idle";
     let resolutionRequired = false;
     let resolutionResolved = false;
+    let loadedPlan: InvestigationPlan | null = null;
+    let loadedEvalResult: EvaluationResult | null = null;
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -243,6 +294,23 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
       // thinking_done / answer_done / ask_human_done → DB boundary markers, skip in UI
       if (event.event_type === "thinking_done" || event.event_type === "answer_done" || event.event_type === "ask_human_done") {
+        continue;
+      }
+
+      // plan_generated / plan_updated → track plan state
+      if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
+        loadedPlan = event.data.plan as unknown as InvestigationPlan;
+        continue;
+      }
+
+      // evaluation_completed → track evaluation result
+      if (event.event_type === "evaluation_completed") {
+        loadedEvalResult = event.data.result as unknown as EvaluationResult;
+        continue;
+      }
+
+      // evaluation_started → skip (no UI state needed)
+      if (event.event_type === "evaluation_started") {
         continue;
       }
 
@@ -297,16 +365,22 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     const hasDone = mainEvents.some((e) => e.event_type === "done");
     const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
     const hasMain = mainEvents.some((e) => e.event_type !== "done");
+    const hasPlan = loadedPlan !== null;
+    const hasEval = loadedEvalResult !== null;
 
     const derivedPhase: PhaseState = {
-      contextGathering: hasContext ? (hasMain || hasDone ? "completed" : "active") : "pending",
-      investigation: hasMain ? (hasDone ? "completed" : "active") : "pending",
+      contextGathering: hasContext ? (hasPlan || hasMain || hasDone ? "completed" : "active") : "pending",
+      planning: hasPlan ? (hasMain || hasDone ? "completed" : "active") : "pending",
+      investigation: hasMain ? (hasEval || hasDone ? "completed" : "active") : "pending",
+      evaluation: hasEval ? "completed" : "pending",
     };
 
     set({
       events: mainEvents,
       historyAgentState: { events: historyEvents, thinkingContent: "", status: historyStatus },
       kbAgentState: { events: kbEvents, thinkingContent: "", status: kbStatus },
+      plannerPlan: loadedPlan,
+      evaluationResult: loadedEvalResult,
       phaseState: derivedPhase,
       decidedApprovals: decided,
       askHumanQuestion: askQuestion,
@@ -321,6 +395,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       events: [],
       historyAgentState: emptySubAgent(),
       kbAgentState: emptySubAgent(),
+      plannerPlan: null,
+      evaluationResult: null,
       phaseState: initialPhaseState(),
       isConnected: false,
       isWaitingForAgent: false,

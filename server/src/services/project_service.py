@@ -31,21 +31,15 @@ class ProjectService:
         return project
 
     async def get(self, project_id: uuid.UUID) -> Project | None:
-        result = await self.session.execute(
-            select(Project).where(Project.id == project_id)
-        )
+        result = await self.session.execute(select(Project).where(Project.id == project_id))
         return result.scalar_one_or_none()
 
     async def get_by_slug(self, slug: str) -> Project | None:
-        result = await self.session.execute(
-            select(Project).where(Project.slug == slug)
-        )
+        result = await self.session.execute(select(Project).where(Project.slug == slug))
         return result.scalar_one_or_none()
 
     async def list_all(self) -> list[Project]:
-        result = await self.session.execute(
-            select(Project).order_by(Project.created_at.desc())
-        )
+        result = await self.session.execute(select(Project).order_by(Project.created_at.desc()))
         return list(result.scalars().all())
 
     async def update(self, project: Project, **kwargs) -> Project:

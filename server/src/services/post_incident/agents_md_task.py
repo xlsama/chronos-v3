@@ -139,13 +139,14 @@ flowchart TD
 async def _fetch_entity_anchors(session: AsyncSession) -> str:
     """查询所有已配置的 Server 和 Service，格式化为实体参照表。"""
     log = get_logger(component="post_incident")
-    servers = (await session.execute(
-        select(Server.name, Server.host).order_by(Server.name)
-    )).all()
-    services = (await session.execute(
-        select(Service.name, Service.service_type, Service.host, Service.port)
-        .order_by(Service.name)
-    )).all()
+    servers = (await session.execute(select(Server.name, Server.host).order_by(Server.name))).all()
+    services = (
+        await session.execute(
+            select(Service.name, Service.service_type, Service.host, Service.port).order_by(
+                Service.name
+            )
+        )
+    ).all()
 
     log.info("Fetched entity anchors", servers=len(servers), services=len(services))
 
@@ -258,10 +259,12 @@ async def _extract_knowledge(
     llm = get_mini_llm()
     log.info("Calling LLM for knowledge extraction")
     try:
-        resp = await llm.ainvoke([
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=input_text),
-        ])
+        resp = await llm.ainvoke(
+            [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=input_text),
+            ]
+        )
         log.info(
             "LLM responded for knowledge extraction",
             resp_content_type=type(resp.content).__name__,
@@ -316,9 +319,7 @@ async def _find_candidate_projects(knowledge_text: str) -> list[tuple[uuid.UUID,
             best_by_project[pid] = dist
 
     # Filter: only keep projects with distance < 0.3
-    candidates = [
-        (pid, dist) for pid, dist in best_by_project.items() if dist < 0.3
-    ]
+    candidates = [(pid, dist) for pid, dist in best_by_project.items() if dist < 0.3]
     # Sort by distance ascending
     candidates.sort(key=lambda x: x[1])
     log.info(
@@ -344,10 +345,12 @@ async def _update_project_agents_md(
 
     # Find the AGENTS.md document
     result = await session.execute(
-        select(ProjectDocument).where(
+        select(ProjectDocument)
+        .where(
             ProjectDocument.project_id == project_id,
             ProjectDocument.doc_type == "agents_config",
-        ).limit(1)
+        )
+        .limit(1)
     )
     doc = result.scalar_one_or_none()
     if not doc:
@@ -355,7 +358,9 @@ async def _update_project_agents_md(
         return "no_doc"
 
     current_content = doc.content or ""
-    log.info("Current AGENTS.md content loaded", project=pid_short, content_len=len(current_content))
+    log.info(
+        "Current AGENTS.md content loaded", project=pid_short, content_len=len(current_content)
+    )
 
     # Ask LLM whether to update
     llm = get_mini_llm()
@@ -365,9 +370,11 @@ async def _update_project_agents_md(
     )
     log.info("Calling LLM for AGENTS.md update decision", prompt_len=len(prompt))
     try:
-        resp = await llm.ainvoke([
-            HumanMessage(content=prompt),
-        ])
+        resp = await llm.ainvoke(
+            [
+                HumanMessage(content=prompt),
+            ]
+        )
         resp_len = len(resp.content) if resp.content else 0
         resp_preview = repr(resp.content[:200]) if resp.content else "None"
         log.info(
@@ -385,7 +392,7 @@ async def _update_project_agents_md(
         return "skipped"
 
     # Remove outermost markdown code block wrapper if present
-    m = re.match(r'^```(?:markdown|md)?\s*\n(.*?)(?:\n```\s*)$', result_text, re.DOTALL)
+    m = re.match(r"^```(?:markdown|md)?\s*\n(.*?)(?:\n```\s*)$", result_text, re.DOTALL)
     if m:
         result_text = m.group(1)
 
@@ -395,6 +402,7 @@ async def _update_project_agents_md(
 
     # Sync to disk
     from src.lib.paths import knowledge_dir
+
     project = await session.get(Project, project_id)
     if project:
         file_path = knowledge_dir(project.slug) / "AGENTS.md"
@@ -402,10 +410,13 @@ async def _update_project_agents_md(
         file_path.write_text(result_text, encoding="utf-8")
 
     from src.services.version_service import VersionService
+
     vs = VersionService(session)
     await vs.save_version(
-        entity_type="agents_md", entity_id=str(doc.id),
-        content=result_text, change_source="auto",
+        entity_type="agents_md",
+        entity_id=str(doc.id),
+        content=result_text,
+        change_source="auto",
     )
     await session.commit()
     log.info("Project AGENTS.md updated and committed", project=pid_short)

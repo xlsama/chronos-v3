@@ -75,7 +75,9 @@ async def create_skill(body: SkillCreate, session: AsyncSession = Depends(get_se
     # 保存初始版本
     _, content = service.get_skill(body.slug)
     vs = VersionService(session)
-    await vs.save_version(entity_type="skill", entity_id=body.slug, content=content, change_source="init")
+    await vs.save_version(
+        entity_type="skill", entity_id=body.slug, content=content, change_source="init"
+    )
     await session.commit()
 
     return _to_response(meta)
@@ -91,7 +93,9 @@ async def update_skill(slug: str, body: SkillUpdate, session: AsyncSession = Dep
 
     # 保存新内容为版本（去重会自动处理内容未变的情况）
     vs = VersionService(session)
-    await vs.save_version(entity_type="skill", entity_id=slug, content=body.content, change_source="manual")
+    await vs.save_version(
+        entity_type="skill", entity_id=slug, content=body.content, change_source="manual"
+    )
     await session.commit()
 
     return _to_response(meta)
@@ -112,6 +116,7 @@ async def delete_skill(slug: str, session: AsyncSession = Depends(get_session)):
 
 
 # ── File Management ──────────────────────────────────────────
+
 
 @router.get("/{slug}/files/{path:path}")
 async def get_skill_file(slug: str, path: str):

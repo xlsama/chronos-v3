@@ -16,7 +16,9 @@ def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-async def _save_seed_version(session: AsyncSession, slug: str, content: str, change_source: str = "seed") -> None:
+async def _save_seed_version(
+    session: AsyncSession, slug: str, content: str, change_source: str = "seed"
+) -> None:
     from src.services.version_service import VersionService
 
     vs = VersionService(session)
@@ -28,7 +30,9 @@ async def _save_seed_version(session: AsyncSession, slug: str, content: str, cha
     )
 
 
-async def _ensure_seed_version(session_factory: async_sessionmaker[AsyncSession], slug: str, content: str) -> None:
+async def _ensure_seed_version(
+    session_factory: async_sessionmaker[AsyncSession], slug: str, content: str
+) -> None:
     """确保 seed 技能至少有一条版本记录，没有则补建"""
     from src.services.version_service import VersionService
 
@@ -103,7 +107,9 @@ async def seed_skills(session_factory: async_sessionmaker[AsyncSession]) -> None
                     log.info("Updated seed skill", slug=slug)
                 else:
                     # 用户已修改，不覆盖
-                    log.warning("Seed skill updated but user has modifications, skipping", slug=slug)
+                    log.warning(
+                        "Seed skill updated but user has modifications, skipping", slug=slug
+                    )
 
         else:
             # 无 marker：用户自建的同名 skill，不动

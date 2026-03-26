@@ -5,8 +5,6 @@ import time
 
 import httpx
 
-from src.lib.logger import get_logger
-
 
 def _compute_feishu_sign(timestamp: str, sign_key: str) -> str:
     string_to_sign = f"{timestamp}\n{sign_key}"

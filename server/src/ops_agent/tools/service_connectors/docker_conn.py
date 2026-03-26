@@ -64,7 +64,7 @@ class DockerConnector(ServiceConnector):
         """Parse docker CLI command into (subcommand, args)."""
         cmd = command.strip()
         if cmd.startswith("docker "):
-            cmd = cmd[len("docker "):]
+            cmd = cmd[len("docker ") :]
         elif cmd == "docker":
             return "version", []
 
@@ -89,8 +89,7 @@ class DockerConnector(ServiceConnector):
             lines.append("---|---|---|---|---")
             for c in containers:
                 ports = ", ".join(
-                    f"{v[0]['HostPort']}->{k}" if v else k
-                    for k, v in (c.ports or {}).items()
+                    f"{v[0]['HostPort']}->{k}" if v else k for k, v in (c.ports or {}).items()
                 )
                 lines.append(
                     f"{c.short_id} | {c.name} | {c.image.tags[0] if c.image.tags else c.image.short_id} | {c.status} | {ports}"
@@ -100,7 +99,9 @@ class DockerConnector(ServiceConnector):
 
         elif subcmd == "inspect":
             if not args:
-                return ServiceResult(success=False, output="", error="用法: docker inspect <容器名>")
+                return ServiceResult(
+                    success=False, output="", error="用法: docker inspect <容器名>"
+                )
             container = client.containers.get(args[0])
             output = json.dumps(container.attrs, indent=2, ensure_ascii=False, default=str)
             return ServiceResult(success=True, output=output)
@@ -123,7 +124,9 @@ class DockerConnector(ServiceConnector):
 
         elif subcmd == "restart":
             if not args:
-                return ServiceResult(success=False, output="", error="用法: docker restart <容器名>")
+                return ServiceResult(
+                    success=False, output="", error="用法: docker restart <容器名>"
+                )
             container = client.containers.get(args[0])
             container.restart()
             return ServiceResult(success=True, output=f"容器 {args[0]} 已重启")
@@ -291,9 +294,8 @@ class DockerConnector(ServiceConnector):
             result_images = client.images.prune()
             deleted_containers = len(result_containers.get("ContainersDeleted", []) or [])
             deleted_images = len(result_images.get("ImagesDeleted", []) or [])
-            reclaimed = (
-                result_containers.get("SpaceReclaimed", 0)
-                + result_images.get("SpaceReclaimed", 0)
+            reclaimed = result_containers.get("SpaceReclaimed", 0) + result_images.get(
+                "SpaceReclaimed", 0
             )
             return ServiceResult(
                 success=True,
@@ -318,9 +320,7 @@ class DockerConnector(ServiceConnector):
             log.error("Execute failed", error=error_msg)
             if "404" in error_msg or "not found" in error_msg.lower():
                 return ServiceResult(success=False, output="", error=f"容器或镜像不存在: {e}")
-            return ServiceResult(
-                success=False, output="", error=f"{type(e).__name__}: {e}"
-            )
+            return ServiceResult(success=False, output="", error=f"{type(e).__name__}: {e}")
 
     async def close(self) -> None:
         if self._client:
@@ -344,9 +344,8 @@ class DockerConnector(ServiceConnector):
             stats["cpu_stats"]["cpu_usage"]["total_usage"]
             - stats["precpu_stats"]["cpu_usage"]["total_usage"]
         )
-        system_delta = (
-            stats["cpu_stats"].get("system_cpu_usage", 0)
-            - stats["precpu_stats"].get("system_cpu_usage", 0)
+        system_delta = stats["cpu_stats"].get("system_cpu_usage", 0) - stats["precpu_stats"].get(
+            "system_cpu_usage", 0
         )
         if system_delta > 0 and cpu_delta > 0:
             online_cpus = stats["cpu_stats"].get(

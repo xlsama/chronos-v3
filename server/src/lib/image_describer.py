@@ -31,13 +31,15 @@ class ImageDescriber:
         mime = _get_mime_type(filename)
         resp = await self.client.chat.completions.create(
             model=self.model,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-                    {"type": "text", "text": "请详细描述这张图片的内容。"},
-                ],
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                        {"type": "text", "text": "请详细描述这张图片的内容。"},
+                    ],
+                }
+            ],
             max_tokens=1000,
         )
         return resp.choices[0].message.content

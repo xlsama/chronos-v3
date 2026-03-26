@@ -84,25 +84,37 @@ async def run_history_agent(
 
         for tc in full_response.tool_calls:
             iter_log.info("Tool call: search_incident_history", query=tc["args"].get("query", ""))
-            await event_callback("tool_use", {
-                "name": "search_incident_history",
-                "args": tc["args"],
-            })
+            await event_callback(
+                "tool_use",
+                {
+                    "name": "search_incident_history",
+                    "args": tc["args"],
+                },
+            )
 
             t_tool = time.monotonic()
             result = await search_tool.ainvoke(tc["args"])
             tool_elapsed = time.monotonic() - t_tool
 
             result_str = str(result)
-            iter_log.info("Tool result", elapsed=f"{tool_elapsed:.2f}s", chars=len(result_str), sources=len(last_sources))
+            iter_log.info(
+                "Tool result",
+                elapsed=f"{tool_elapsed:.2f}s",
+                chars=len(result_str),
+                sources=len(last_sources),
+            )
 
-            await event_callback("tool_result", {
-                "name": "search_incident_history",
-                "output": result_str,
-                "sources": list(last_sources),
-            })
+            await event_callback(
+                "tool_result",
+                {
+                    "name": "search_incident_history",
+                    "output": result_str,
+                    "sources": list(last_sources),
+                },
+            )
 
             from langchain_core.messages import ToolMessage
+
             messages.append(ToolMessage(content=result_str, tool_call_id=tc["id"]))
 
     full_content = ""

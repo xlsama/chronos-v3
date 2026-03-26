@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown, ChevronRight, Check } from "lucide-react";
 import type { PhaseStatus } from "@/stores/incident-stream";
@@ -46,13 +46,9 @@ export function PhaseSection({
   contentClassName,
   isLast,
 }: PhaseSectionProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded ?? status === "active");
-
-  // Auto-collapse when completed, auto-expand when active
-  useEffect(() => {
-    if (status === "active") setExpanded(true);
-    if (status === "completed" && !defaultExpanded) setExpanded(false);
-  }, [status, defaultExpanded]);
+  const derivedExpanded = defaultExpanded ?? status === "active";
+  const [userToggled, setUserToggled] = useState<boolean | null>(null);
+  const expanded = userToggled ?? derivedExpanded;
 
   return (
     <div className={cn("relative pl-6", !isLast && "pb-4")} data-testid="phase-section">
@@ -71,7 +67,7 @@ export function PhaseSection({
       {/* Header */}
       <button
         className="flex w-full items-center gap-2 py-1.5 text-left"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => setUserToggled(!expanded)}
       >
         <span className="text-[13px] font-medium">{title}</span>
         {subtitle && (

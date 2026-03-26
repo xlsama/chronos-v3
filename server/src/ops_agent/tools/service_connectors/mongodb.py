@@ -26,7 +26,11 @@ class MongoDBConnector(ServiceConnector):
     def _get_client(self) -> AsyncIOMotorClient:
         if self._client is None:
             # Mask password in URI for logging
-            safe_uri = re.sub(r"://[^:]+:[^@]+@", "://***:***@", self._uri) if "@" in self._uri else self._uri
+            safe_uri = (
+                re.sub(r"://[^:]+:[^@]+@", "://***:***@", self._uri)
+                if "@" in self._uri
+                else self._uri
+            )
             log.info("Creating client", uri=safe_uri)
             self._client = AsyncIOMotorClient(self._uri, serverSelectionTimeoutMS=5000)
         return self._client

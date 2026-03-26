@@ -29,8 +29,18 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("slug", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("slug", name="uq_projects_slug"),
     )
@@ -61,8 +71,18 @@ def upgrade() -> None:
         ),
         sa.Column("status", sa.String(length=20), nullable=False, server_default="unknown"),
         sa.Column("project_id", sa.UUID(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("project_id", "name", name="uq_connections_project_name"),
@@ -93,8 +113,18 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("project_id", "slug", name="uq_services_project_slug"),
@@ -107,12 +137,23 @@ def upgrade() -> None:
         sa.Column("project_id", sa.UUID(), nullable=False),
         sa.Column("from_service_id", sa.UUID(), nullable=False),
         sa.Column("to_service_id", sa.UUID(), nullable=False),
-        sa.Column("dependency_type", sa.String(length=50), nullable=False, server_default="api_call"),
+        sa.Column(
+            "dependency_type", sa.String(length=50), nullable=False, server_default="api_call"
+        ),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("confidence", sa.Integer(), nullable=False, server_default="100"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.CheckConstraint("from_service_id <> to_service_id", name="ck_service_dependencies_no_self_ref"),
-        sa.CheckConstraint("confidence >= 0 AND confidence <= 100", name="ck_service_dependencies_confidence"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "from_service_id <> to_service_id", name="ck_service_dependencies_no_self_ref"
+        ),
+        sa.CheckConstraint(
+            "confidence >= 0 AND confidence <= 100", name="ck_service_dependencies_confidence"
+        ),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["from_service_id"], ["services.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["to_service_id"], ["services.id"], ondelete="CASCADE"),
@@ -126,8 +167,12 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_service_dependencies_project_id", "service_dependencies", ["project_id"])
-    op.create_index("ix_service_dependencies_from_service_id", "service_dependencies", ["from_service_id"])
-    op.create_index("ix_service_dependencies_to_service_id", "service_dependencies", ["to_service_id"])
+    op.create_index(
+        "ix_service_dependencies_from_service_id", "service_dependencies", ["from_service_id"]
+    )
+    op.create_index(
+        "ix_service_dependencies_to_service_id", "service_dependencies", ["to_service_id"]
+    )
 
     op.create_table(
         "service_connection_bindings",
@@ -135,11 +180,23 @@ def upgrade() -> None:
         sa.Column("project_id", sa.UUID(), nullable=False),
         sa.Column("service_id", sa.UUID(), nullable=False),
         sa.Column("connection_id", sa.UUID(), nullable=False),
-        sa.Column("usage_type", sa.String(length=50), nullable=False, server_default="runtime_inspect"),
+        sa.Column(
+            "usage_type", sa.String(length=50), nullable=False, server_default="runtime_inspect"
+        ),
         sa.Column("priority", sa.Integer(), nullable=False, server_default="100"),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint("priority >= 0", name="ck_service_connection_bindings_priority"),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["service_id"], ["services.id"], ondelete="CASCADE"),
@@ -153,9 +210,17 @@ def upgrade() -> None:
             name="uq_service_connection_bindings_scope",
         ),
     )
-    op.create_index("ix_service_connection_bindings_project_id", "service_connection_bindings", ["project_id"])
-    op.create_index("ix_service_connection_bindings_service_id", "service_connection_bindings", ["service_id"])
-    op.create_index("ix_service_connection_bindings_connection_id", "service_connection_bindings", ["connection_id"])
+    op.create_index(
+        "ix_service_connection_bindings_project_id", "service_connection_bindings", ["project_id"]
+    )
+    op.create_index(
+        "ix_service_connection_bindings_service_id", "service_connection_bindings", ["service_id"]
+    )
+    op.create_index(
+        "ix_service_connection_bindings_connection_id",
+        "service_connection_bindings",
+        ["connection_id"],
+    )
 
     op.create_table(
         "incidents",
@@ -169,8 +234,18 @@ def upgrade() -> None:
         sa.Column("summary_md", sa.Text(), nullable=True),
         sa.Column("thread_id", sa.String(length=100), nullable=True),
         sa.Column("saved_to_memory", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["connection_id"], ["connections.id"]),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"]),
         sa.PrimaryKeyConstraint("id"),
@@ -186,7 +261,12 @@ def upgrade() -> None:
         sa.Column("stored_filename", sa.String(length=500), nullable=False),
         sa.Column("content_type", sa.String(length=255), nullable=False),
         sa.Column("size", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["incident_id"], ["incidents.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -200,7 +280,12 @@ def upgrade() -> None:
         sa.Column("event_type", sa.String(length=50), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("metadata_json", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["incident_id"], ["incidents.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -218,7 +303,12 @@ def upgrade() -> None:
         sa.Column("risk_level", sa.String(length=20), nullable=True),
         sa.Column("risk_detail", sa.Text(), nullable=True),
         sa.Column("explanation", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["incident_id"], ["incidents.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -232,7 +322,12 @@ def upgrade() -> None:
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("doc_type", sa.String(length=50), nullable=False),
         sa.Column("status", sa.String(length=20), nullable=False, server_default="processing"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -252,7 +347,12 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["document_id"], ["project_documents.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -273,8 +373,18 @@ def upgrade() -> None:
         sa.Column("endpoint", sa.String(length=500), nullable=False),
         sa.Column("conn_config", sa.Text(), nullable=True),
         sa.Column("status", sa.String(length=20), nullable=False, server_default="unknown"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -288,7 +398,12 @@ def upgrade() -> None:
         sa.Column("title", sa.String(length=500), nullable=False),
         sa.Column("summary_md", sa.Text(), nullable=False),
         sa.Column("embedding", Vector(1024), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["incident_id"], ["incidents.id"]),
         sa.ForeignKeyConstraint(["project_id"], ["projects.id"]),
         sa.PrimaryKeyConstraint("id"),
@@ -329,9 +444,15 @@ def downgrade() -> None:
     op.drop_index("ix_incidents_connection_id", table_name="incidents")
     op.drop_table("incidents")
 
-    op.drop_index("ix_service_connection_bindings_connection_id", table_name="service_connection_bindings")
-    op.drop_index("ix_service_connection_bindings_service_id", table_name="service_connection_bindings")
-    op.drop_index("ix_service_connection_bindings_project_id", table_name="service_connection_bindings")
+    op.drop_index(
+        "ix_service_connection_bindings_connection_id", table_name="service_connection_bindings"
+    )
+    op.drop_index(
+        "ix_service_connection_bindings_service_id", table_name="service_connection_bindings"
+    )
+    op.drop_index(
+        "ix_service_connection_bindings_project_id", table_name="service_connection_bindings"
+    )
     op.drop_table("service_connection_bindings")
 
     op.drop_index("ix_service_dependencies_to_service_id", table_name="service_dependencies")

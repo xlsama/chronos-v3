@@ -166,6 +166,7 @@ function FileUploadContent({ className, ...props }: FileUploadContentProps) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- track mount state for SSR safety
     setMounted(true)
     return () => setMounted(false)
   }, [])

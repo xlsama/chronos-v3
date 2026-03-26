@@ -75,7 +75,13 @@ async def local_bash(command: str) -> dict:
     stdout_str = compress_output(stdout.decode(errors="replace"))
     stderr_str = stderr.decode(errors="replace")
 
-    log.info("Result", elapsed=f"{exec_elapsed:.2f}s", exit_code=proc.returncode, stdout_len=len(stdout_str), stderr_len=len(stderr_str))
+    log.info(
+        "Result",
+        elapsed=f"{exec_elapsed:.2f}s",
+        exit_code=proc.returncode,
+        stdout_len=len(stdout_str),
+        stderr_len=len(stderr_str),
+    )
     log.debug("stdout", stdout=stdout_str)
     if stderr_str:
         log.debug("stderr", stderr=stderr_str)

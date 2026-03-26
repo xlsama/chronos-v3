@@ -25,23 +25,19 @@ async def search_incident_history(query: str) -> tuple[str, list[dict]]:
         results = await service.search(query=query, limit=3)
 
     elapsed = time.monotonic() - t0
-    log.info("search_incident_history completed", elapsed=f"{elapsed:.2f}s", result_count=len(results))
+    log.info(
+        "search_incident_history completed", elapsed=f"{elapsed:.2f}s", result_count=len(results)
+    )
 
     if not results:
         return ("暂无相似历史事件。", [])
 
-    sources = [
-        {"type": "incident_history", "id": r["id"], "title": r["title"]}
-        for r in results
-    ]
+    sources = [{"type": "incident_history", "id": r["id"], "title": r["title"]} for r in results]
 
     sections = []
     for r in results:
         similarity = r.get("relevance_score", 1 - r["distance"])
-        sections.append(
-            f"### {r['title']} (相似度: {similarity:.2f})\n\n"
-            f"{r['summary_md']}"
-        )
+        sections.append(f"### {r['title']} (相似度: {similarity:.2f})\n\n{r['summary_md']}")
 
     text = "## 历史事件参考\n\n" + "\n\n---\n\n".join(sections)
     return (text, sources)

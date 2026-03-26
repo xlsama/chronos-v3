@@ -48,6 +48,8 @@ export function useIncidentStream(
     setResolutionConfirmResolved,
     setWaitingForAgent,
     setApprovalDecided,
+    setPlannerPlan,
+    setEvaluationResult,
     setConnected,
     reset,
     loadHistory,
@@ -67,6 +69,7 @@ export function useIncidentStream(
       clearTimeout(heartbeatTimerRef.current);
       setConnected(false);
     }
+    // oxlint-disable-next-line react/exhaustive-deps -- setConnected is a stable zustand action
   }, [status]);
 
   // Fetch persisted history events
@@ -87,6 +90,7 @@ export function useIncidentStream(
       seenEventIdsRef.current = new Set();
       hasInvalidatedIncidentRef.current = false;
     };
+    // oxlint-disable-next-line react/exhaustive-deps -- reset is a stable zustand action
   }, [incidentId]);
 
   useEffect(() => {
@@ -221,6 +225,12 @@ export function useIncidentStream(
               setResolutionConfirmRequired(true);
             } else if (event.event_type === "resolution_confirmed") {
               setResolutionConfirmResolved(true);
+            } else if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
+              setPlannerPlan(event.data.plan as never);
+            } else if (event.event_type === "evaluation_completed") {
+              setEvaluationResult(event.data.result as never);
+            } else if (event.event_type === "evaluation_started") {
+              // skip
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
                 setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
@@ -398,6 +408,14 @@ export function useIncidentStream(
               });
               clearAnswer();
             }
+          } else if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
+            setPlannerPlan(event.data.plan as never);
+            updatePhase(phase || "planning");
+          } else if (event.event_type === "evaluation_started") {
+            updatePhase("evaluation");
+          } else if (event.event_type === "evaluation_completed") {
+            setEvaluationResult(event.data.result as never);
+            updatePhase("evaluation");
           } else if (event.event_type === "agent_status") {
             // main-phase agent_status: ignore (only relevant for gather_context)
           } else {
@@ -446,5 +464,6 @@ export function useIncidentStream(
       clearTimeout(heartbeatTimerRef.current);
       setConnected(false);
     };
+    // oxlint-disable-next-line react/exhaustive-deps -- store actions are stable zustand references
   }, [incidentId, historyEvents]);
 }

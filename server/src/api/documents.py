@@ -60,10 +60,13 @@ async def upload_document(
     # Save init version for agents_config documents
     if doc.doc_type == "agents_config":
         from src.services.version_service import VersionService
+
         vs = VersionService(session)
         await vs.save_version(
-            entity_type="agents_md", entity_id=str(doc.id),
-            content=body.content or "", change_source="init",
+            entity_type="agents_md",
+            entity_id=str(doc.id),
+            content=body.content or "",
+            change_source="init",
         )
         await session.commit()
 
@@ -88,6 +91,7 @@ async def upload_document_file(
     ext = Path(filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         from src.lib.errors import AppError
+
         raise AppError(
             f"Unsupported file format: {ext}. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
             status_code=400,
@@ -106,15 +110,27 @@ async def upload_document_file(
         description = await image_describer.describe(file_bytes, filename)
         content = description
         doc_type = "image"
-        segments: list[ParsedSegment] = [ParsedSegment(content=description, metadata={"source_type": "image"})]
+        segments: list[ParsedSegment] = [
+            ParsedSegment(content=description, metadata={"source_type": "image"})
+        ]
     else:
         segments = parse_file_segments(file_bytes, filename)
         content = "\n\n".join(seg.content for seg in segments)
         doc_type_map = {
-            ".pdf": "pdf", ".docx": "word", ".xlsx": "excel", ".xls": "excel",
-            ".csv": "csv", ".md": "markdown", ".txt": "text", ".pptx": "pptx",
-            ".html": "html", ".htm": "html", ".json": "json",
-            ".yaml": "yaml", ".yml": "yaml", ".log": "log",
+            ".pdf": "pdf",
+            ".docx": "word",
+            ".xlsx": "excel",
+            ".xls": "excel",
+            ".csv": "csv",
+            ".md": "markdown",
+            ".txt": "text",
+            ".pptx": "pptx",
+            ".html": "html",
+            ".htm": "html",
+            ".json": "json",
+            ".yaml": "yaml",
+            ".yml": "yaml",
+            ".log": "log",
         }
         doc_type = doc_type_map.get(ext, "text")
 
@@ -161,6 +177,7 @@ async def delete_document(
         raise NotFoundError("Document not found")
     if doc.doc_type == "agents_config":
         from src.lib.errors import AppError
+
         raise AppError("AGENTS.md 文档不可删除", status_code=400)
     try:
         await service.delete(document_id)
@@ -190,9 +207,11 @@ async def get_document_file(
     from sqlalchemy import select as sa_select
     from src.db.models import ProjectDocument
 
-    stmt = sa_select(ProjectDocument).options(
-        selectinload(ProjectDocument.project)
-    ).where(ProjectDocument.id == document_id)
+    stmt = (
+        sa_select(ProjectDocument)
+        .options(selectinload(ProjectDocument.project))
+        .where(ProjectDocument.id == document_id)
+    )
     result = await session.execute(stmt)
     doc = result.scalar_one_or_none()
 
@@ -234,9 +253,11 @@ async def update_document(
     from sqlalchemy import select as sa_select
     from src.db.models import ProjectDocument
 
-    stmt = sa_select(ProjectDocument).options(
-        selectinload(ProjectDocument.project)
-    ).where(ProjectDocument.id == document_id)
+    stmt = (
+        sa_select(ProjectDocument)
+        .options(selectinload(ProjectDocument.project))
+        .where(ProjectDocument.id == document_id)
+    )
     result = await session.execute(stmt)
     doc = result.scalar_one_or_none()
 
@@ -253,10 +274,13 @@ async def update_document(
 
     if doc.doc_type == "agents_config":
         from src.services.version_service import VersionService
+
         vs = VersionService(session)
         await vs.save_version(
-            entity_type="agents_md", entity_id=str(doc.id),
-            content=body.content, change_source="manual",
+            entity_type="agents_md",
+            entity_id=str(doc.id),
+            content=body.content,
+            change_source="manual",
         )
         await session.commit()
 
