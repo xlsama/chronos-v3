@@ -36,8 +36,6 @@ interface IncidentStreamState {
   decidedApprovals: Record<string, { decision: string; supplementText?: string }>;
   pendingSupplement: { approvalId: string } | null;
   scrollToBottomTrigger: number;
-  suppressLiveThinking: boolean;
-  setSuppressLiveThinking: (suppress: boolean) => void;
   addEvent: (event: SSEEvent) => void;
   setPlannerPlanMd: (md: string) => void;
   appendPlannerThinking: (content: string) => void;
@@ -100,8 +98,6 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   decidedApprovals: {},
   pendingSupplement: null,
   scrollToBottomTrigger: 0,
-  suppressLiveThinking: false,
-  setSuppressLiveThinking: (suppress) => set({ suppressLiveThinking: suppress }),
 
   addEvent: (event) => {
     set((state) => {
@@ -418,6 +414,5 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       decidedApprovals: {},
       pendingSupplement: null,
       scrollToBottomTrigger: 0,
-      suppressLiveThinking: false,
     }),
 }));

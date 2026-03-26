@@ -53,7 +53,6 @@ export function useIncidentStream(
     setPlannerProgress,
     endRound,
     setConnected,
-    setSuppressLiveThinking,
     reset,
     loadHistory,
   } = useIncidentStreamStore();
@@ -384,23 +383,15 @@ export function useIncidentStream(
               appendPlannerThinking(event.data.content as string);
             } else {
               updatePhase("investigation");
-              const { suppressLiveThinking: suppress } =
-                useIncidentStreamStore.getState();
-              if (!suppress) {
-                appendThinking(event.data.content as string);
-              }
+              appendThinking(event.data.content as string);
             }
           } else if (event.event_type === "thinking_done") {
             if (phase === "planning") {
               // Planner thinking done — structured result event will follow
             } else {
-              const { thinkingContent, suppressLiveThinking } =
+              const { thinkingContent } =
                 useIncidentStreamStore.getState();
-              if (suppressLiveThinking) {
-                // Post-compact thinking — discard and reset suppression
-                clearThinking();
-                setSuppressLiveThinking(false);
-              } else if (thinkingContent) {
+              if (thinkingContent) {
                 addEvent({
                   event_type: "thinking",
                   data: { content: thinkingContent },
@@ -447,7 +438,6 @@ export function useIncidentStream(
           } else if (event.event_type === "round_ended") {
             endRound(event.data.round as number, (event.data.summary as string) || "");
             addEvent(event);
-            setSuppressLiveThinking(true);
           } else if (event.event_type === "agent_status") {
             // main-phase agent_status: ignore (only relevant for gather_context)
           } else {

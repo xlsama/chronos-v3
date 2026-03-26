@@ -182,6 +182,16 @@ async def compact_context_node(state: OpsState) -> dict:
             log.warning("Max investigation rounds reached", max_rounds=max_rounds)
         result["investigation_round"] = next_round
 
+        # 新轮次开场指令：让 LLM 在开始新一轮时说明排查方向
+        compacted_messages.append(
+            HumanMessage(
+                content=(
+                    f"[系统提示] 上下文已压缩，现在进入第 {next_round} 轮排查。"
+                    "请根据排查进度摘要和调查计划，简要说明本轮的排查方向，然后继续执行。"
+                )
+            )
+        )
+
     return result
 
 

@@ -47,8 +47,6 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   const pendingTools = new Map<string, number>();
   // Map from approval_id to the index in items array for approval_tool items
   const pendingApprovals = new Map<string, number>();
-  // Suppress thinking after round_ended (post-compact thinking is noise)
-  let suppressNextThinking = false;
   // Track pending round_started for pairing with round_ended
   let pendingRoundIdx: number | undefined;
   // Track the current round number
@@ -57,10 +55,6 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   for (const [idx, event] of events.entries()) {
     switch (event.event_type) {
       case "thinking":
-        if (suppressNextThinking) {
-          suppressNextThinking = false;
-          break;
-        }
         items.push({ type: "thinking", event, round: currentRound });
         break;
       case "plan_updated":
@@ -77,7 +71,6 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
         }
         // 不再 push 单独的 round_ended item，round_progress 完成态已足够
         currentRound++;
-        suppressNextThinking = true;
         break;
       case "tool_use": {
         const name = event.data.name as string;
@@ -214,8 +207,7 @@ function WaitingIndicator() {
 
 function LiveThinkingSection() {
   const thinkingContent = useIncidentStreamStore((s) => s.thinkingContent);
-  const suppress = useIncidentStreamStore((s) => s.suppressLiveThinking);
-  if (!thinkingContent || suppress) return null;
+  if (!thinkingContent) return null;
   return (
     <div className="animate-in fade-in duration-150">
       <ThinkingBubble content={thinkingContent} isStreaming />
@@ -328,7 +320,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   const historyAgentState = useIncidentStreamStore((s) => s.historyAgentState);
   const kbAgentState = useIncidentStreamStore((s) => s.kbAgentState);
   const phaseState = useIncidentStreamStore((s) => s.phaseState);
-  const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent && !s.suppressLiveThinking);
+  const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
   const hasAnswerStream = useIncidentStreamStore((s) => !!s.answerContent);
   const hasAskHumanStream = useIncidentStreamStore((s) => !!s.askHumanStreamContent);
 
@@ -669,12 +661,12 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
         const reason = (item.startEvent.data.reason as string) || "hypothesis_transition";
         const loadingText =
           reason === "message_limit"
-            ? "排查轮次较长，正在压缩并重新聚焦方向..."
-            : "假设已确认，正在整理排查进度...";
+            ? "消息较多，正在压缩上下文..."
+            : "假设状态已变更，正在压缩上下文...";
         const doneText =
           reason === "message_limit"
-            ? "已重新聚焦排查方向"
-            : "排查进度已整理";
+            ? "上下文已压缩（消息过多）"
+            : "上下文已压缩（假设状态变更）";
         return (
           <div key={i} className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
             {isDone ? (
@@ -777,33 +769,37 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
 
                 return (
                   <div key={`round-${round}`}>
-                    {!isCurrentRound && !isExpanded ? (
-                      // Collapsed past round
+                    {/* Round header */}
+                    {isCurrentRound ? (
+                      <div className="flex items-center gap-2 py-1.5 text-sm text-muted-foreground">
+                        <div className="h-px w-4 bg-border" />
+                        <span className="font-medium">第 {round} 轮</span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                    ) : (
                       <button
-                        className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                        className="group flex w-full cursor-pointer items-center gap-2 py-1.5 text-left text-sm text-muted-foreground transition-colors"
                         onClick={() => toggleRound(round)}
                       >
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                        <span className="font-medium">第 {round} 轮</span>
-                        <span className="truncate text-xs">
-                          {summaryText ? `\u2014 ${summaryText.slice(0, 60)}...` : ""}
-                        </span>
-                      </button>
-                    ) : (
-                      // Expanded round (current or toggled open)
-                      <div>
-                        {!isCurrentRound && (
-                          <button
-                            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50 transition-colors mb-2"
-                            onClick={() => toggleRound(round)}
-                          >
-                            <ChevronRight className="h-3.5 w-3.5 shrink-0 rotate-90 transition-transform" />
-                            <span className="font-medium">第 {round} 轮</span>
-                          </button>
+                        <div className="h-px w-4 bg-border" />
+                        <ChevronRight className={cn(
+                          "h-3.5 w-3.5 shrink-0 transition-transform",
+                          isExpanded && "rotate-90",
+                        )} />
+                        <span className="font-medium group-hover:text-foreground transition-colors">第 {round} 轮</span>
+                        {!isExpanded && summaryText && (
+                          <span className="truncate text-xs text-muted-foreground/70">
+                            {summaryText.slice(0, 60)}...
+                          </span>
                         )}
-                        <div className="space-y-3">
-                          {items.map((item, i) => renderTimelineItem(item, i))}
-                        </div>
+                        <div className="h-px flex-1 bg-border" />
+                      </button>
+                    )}
+
+                    {/* Round content */}
+                    {(isCurrentRound || isExpanded) && (
+                      <div className="space-y-3 border-l-2 border-border/50 pl-4 ml-1.5">
+                        {items.map((item, i) => renderTimelineItem(item, i))}
                       </div>
                     )}
                   </div>
