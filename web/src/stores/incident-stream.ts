@@ -9,15 +9,6 @@ export interface PhaseState {
   investigation: PhaseStatus;
 }
 
-export interface EvaluationResult {
-  outcome_type: string;
-  verification_passed: boolean;
-  confidence: string;
-  evidence_summary: string;
-  concerns: string[];
-  recommendation: string;
-}
-
 interface SubAgentState {
   events: SSEEvent[];
   thinkingContent: string;
@@ -31,8 +22,8 @@ interface IncidentStreamState {
   plannerPlanMd: string;
   plannerThinkingContent: string;
   plannerProgress: string;
-  evaluationResult: EvaluationResult | null;
-  evaluatorThinkingContent: string;
+  currentRound: number;
+  roundSummaries: { round: number; summary: string }[];
   phaseState: PhaseState;
   isConnected: boolean;
   thinkingContent: string;
@@ -52,9 +43,7 @@ interface IncidentStreamState {
   appendPlannerThinking: (content: string) => void;
   clearPlannerThinking: () => void;
   setPlannerProgress: (status: string) => void;
-  setEvaluationResult: (result: EvaluationResult | null) => void;
-  appendEvaluatorThinking: (content: string) => void;
-  clearEvaluatorThinking: () => void;
+  endRound: (round: number, summary: string) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
   appendAnswer: (content: string) => void;
@@ -97,8 +86,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   plannerPlanMd: "",
   plannerThinkingContent: "",
   plannerProgress: "",
-  evaluationResult: null,
-  evaluatorThinkingContent: "",
+  currentRound: 1,
+  roundSummaries: [],
   phaseState: initialPhaseState(),
   isConnected: false,
   isWaitingForAgent: false,
@@ -215,12 +204,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   setPlannerProgress: (status) => set({ plannerProgress: status }),
 
-  setEvaluationResult: (result) => set({ evaluationResult: result, evaluatorThinkingContent: "" }),
-
-  appendEvaluatorThinking: (content) =>
-    set((state) => ({ evaluatorThinkingContent: state.evaluatorThinkingContent + content })),
-
-  clearEvaluatorThinking: () => set({ evaluatorThinkingContent: "" }),
+  endRound: (round, summary) =>
+    set((state) => ({
+      currentRound: round + 1,
+      roundSummaries: [...state.roundSummaries, { round, summary }],
+    })),
 
   updatePhase: (phase) =>
     set((state) => {
@@ -278,7 +266,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     let resolutionRequired = false;
     let resolutionResolved = false;
     let loadedPlanMd = "";
-    let loadedEvalResult: EvaluationResult | null = null;
+    let loadedCurrentRound = 1;
+    const loadedRoundSummaries: { round: number; summary: string }[] = [];
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -316,15 +305,14 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // evaluation_completed → track evaluation result AND add to timeline
-      if (event.event_type === "evaluation_completed") {
-        loadedEvalResult = event.data.result as unknown as EvaluationResult;
-        mainEvents.push(event);
-        continue;
-      }
-
-      // evaluation_started → add to timeline (renders as inline card)
-      if (event.event_type === "evaluation_started") {
+      // round_ended → track round boundaries
+      if (event.event_type === "round_ended") {
+        const round = event.data.round as number;
+        loadedCurrentRound = round + 1;
+        loadedRoundSummaries.push({
+          round,
+          summary: (event.data.summary as string) || "",
+        });
         mainEvents.push(event);
         continue;
       }
@@ -397,7 +385,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       historyAgentState: { events: historyEvents, thinkingContent: "", status: historyStatus },
       kbAgentState: { events: kbEvents, thinkingContent: "", status: kbStatus },
       plannerPlanMd: loadedPlanMd,
-      evaluationResult: loadedEvalResult,
+      currentRound: loadedCurrentRound,
+      roundSummaries: loadedRoundSummaries,
       phaseState: derivedPhase,
       decidedApprovals: decided,
       askHumanQuestion: askQuestion,
@@ -415,8 +404,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       plannerPlanMd: "",
       plannerThinkingContent: "",
       plannerProgress: "",
-      evaluationResult: null,
-      evaluatorThinkingContent: "",
+      currentRound: 1,
+      roundSummaries: [],
       phaseState: initialPhaseState(),
       isConnected: false,
       isWaitingForAgent: false,

@@ -18,6 +18,7 @@ COMPACT_THRESHOLD = 50
 MAX_COMPACT_COUNT = 5
 
 
+
 def _format_message_for_summary(msg) -> str:
     """将单条消息格式化为可读文本，用于压缩摘要。"""
     if isinstance(msg, SystemMessage):
@@ -152,27 +153,33 @@ async def compact_context_node(state: OpsState) -> dict:
         SystemMessage(content=f"## 排查进度摘要（第 {compact_count + 1} 次压缩）\n\n{summary}"),
     ]
 
-    # 发布 round_ended 事件（告知前端本轮排查结束，开启新轮次）
-    try:
-        await publisher.publish(
-            channel,
-            "round_ended",
-            {
-                "round": compact_count + 1,
-                "reason": reason,
-                "summary": summary[:500],
-                "phase": "investigation",
-            },
-        )
-    except Exception as e:
-        log.warning("Failed to publish round_ended event", error=str(e))
-
-    return {
+    result: dict = {
         "messages": compacted_messages,
         "investigation_summary": summary,
         "message_count_at_last_compact": len(compacted_messages),
         "compact_count": compact_count + 1,
     }
+
+    # 只有假设切换才发 round_ended + 递增轮次
+    # 消息过多触发的 compact 只压缩，不发事件
+    if is_hypothesis_transition:
+        current_round = state.get("investigation_round", 1)
+        log.info("Hypothesis transition, ending round", round=current_round)
+        try:
+            await publisher.publish(
+                channel,
+                "round_ended",
+                {
+                    "round": current_round,
+                    "summary": summary[:500],
+                    "phase": "investigation",
+                },
+            )
+        except Exception as e:
+            log.warning("Failed to publish round_ended event", error=str(e))
+        result["investigation_round"] = current_round + 1
+
+    return result
 
 
 def should_compact(state: OpsState) -> bool:

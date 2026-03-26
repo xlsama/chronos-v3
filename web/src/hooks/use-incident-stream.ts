@@ -51,8 +51,7 @@ export function useIncidentStream(
     setPlannerPlanMd,
     appendPlannerThinking,
     setPlannerProgress,
-    setEvaluationResult,
-    appendEvaluatorThinking,
+    endRound,
     setConnected,
     setSuppressLiveThinking,
     reset,
@@ -235,10 +234,6 @@ export function useIncidentStream(
               if (event.event_type === "plan_updated" && phase === "investigation") {
                 addEvent(event);
               }
-            } else if (event.event_type === "evaluation_completed") {
-              setEvaluationResult(event.data.result as never);
-            } else if (event.event_type === "evaluation_started") {
-              // skip
             } else if (event.event_type === "planner_started" || event.event_type === "planner_progress") {
               // skip — phase update handled below
             } else if (event.event_type === "agent_status") {
@@ -388,15 +383,13 @@ export function useIncidentStream(
             if (phase === "planning") {
               updatePhase("planning");
               appendPlannerThinking(event.data.content as string);
-            } else if (phase === "evaluation") {
-              appendEvaluatorThinking(event.data.content as string);
             } else {
               updatePhase("investigation");
               appendThinking(event.data.content as string);
             }
           } else if (event.event_type === "thinking_done") {
-            if (phase === "planning" || phase === "evaluation") {
-              // Planner/evaluator thinking done — structured result event will follow
+            if (phase === "planning") {
+              // Planner thinking done — structured result event will follow
             } else {
               const { thinkingContent, suppressLiveThinking } =
                 useIncidentStreamStore.getState();
@@ -446,20 +439,10 @@ export function useIncidentStream(
               addEvent(event);
             }
             updatePhase(phase || "planning");
-          } else if (
-            event.event_type === "round_started" ||
-            event.event_type === "round_ended"
-          ) {
+          } else if (event.event_type === "round_started") {
             addEvent(event);
-            if (event.event_type === "round_ended") {
-              setSuppressLiveThinking(true);
-            }
-          } else if (event.event_type === "evaluation_started") {
-            // Add to investigation timeline as inline card
-            addEvent(event);
-          } else if (event.event_type === "evaluation_completed") {
-            setEvaluationResult(event.data.result as never);
-            // Add to investigation timeline as inline card
+          } else if (event.event_type === "round_ended") {
+            endRound(event.data.round as number, (event.data.summary as string) || "");
             addEvent(event);
           } else if (event.event_type === "agent_status") {
             // main-phase agent_status: ignore (only relevant for gather_context)

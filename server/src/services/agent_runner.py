@@ -125,6 +125,7 @@ class AgentRunner:
             "incident_history_summary": None,
             "kb_summary": None,
             "kb_project_ids": [],
+            "investigation_round": 1,
         }
 
         log.info("===== Agent lifecycle started =====")

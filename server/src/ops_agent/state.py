@@ -20,3 +20,4 @@ class OpsState(MessagesState):
     investigation_summary: str | None
     message_count_at_last_compact: int
     compact_count: int
+    investigation_round: int

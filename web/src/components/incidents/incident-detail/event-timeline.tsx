@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { MessageCircleQuestion, Sparkles, CheckCircle, RefreshCw, Check, Loader2 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { MessageCircleQuestion, Sparkles, CheckCircle, RefreshCw, Check, Loader2, ChevronRight } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
@@ -20,8 +20,6 @@ import { TimelineDivider } from "./timeline-divider";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
 import { PlannerContent } from "./planner-phase-section";
-import { EvaluationInlineCard, LiveEvaluatorThinkingSection } from "./evaluator-phase-section";
-import type { EvaluationResult } from "@/stores/incident-stream";
 
 interface EventTimelineProps {
   incidentId: string;
@@ -29,20 +27,20 @@ interface EventTimelineProps {
 }
 
 type TimelineItem =
-  | { type: "thinking"; event: SSEEvent }
-  | { type: "paired_tool"; toolCall: SSEEvent; toolResult?: SSEEvent }
-  | { type: "approval_tool"; approvalEvent: SSEEvent; toolCall?: SSEEvent; toolResult?: SSEEvent }
-  | { type: "plan_update"; event: SSEEvent }
-  | { type: "round_progress"; startEvent: SSEEvent; endEvent?: SSEEvent }
-  | { type: "ask_human"; event: SSEEvent }
-  | { type: "error"; event: SSEEvent }
-  | { type: "user_message"; event: SSEEvent }
-  | { type: "incident_stopped"; event: SSEEvent }
-  | { type: "skill_read"; event: SSEEvent }
-  | { type: "answer"; event: SSEEvent }
-  | { type: "agent_interrupted"; event: SSEEvent }
-  | { type: "evaluation"; event: SSEEvent }
-  | { type: "done"; event: SSEEvent };
+  | { type: "thinking"; event: SSEEvent; round: number }
+  | { type: "paired_tool"; toolCall: SSEEvent; toolResult?: SSEEvent; round: number }
+  | { type: "approval_tool"; approvalEvent: SSEEvent; toolCall?: SSEEvent; toolResult?: SSEEvent; round: number }
+  | { type: "plan_update"; event: SSEEvent; round: number }
+  | { type: "round_progress"; startEvent: SSEEvent; endEvent?: SSEEvent; round: number }
+  | { type: "ask_human"; event: SSEEvent; round: number }
+  | { type: "error"; event: SSEEvent; round: number }
+  | { type: "user_message"; event: SSEEvent; round: number }
+  | { type: "incident_stopped"; event: SSEEvent; round: number }
+  | { type: "skill_read"; event: SSEEvent; round: number }
+  | { type: "answer"; event: SSEEvent; round: number }
+  | { type: "agent_interrupted"; event: SSEEvent; round: number }
+  | { type: "round_ended"; event: SSEEvent; round: number; data: Record<string, unknown> }
+  | { type: "done"; event: SSEEvent; round: number };
 
 function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   const items: TimelineItem[] = [];
@@ -54,6 +52,8 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   let suppressNextThinking = false;
   // Track pending round_started for pairing with round_ended
   let pendingRoundIdx: number | undefined;
+  // Track the current round number
+  let currentRound = 1;
 
   for (const [idx, event] of events.entries()) {
     switch (event.event_type) {
@@ -62,26 +62,30 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
           suppressNextThinking = false;
           break;
         }
-        items.push({ type: "thinking", event });
+        items.push({ type: "thinking", event, round: currentRound });
         break;
       case "plan_updated":
-        items.push({ type: "plan_update", event });
+        items.push({ type: "plan_update", event, round: currentRound });
         break;
       case "round_started":
         pendingRoundIdx = items.length;
-        items.push({ type: "round_progress", startEvent: event });
+        items.push({ type: "round_progress", startEvent: event, round: currentRound });
         break;
       case "round_ended":
         if (pendingRoundIdx !== undefined) {
           (items[pendingRoundIdx] as { endEvent?: SSEEvent }).endEvent = event;
           pendingRoundIdx = undefined;
         } else {
-          items.push({ type: "round_progress", startEvent: event, endEvent: event });
+          items.push({ type: "round_progress", startEvent: event, endEvent: event, round: currentRound });
         }
+        items.push({ type: "round_ended" as const, round: currentRound, event, data: event.data });
+        currentRound++;
         suppressNextThinking = true;
         break;
       case "tool_use": {
         const name = event.data.name as string;
+        // Skip the "complete" tool
+        if (name === "complete") break;
         const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
         const approvalId = event.data.approval_id as string | undefined;
 
@@ -101,13 +105,15 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
           pendingApprovals.delete(approvalId!);
         } else {
           const itemIdx = items.length;
-          items.push({ type: "paired_tool", toolCall: event });
+          items.push({ type: "paired_tool", toolCall: event, round: currentRound });
           pendingTools.set(callId, itemIdx);
         }
         break;
       }
       case "tool_result": {
         const name = event.data.name as string;
+        // Skip the "complete" tool
+        if (name === "complete") break;
         const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
         const pendingIdx = pendingTools.get(callId);
         if (pendingIdx !== undefined) {
@@ -119,53 +125,38 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
       case "approval_required": {
         const approvalId = event.data.approval_id as string;
         const itemIdx = items.length;
-        items.push({ type: "approval_tool", approvalEvent: event });
+        items.push({ type: "approval_tool", approvalEvent: event, round: currentRound });
         if (approvalId) {
           pendingApprovals.set(approvalId, itemIdx);
         }
         break;
       }
       case "ask_human":
-        items.push({ type: "ask_human", event });
+        items.push({ type: "ask_human", event, round: currentRound });
         break;
       case "error":
-        items.push({ type: "error", event });
+        items.push({ type: "error", event, round: currentRound });
         break;
       case "user_message":
-        items.push({ type: "user_message", event });
+        items.push({ type: "user_message", event, round: currentRound });
         break;
       case "incident_stopped":
-        items.push({ type: "incident_stopped", event });
+        items.push({ type: "incident_stopped", event, round: currentRound });
         break;
       case "agent_interrupted":
-        items.push({ type: "agent_interrupted", event });
+        items.push({ type: "agent_interrupted", event, round: currentRound });
         break;
       case "done":
-        items.push({ type: "done", event });
+        items.push({ type: "done", event, round: currentRound });
         break;
       case "skill_read":
         if (event.data.success !== false) {
-          items.push({ type: "skill_read", event });
+          items.push({ type: "skill_read", event, round: currentRound });
         }
         break;
       case "answer":
-        items.push({ type: "answer", event });
+        items.push({ type: "answer", event, round: currentRound });
         break;
-      case "evaluation_started": {
-        // Push loading card; will be replaced in-place by evaluation_completed
-        items.push({ type: "evaluation", event });
-        break;
-      }
-      case "evaluation_completed": {
-        // Replace pending evaluation_started item if exists
-        const pendingIdx = items.findLastIndex((it) => it.type === "evaluation" && !it.event.data.result);
-        if (pendingIdx !== -1) {
-          items[pendingIdx] = { type: "evaluation", event };
-        } else {
-          items.push({ type: "evaluation", event });
-        }
-        break;
-      }
       case "thinking_done":
       case "agent_status":
         break; // Don't render
@@ -434,6 +425,40 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(mainEvents), [mainEvents]);
 
+  // Store round state
+  const currentRound = useIncidentStreamStore((s) => s.currentRound);
+  const roundSummaries = useIncidentStreamStore((s) => s.roundSummaries);
+
+  // Group timeline items by round
+  const roundGrouped = useMemo(() => {
+    const map = new Map<number, TimelineItem[]>();
+    for (const item of timelineItems) {
+      const existing = map.get(item.round);
+      if (existing) {
+        existing.push(item);
+      } else {
+        map.set(item.round, [item]);
+      }
+    }
+    return map;
+  }, [timelineItems]);
+
+  const totalRounds = roundGrouped.size;
+
+  // Track which past rounds are expanded
+  const [expandedRounds, setExpandedRounds] = useState<Set<number>>(new Set());
+  const toggleRound = useCallback((round: number) => {
+    setExpandedRounds((prev) => {
+      const next = new Set(prev);
+      if (next.has(round)) {
+        next.delete(round);
+      } else {
+        next.add(round);
+      }
+      return next;
+    });
+  }, []);
+
   // Compute base timestamp and stats for investigation phase
   const { baseTimestamp, phaseSubtitle } = useMemo(() => {
     if (mainEvents.length === 0) return { baseTimestamp: "", phaseSubtitle: "" };
@@ -457,6 +482,221 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     const dur = formatDuration(sorted[0].timestamp, sorted[sorted.length - 1].timestamp);
     return dur !== "0s" ? dur : "";
   }, [historyAgentState.events, kbAgentState.events]);
+
+  // Helper: render a single timeline item
+  const renderTimelineItem = (item: TimelineItem, i: number) => {
+    switch (item.type) {
+      case "thinking":
+        return (
+          <div key={i}>
+            <ThinkingBubble content={item.event.data.content as string} />
+          </div>
+        );
+      case "paired_tool": {
+        const toolName = item.toolCall.data.name as string;
+        const toolArgs = item.toolCall.data.args as Record<string, unknown> | undefined;
+
+        let serverInfo: string | undefined;
+        let serviceInfo: string | undefined;
+        if (toolName === "ssh_bash") {
+          const serverId = toolArgs?.server_id as string | undefined;
+          serverInfo = serverId ? serverMap.get(serverId) : undefined;
+        } else if (toolName === "service_exec") {
+          const serviceId = toolArgs?.service_id as string | undefined;
+          serviceInfo = serviceId ? serviceMap.get(serviceId) : undefined;
+        }
+
+        const relTime = baseTimestamp
+          ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
+          : undefined;
+        return (
+          <div key={i}>
+            <ToolCallCard
+              name={toolName}
+              args={toolArgs}
+              output={item.toolResult?.data.output as string | undefined}
+              isExecuting={!item.toolResult}
+              relativeTime={relTime}
+              serverInfo={serverInfo}
+              serviceInfo={serviceInfo}
+            />
+          </div>
+        );
+      }
+      case "approval_tool": {
+        const approvalData = item.approvalEvent.data;
+        const approvalToolName = (approvalData.tool_name as string) || "";
+        const approvalArgs = approvalData.tool_args as
+          | Record<string, unknown>
+          | undefined;
+
+        let approvalServerInfo: string | undefined;
+        let approvalServiceInfo: string | undefined;
+        if (approvalToolName === "ssh_bash") {
+          const sid = approvalArgs?.server_id as string | undefined;
+          approvalServerInfo = sid ? serverMap.get(sid) : undefined;
+        } else if (approvalToolName === "service_exec") {
+          const sid = approvalArgs?.service_id as string | undefined;
+          approvalServiceInfo = sid ? serviceMap.get(sid) : undefined;
+        }
+
+        const approvalRelTime =
+          baseTimestamp && item.toolCall
+            ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
+            : undefined;
+
+        return (
+          <div key={i}>
+            <ToolCallCard
+              name={approvalToolName}
+              args={approvalArgs}
+              output={item.toolResult?.data.output as string | undefined}
+              isExecuting={!!item.toolCall && !item.toolResult}
+              relativeTime={approvalRelTime}
+              serverInfo={approvalServerInfo}
+              serviceInfo={approvalServiceInfo}
+              approvalId={approvalData.approval_id as string}
+              riskLevel={approvalArgs?.risk_level as string | undefined}
+              explanation={approvalArgs?.explanation as string | undefined}
+              incidentStatus={incidentStatus}
+            />
+          </div>
+        );
+      }
+      case "ask_human":
+        return (
+          <div key={i}>
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+              <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Agent 需要更多信息</p>
+                <Markdown
+                  content={item.event.data.question as string}
+                  variant="compact"
+                  className="mt-1 card-markdown card-markdown--amber"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      case "user_message":
+        return (
+          <div key={i}>
+            <UserMessageBubble
+              content={item.event.data.content as string}
+              attachments={
+                item.event.data.attachments as {
+                  filename: string;
+                  content_type: string;
+                  size: number;
+                  preview_url: string | null;
+                }[]
+              }
+              attachment_ids={item.event.data.attachment_ids as string[]}
+              attachments_meta={
+                item.event.data.attachments_meta as {
+                  id: string;
+                  filename: string;
+                  content_type: string;
+                  size: number;
+                }[]
+              }
+            />
+          </div>
+        );
+
+      case "error":
+        return (
+          <div key={i}>
+            <div className="rounded-md border border-destructive bg-destructive/10 p-3">
+              <Markdown
+                content={formatErrorMessage(item.event.data.message as string)}
+                variant="compact"
+                className="card-markdown card-markdown--destructive"
+              />
+            </div>
+          </div>
+        );
+      case "agent_interrupted":
+        return (
+          <div key={i}>
+            <TimelineDivider type="agent_interrupted" />
+          </div>
+        );
+      case "done":
+        return (
+          <div key={i}>
+            <TimelineDivider type="done" />
+          </div>
+        );
+      case "incident_stopped":
+        return (
+          <div key={i}>
+            <TimelineDivider type="incident_stopped" />
+          </div>
+        );
+      case "skill_read": {
+        const skillName =
+          (item.event.data.skill_name as string) ||
+          (item.event.data.skill_slug as string);
+        const skillSlug = item.event.data.skill_slug as string;
+        return (
+          <div key={i}>
+            <SkillReadCard skillName={skillName} skillSlug={skillSlug} />
+          </div>
+        );
+      }
+      case "answer":
+        return (
+          <div key={i}>
+            <AnswerCard content={item.event.data.content as string} />
+          </div>
+        );
+      case "plan_update":
+        return (
+          <div key={i} className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
+            <RefreshCw className="h-3 w-3 text-blue-400" />
+            <span>计划已更新</span>
+          </div>
+        );
+      case "round_progress": {
+        const isDone = !!item.endEvent;
+        const reason = (item.startEvent.data.reason as string) || "hypothesis_transition";
+        const loadingText =
+          reason === "message_limit"
+            ? "排查轮次较长，正在压缩并重新聚焦方向..."
+            : "假设已确认，正在整理排查进度...";
+        const doneText =
+          reason === "message_limit"
+            ? "已重新聚焦排查方向"
+            : "排查进度已整理";
+        return (
+          <div key={i} className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
+            {isDone ? (
+              <Check className="h-3 w-3 text-green-500" />
+            ) : (
+              <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+            )}
+            <span>{isDone ? doneText : loadingText}</span>
+          </div>
+        );
+      }
+      case "round_ended": {
+        const summary = item.data.summary as string | undefined;
+        return (
+          <div key={i} className="flex items-center gap-3 py-2">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs text-muted-foreground">
+              本轮小结: {summary?.slice(0, 80)}...
+            </span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+        );
+      }
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="px-8 py-4" data-testid="event-timeline">
@@ -531,215 +771,52 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           isLast
         >
           <div className="space-y-3">
-            {timelineItems.map((item, i) => {
-              switch (item.type) {
-                case "thinking":
-                  return (
-                    <div key={i}>
-                      <ThinkingBubble content={item.event.data.content as string} />
-                    </div>
-                  );
-                case "paired_tool": {
-                  const toolName = item.toolCall.data.name as string;
-                  const toolArgs = item.toolCall.data.args as Record<string, unknown> | undefined;
+            {totalRounds <= 1 ? (
+              // Single round: render all items directly (no round headers)
+              timelineItems.map((item, i) => renderTimelineItem(item, i))
+            ) : (
+              // Multiple rounds: group by round with expand/collapse
+              Array.from(roundGrouped.entries()).map(([round, items]) => {
+                const isCurrentRound = round === currentRound;
+                const isExpanded = isCurrentRound || expandedRounds.has(round);
+                const summaryEntry = roundSummaries.find((s) => s.round === round);
+                const summaryText = summaryEntry?.summary || "";
 
-                  let serverInfo: string | undefined;
-                  let serviceInfo: string | undefined;
-                  if (toolName === "ssh_bash") {
-                    const serverId = toolArgs?.server_id as string | undefined;
-                    serverInfo = serverId ? serverMap.get(serverId) : undefined;
-                  } else if (toolName === "service_exec") {
-                    const serviceId = toolArgs?.service_id as string | undefined;
-                    serviceInfo = serviceId ? serviceMap.get(serviceId) : undefined;
-                  }
-
-                  const relTime = baseTimestamp
-                    ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
-                    : undefined;
-                  return (
-                    <div key={i}>
-                      <ToolCallCard
-                        name={toolName}
-                        args={toolArgs}
-                        output={item.toolResult?.data.output as string | undefined}
-                        isExecuting={!item.toolResult}
-                        relativeTime={relTime}
-                        serverInfo={serverInfo}
-                        serviceInfo={serviceInfo}
-                      />
-                    </div>
-                  );
-                }
-                case "approval_tool": {
-                  const approvalData = item.approvalEvent.data;
-                  const approvalToolName = (approvalData.tool_name as string) || "";
-                  const approvalArgs = approvalData.tool_args as
-                    | Record<string, unknown>
-                    | undefined;
-
-                  let approvalServerInfo: string | undefined;
-                  let approvalServiceInfo: string | undefined;
-                  if (approvalToolName === "ssh_bash") {
-                    const sid = approvalArgs?.server_id as string | undefined;
-                    approvalServerInfo = sid ? serverMap.get(sid) : undefined;
-                  } else if (approvalToolName === "service_exec") {
-                    const sid = approvalArgs?.service_id as string | undefined;
-                    approvalServiceInfo = sid ? serviceMap.get(sid) : undefined;
-                  }
-
-                  const approvalRelTime =
-                    baseTimestamp && item.toolCall
-                      ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
-                      : undefined;
-
-                  return (
-                    <div key={i}>
-                      <ToolCallCard
-                        name={approvalToolName}
-                        args={approvalArgs}
-                        output={item.toolResult?.data.output as string | undefined}
-                        isExecuting={!!item.toolCall && !item.toolResult}
-                        relativeTime={approvalRelTime}
-                        serverInfo={approvalServerInfo}
-                        serviceInfo={approvalServiceInfo}
-                        approvalId={approvalData.approval_id as string}
-                        riskLevel={approvalArgs?.risk_level as string | undefined}
-                        explanation={approvalArgs?.explanation as string | undefined}
-                        incidentStatus={incidentStatus}
-                      />
-                    </div>
-                  );
-                }
-                case "ask_human":
-                  return (
-                    <div key={i}>
-                      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
-                        <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                        <div>
-                          <p className="text-sm font-medium text-amber-800">Agent 需要更多信息</p>
-                          <Markdown
-                            content={item.event.data.question as string}
-                            variant="compact"
-                            className="mt-1 card-markdown card-markdown--amber"
-                          />
+                return (
+                  <div key={`round-${round}`}>
+                    {!isCurrentRound && !isExpanded ? (
+                      // Collapsed past round
+                      <button
+                        className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                        onClick={() => toggleRound(round)}
+                      >
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                        <span className="font-medium">第 {round} 轮</span>
+                        <span className="truncate text-xs">
+                          {summaryText ? `\u2014 ${summaryText.slice(0, 60)}...` : ""}
+                        </span>
+                      </button>
+                    ) : (
+                      // Expanded round (current or toggled open)
+                      <div>
+                        {!isCurrentRound && (
+                          <button
+                            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50 transition-colors mb-2"
+                            onClick={() => toggleRound(round)}
+                          >
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 rotate-90 transition-transform" />
+                            <span className="font-medium">第 {round} 轮</span>
+                          </button>
+                        )}
+                        <div className="space-y-3">
+                          {items.map((item, i) => renderTimelineItem(item, i))}
                         </div>
                       </div>
-                    </div>
-                  );
-                case "user_message":
-                  return (
-                    <div key={i}>
-                      <UserMessageBubble
-                        content={item.event.data.content as string}
-                        attachments={
-                          item.event.data.attachments as {
-                            filename: string;
-                            content_type: string;
-                            size: number;
-                            preview_url: string | null;
-                          }[]
-                        }
-                        attachment_ids={item.event.data.attachment_ids as string[]}
-                        attachments_meta={
-                          item.event.data.attachments_meta as {
-                            id: string;
-                            filename: string;
-                            content_type: string;
-                            size: number;
-                          }[]
-                        }
-                      />
-                    </div>
-                  );
-
-                case "error":
-                  return (
-                    <div key={i}>
-                      <div className="rounded-md border border-destructive bg-destructive/10 p-3">
-                        <Markdown
-                          content={formatErrorMessage(item.event.data.message as string)}
-                          variant="compact"
-                          className="card-markdown card-markdown--destructive"
-                        />
-                      </div>
-                    </div>
-                  );
-                case "agent_interrupted":
-                  return (
-                    <div key={i}>
-                      <TimelineDivider type="agent_interrupted" />
-                    </div>
-                  );
-                case "done":
-                  return (
-                    <div key={i}>
-                      <TimelineDivider type="done" />
-                    </div>
-                  );
-                case "incident_stopped":
-                  return (
-                    <div key={i}>
-                      <TimelineDivider type="incident_stopped" />
-                    </div>
-                  );
-                case "skill_read": {
-                  const skillName =
-                    (item.event.data.skill_name as string) ||
-                    (item.event.data.skill_slug as string);
-                  const skillSlug = item.event.data.skill_slug as string;
-                  return (
-                    <div key={i}>
-                      <SkillReadCard skillName={skillName} skillSlug={skillSlug} />
-                    </div>
-                  );
-                }
-                case "answer":
-                  return (
-                    <div key={i}>
-                      <AnswerCard content={item.event.data.content as string} />
-                    </div>
-                  );
-                case "evaluation": {
-                  const evalResult = item.event.data.result as EvaluationResult | undefined;
-                  return (
-                    <div key={i}>
-                      <EvaluationInlineCard result={evalResult} />
-                    </div>
-                  );
-                }
-                case "plan_update":
-                  return (
-                    <div key={i} className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
-                      <RefreshCw className="h-3 w-3 text-blue-400" />
-                      <span>计划已更新</span>
-                    </div>
-                  );
-                case "round_progress": {
-                  const isDone = !!item.endEvent;
-                  const reason = (item.startEvent.data.reason as string) || "hypothesis_transition";
-                  const loadingText =
-                    reason === "message_limit"
-                      ? "排查轮次较长，正在压缩并重新聚焦方向..."
-                      : "假设已确认，正在整理排查进度...";
-                  const doneText =
-                    reason === "message_limit"
-                      ? "已重新聚焦排查方向"
-                      : "排查进度已整理";
-                  return (
-                    <div key={i} className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
-                      {isDone ? (
-                        <Check className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
-                      )}
-                      <span>{isDone ? doneText : loadingText}</span>
-                    </div>
-                  );
-                }
-                default:
-                  return null;
-              }
-            })}
+                    )}
+                  </div>
+                );
+              })
+            )}
 
             {/* Transitional indicator — waiting for first investigation event after context gathering */}
             {isTransitioningToInvestigation && timelineItems.length === 0 && !hasThinking && (
@@ -753,9 +830,6 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
 
             {/* Live thinking stream — isolated component to avoid re-rendering timeline */}
             <LiveThinkingSection />
-
-            {/* Live evaluator thinking — shown while evaluator is running */}
-            <LiveEvaluatorThinkingSection />
 
             {/* Live ask_human stream — shows question as it streams in */}
             <LiveAskHumanSection />
