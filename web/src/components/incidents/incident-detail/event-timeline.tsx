@@ -270,8 +270,10 @@ function ResolutionConfirmCard({
     (s) => s.setResolutionConfirmResolved,
   );
 
-  const TERMINAL = ["resolved", "stopped"];
-  const isTerminal = !!incidentStatus && TERMINAL.includes(incidentStatus);
+  // 停止状态下不显示确认卡片（用户未确认解决）
+  if (incidentStatus === "stopped") return null;
+
+  const isTerminal = incidentStatus === "resolved";
 
   const queryClient = useQueryClient();
   const confirmMutation = useMutation({

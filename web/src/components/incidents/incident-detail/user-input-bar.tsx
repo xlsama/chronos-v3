@@ -138,7 +138,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
   const activeMutation = isSupplementMode ? supplementMutation : mutation;
 
   const placeholder = isTerminal
-    ? "事件已结束"
+    ? ""
     : isSupplementMode
       ? "输入补充说明后发送，Agent 将重新思考方案..."
       : incidentStatus === "interrupted"

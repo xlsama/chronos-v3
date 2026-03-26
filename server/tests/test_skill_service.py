@@ -8,7 +8,7 @@ def test_seed_incident_triage_skill_is_available_and_readable():
     available = {skill["slug"]: skill for skill in service.get_available_skills()}
 
     assert "incident-triage" in available
-    assert "通用运维排障分诊骨架" in available["incident-triage"]["description"]
+    assert "分诊框架" in available["incident-triage"]["description"]
 
     content = service.read_file("incident-triage")
 
