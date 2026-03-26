@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { MessageCircleQuestion, Sparkles, CheckCircle } from "lucide-react";
+import { MessageCircleQuestion, Sparkles, CheckCircle, RefreshCw, Check, Loader2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
@@ -32,6 +32,8 @@ type TimelineItem =
   | { type: "thinking"; event: SSEEvent }
   | { type: "paired_tool"; toolCall: SSEEvent; toolResult?: SSEEvent }
   | { type: "approval_tool"; approvalEvent: SSEEvent; toolCall?: SSEEvent; toolResult?: SSEEvent }
+  | { type: "plan_update"; event: SSEEvent }
+  | { type: "round_progress"; startEvent: SSEEvent; endEvent?: SSEEvent }
   | { type: "ask_human"; event: SSEEvent }
   | { type: "error"; event: SSEEvent }
   | { type: "user_message"; event: SSEEvent }
@@ -48,11 +50,35 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   const pendingTools = new Map<string, number>();
   // Map from approval_id to the index in items array for approval_tool items
   const pendingApprovals = new Map<string, number>();
+  // Suppress thinking after round_ended (post-compact thinking is noise)
+  let suppressNextThinking = false;
+  // Track pending round_started for pairing with round_ended
+  let pendingRoundIdx: number | undefined;
 
   for (const [idx, event] of events.entries()) {
     switch (event.event_type) {
       case "thinking":
+        if (suppressNextThinking) {
+          suppressNextThinking = false;
+          break;
+        }
         items.push({ type: "thinking", event });
+        break;
+      case "plan_updated":
+        items.push({ type: "plan_update", event });
+        break;
+      case "round_started":
+        pendingRoundIdx = items.length;
+        items.push({ type: "round_progress", startEvent: event });
+        break;
+      case "round_ended":
+        if (pendingRoundIdx !== undefined) {
+          (items[pendingRoundIdx] as { endEvent?: SSEEvent }).endEvent = event;
+          pendingRoundIdx = undefined;
+        } else {
+          items.push({ type: "round_progress", startEvent: event, endEvent: event });
+        }
+        suppressNextThinking = true;
         break;
       case "tool_use": {
         const name = event.data.name as string;
@@ -200,7 +226,8 @@ function WaitingIndicator() {
 
 function LiveThinkingSection() {
   const thinkingContent = useIncidentStreamStore((s) => s.thinkingContent);
-  if (!thinkingContent) return null;
+  const suppress = useIncidentStreamStore((s) => s.suppressLiveThinking);
+  if (!thinkingContent || suppress) return null;
   return (
     <div className="animate-in fade-in duration-150">
       <ThinkingBubble content={thinkingContent} isStreaming />
@@ -311,7 +338,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   const historyAgentState = useIncidentStreamStore((s) => s.historyAgentState);
   const kbAgentState = useIncidentStreamStore((s) => s.kbAgentState);
   const phaseState = useIncidentStreamStore((s) => s.phaseState);
-  const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
+  const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent && !s.suppressLiveThinking);
   const hasAnswerStream = useIncidentStreamStore((s) => !!s.answerContent);
   const hasAskHumanStream = useIncidentStreamStore((s) => !!s.askHumanStreamContent);
 
@@ -677,6 +704,35 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                   return (
                     <div key={i}>
                       <EvaluationInlineCard result={evalResult} />
+                    </div>
+                  );
+                }
+                case "plan_update":
+                  return (
+                    <div key={i} className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
+                      <RefreshCw className="h-3 w-3 text-blue-400" />
+                      <span>计划已更新</span>
+                    </div>
+                  );
+                case "round_progress": {
+                  const isDone = !!item.endEvent;
+                  const reason = (item.startEvent.data.reason as string) || "hypothesis_transition";
+                  const loadingText =
+                    reason === "message_limit"
+                      ? "排查轮次较长，正在压缩并重新聚焦方向..."
+                      : "假设已确认，正在整理排查进度...";
+                  const doneText =
+                    reason === "message_limit"
+                      ? "已重新聚焦排查方向"
+                      : "排查进度已整理";
+                  return (
+                    <div key={i} className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
+                      {isDone ? (
+                        <Check className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
+                      )}
+                      <span>{isDone ? doneText : loadingText}</span>
                     </div>
                   );
                 }

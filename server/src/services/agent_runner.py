@@ -679,6 +679,9 @@ class AgentRunner:
                 path = event["data"].get("input", {}).get("path", "")
                 skill_log.info("read_skill start", path=path)
                 return
+            if name == "update_plan":
+                main_log.info("Tool start (no SSE)", tool=name)
+                return
             run_id = event.get("run_id", "")
             main_log.info("Tool start", tool=name)
             main_log.debug("Tool input", input=event["data"].get("input", {}))
@@ -722,6 +725,9 @@ class AgentRunner:
                         "agent": agent,
                     },
                 )
+                return
+            if name == "update_plan":
+                main_log.info("Tool end (no SSE)", tool=name)
                 return
             run_id = event.get("run_id", "")
             output_str = str(event["data"].get("output", ""))

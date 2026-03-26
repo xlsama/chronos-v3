@@ -79,6 +79,34 @@ async def compact_context_node(state: OpsState) -> dict:
         compact_count=compact_count,
     )
 
+    # 判断触发原因：假设状态变更 or 消息数超限
+    is_hypothesis_transition = False
+    for msg in reversed(messages):
+        if hasattr(msg, "tool_call_id") and "假设状态已变更" in (
+            getattr(msg, "content", None) or ""
+        ):
+            is_hypothesis_transition = True
+            break
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            break
+    reason = "hypothesis_transition" if is_hypothesis_transition else "message_limit"
+
+    # 发布 round_started 事件（告知前端开始压缩）
+    try:
+        channel = EventPublisher.channel_for_incident(state["incident_id"])
+        publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
+        await publisher.publish(
+            channel,
+            "round_started",
+            {
+                "round": compact_count + 1,
+                "reason": reason,
+                "phase": "investigation",
+            },
+        )
+    except Exception as e:
+        log.warning("Failed to publish round_started event", error=str(e))
+
     # 格式化对话记录（跳过第一条 HumanMessage，它是事件描述，会单独传入）
     conversation = _format_conversation(messages[1:])
 
@@ -126,13 +154,12 @@ async def compact_context_node(state: OpsState) -> dict:
 
     # 发布 round_ended 事件（告知前端本轮排查结束，开启新轮次）
     try:
-        channel = EventPublisher.channel_for_incident(state["incident_id"])
-        publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
         await publisher.publish(
             channel,
             "round_ended",
             {
                 "round": compact_count + 1,
+                "reason": reason,
                 "summary": summary[:500],
                 "phase": "investigation",
             },

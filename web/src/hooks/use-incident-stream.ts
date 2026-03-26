@@ -54,6 +54,7 @@ export function useIncidentStream(
     setEvaluationResult,
     appendEvaluatorThinking,
     setConnected,
+    setSuppressLiveThinking,
     reset,
     loadHistory,
   } = useIncidentStreamStore();
@@ -231,6 +232,9 @@ export function useIncidentStream(
               setResolutionConfirmResolved(true);
             } else if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
               setPlannerPlanMd((event.data.plan_md as string) || "");
+              if (event.event_type === "plan_updated" && phase === "investigation") {
+                addEvent(event);
+              }
             } else if (event.event_type === "evaluation_completed") {
               setEvaluationResult(event.data.result as never);
             } else if (event.event_type === "evaluation_started") {
@@ -394,9 +398,13 @@ export function useIncidentStream(
             if (phase === "planning" || phase === "evaluation") {
               // Planner/evaluator thinking done — structured result event will follow
             } else {
-              // Flush thinking buffer
-              const { thinkingContent } = useIncidentStreamStore.getState();
-              if (thinkingContent) {
+              const { thinkingContent, suppressLiveThinking } =
+                useIncidentStreamStore.getState();
+              if (suppressLiveThinking) {
+                // Post-compact thinking — discard and reset suppression
+                clearThinking();
+                setSuppressLiveThinking(false);
+              } else if (thinkingContent) {
                 addEvent({
                   event_type: "thinking",
                   data: { content: thinkingContent },
@@ -433,7 +441,19 @@ export function useIncidentStream(
             }
           } else if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
             setPlannerPlanMd((event.data.plan_md as string) || "");
+            // plan_updated during investigation → also add to timeline for inline indicator
+            if (event.event_type === "plan_updated" && phase === "investigation") {
+              addEvent(event);
+            }
             updatePhase(phase || "planning");
+          } else if (
+            event.event_type === "round_started" ||
+            event.event_type === "round_ended"
+          ) {
+            addEvent(event);
+            if (event.event_type === "round_ended") {
+              setSuppressLiveThinking(true);
+            }
           } else if (event.event_type === "evaluation_started") {
             // Add to investigation timeline as inline card
             addEvent(event);

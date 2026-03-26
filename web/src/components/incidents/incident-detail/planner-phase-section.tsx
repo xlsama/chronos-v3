@@ -42,7 +42,7 @@ export function PlannerContent() {
         plannerProgress === "first_token_received"
           ? "已连接，正在生成调查计划"
           : plannerProgress === "llm_call_started"
-            ? "正在调用 LLM，等待响应"
+            ? "正在制定计划"
             : "正在分析问题，生成调查计划";
       return (
         <div className="py-2">

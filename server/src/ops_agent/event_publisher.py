@@ -35,6 +35,8 @@ _EVENT_ROLE = {
     "planner_progress": "system",
     "evaluation_started": "system",
     "evaluation_completed": "system",
+    "round_started": "system",
+    "round_ended": "system",
 }
 
 
