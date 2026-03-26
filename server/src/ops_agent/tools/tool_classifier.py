@@ -1,4 +1,4 @@
-import re
+import regex
 from enum import Enum
 
 
@@ -108,24 +108,24 @@ def _strip_sudo_prefix(cmd: str) -> tuple[str, bool]:
 # Shell Safety (ssh_bash + bash shared)
 # ═══════════════════════════════════════════
 
-# Absolutely forbidden (never execute)
-_BLOCKED_PATTERNS = [
+# Absolutely forbidden (never execute) — pre-compiled, single alternation
+_BLOCKED_RE = regex.compile(r"|".join([
     r"rm\s+(-[a-zA-Z]*)?r[a-zA-Z]*f[a-zA-Z]*\s+/\s*$",  # rm -rf /
     r"rm\s+(-[a-zA-Z]*)?r[a-zA-Z]*f[a-zA-Z]*\s+/\*",     # rm -rf /*
     r"rm\s+.*--no-preserve-root",                          # rm --no-preserve-root
     r":\(\)\s*\{",                                          # fork bomb
     r">\s*/dev/sd",                                         # redirect to block device
-]
+]))
 
 # Local-only blocked patterns (local=True)
 # Block sensitive file access only. sudo/su go through normal classification.
-_LOCAL_BLOCKED_PATTERNS = [
+_LOCAL_BLOCKED_RE = regex.compile(r"|".join([
     r"\.env\b",
     r"/etc/(shadow|passwd|sudoers)",
-]
+]))
 
-# Dangerous patterns (needs approval + red warning)
-_DANGEROUS_PATTERNS = [
+# Dangerous patterns (needs approval + red warning) — pre-compiled, IGNORECASE
+_DANGEROUS_RE = regex.compile(r"|".join([
     r"(^|[;&|]\s*)su\b",
     r"rm\s+-rf\b",
     r"mkfs\.",
@@ -143,10 +143,10 @@ _DANGEROUS_PATTERNS = [
     r"\bsystemctl\s+(stop|restart|disable|enable)\b",
     r"\bdocker\s+compose\s+(down|rm)\b",
     r"\bkubectl\s+(apply|patch|scale|rollout)\b",
-]
+]), regex.IGNORECASE)
 
-# Write patterns (needs approval, MEDIUM)
-_WRITE_PATTERNS = [
+# Write patterns (needs approval, MEDIUM) — pre-compiled, IGNORECASE
+_WRITE_RE = regex.compile(r"|".join([
     r"\bsed\s+.*-i\b",
     r"\bsed\s+.*--in-place\b",
     r"\bcurl\s+.*-X\s*(POST|PUT|DELETE|PATCH)\b",
@@ -155,16 +155,19 @@ _WRITE_PATTERNS = [
     r"\bwget\s",
     r"\btee\s+\S",
     r"\b(mysql|mariadb|psql)\b.*\b(INSERT|UPDATE|DELETE|ALTER|CREATE|GRANT|REVOKE)\b",
-]
+]), regex.IGNORECASE)
 
-# Read-only patterns for service CLIs (regex, case-insensitive)
-_READ_PATTERNS = [
-    r"\bredis-cli\b.*\b(GET|MGET|HGET|HGETALL|HMGET|HKEYS|HVALS|HLEN|HEXISTS)\b",
-    r"\bredis-cli\b.*\b(LRANGE|LLEN|LINDEX)\b",
-    r"\bredis-cli\b.*\b(SMEMBERS|SCARD|SISMEMBER|SRANDMEMBER)\b",
-    r"\bredis-cli\b.*\b(ZRANGE|ZREVRANGE|ZCARD|ZSCORE|ZRANK|ZCOUNT)\b",
-    r"\bredis-cli\b.*\b(KEYS|SCAN|TYPE|TTL|PTTL|EXISTS|DBSIZE|STRLEN|OBJECT|RANDOMKEY)\b",
-    r"\bredis-cli\b.*\b(INFO|PING|TIME)\b",
+# Read-only patterns for service CLIs — pre-compiled, IGNORECASE
+# Redis-cli patterns consolidated into single alternation
+_READ_RE = regex.compile(r"|".join([
+    r"\bredis-cli\b.*\b("
+        r"GET|MGET|HGET|HGETALL|HMGET|HKEYS|HVALS|HLEN|HEXISTS"
+        r"|LRANGE|LLEN|LINDEX"
+        r"|SMEMBERS|SCARD|SISMEMBER|SRANDMEMBER"
+        r"|ZRANGE|ZREVRANGE|ZCARD|ZSCORE|ZRANK|ZCOUNT"
+        r"|KEYS|SCAN|TYPE|TTL|PTTL|EXISTS|DBSIZE|STRLEN|OBJECT|RANDOMKEY"
+        r"|INFO|PING|TIME"
+    r")\b",
     r"\bredis-cli\b.*\b(CONFIG\s+GET|CLIENT\s+LIST|SLOWLOG\s+(GET|LEN))\b",
     r"\bredis-cli\b.*\b(CLUSTER\s+(INFO|NODES)|MEMORY\s+(USAGE|STATS))\b",
     r"\bredis-cli\s+.*--(scan|bigkeys|stat|latency)\b",
@@ -176,8 +179,10 @@ _READ_PATTERNS = [
     r"^npm\s+(-v|--version)\b",
     r"^yarn\s+(-v|--version)\b",
     r"\betcdctl\s+(get|endpoint\s+(health|status)|member\s+list|alarm\s+list|version)\b",
-    r"\brabbitmqctl\s+(status|cluster_status|list_queues|list_exchanges|list_bindings|list_connections|list_channels|list_consumers|list_users|list_vhosts|list_permissions)\b",
-]
+    r"\brabbitmqctl\s+(status|cluster_status|list_queues|list_exchanges|list_bindings"
+        r"|list_connections|list_channels|list_consumers|list_users|list_vhosts"
+        r"|list_permissions)\b",
+]), regex.IGNORECASE)
 
 # SSH read-only command prefixes (whitelist)
 _READ_PREFIXES = [
@@ -249,15 +254,12 @@ class ShellSafety:
         cmd = command.strip()
 
         # 1. BLOCKED: universal dangerous patterns (checked on raw command)
-        for pattern in _BLOCKED_PATTERNS:
-            if re.search(pattern, cmd):
-                return CommandType.BLOCKED
+        if _BLOCKED_RE.search(cmd):
+            return CommandType.BLOCKED
 
         # 2. BLOCKED: local-only patterns (sensitive file access)
-        if local:
-            for pattern in _LOCAL_BLOCKED_PATTERNS:
-                if re.search(pattern, cmd):
-                    return CommandType.BLOCKED
+        if local and _LOCAL_BLOCKED_RE.search(cmd):
+            return CommandType.BLOCKED
 
         # 3. Per-sub-command classification with sudo stripping
         #    Split compound commands (&&, ||, ;) then pipes (|).
@@ -276,27 +278,18 @@ class ShellSafety:
                 inner, _ = _strip_sudo_prefix(normalized)
 
                 # DANGEROUS: return immediately (highest actionable severity)
-                for pattern in _DANGEROUS_PATTERNS:
-                    if re.search(pattern, inner, re.IGNORECASE):
-                        return CommandType.DANGEROUS
+                if _DANGEROUS_RE.search(inner):
+                    return CommandType.DANGEROUS
 
                 # WRITE patterns
-                is_write = False
-                for pattern in _WRITE_PATTERNS:
-                    if re.search(pattern, inner, re.IGNORECASE):
-                        is_write = True
-                        break
-                if is_write:
+                if _WRITE_RE.search(inner):
                     worst = CommandType.WRITE
                     continue
 
                 # READ whitelist (prefix match + regex patterns)
                 is_read = any(inner.startswith(prefix) for prefix in read_prefixes)
                 if not is_read:
-                    is_read = any(
-                        re.search(p, inner, re.IGNORECASE)
-                        for p in _READ_PATTERNS
-                    )
+                    is_read = bool(_READ_RE.search(inner))
                 if not is_read:
                     worst = CommandType.WRITE
 
@@ -307,25 +300,33 @@ class ShellSafety:
 # Service Safety (service_exec)
 # ═══════════════════════════════════════════
 
+# Pre-compiled SQL classification patterns
+_SQL_READ_RE = regex.compile(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC)\b")
+_SQL_CTE_READ_RE = regex.compile(r"^WITH\s+.*\bSELECT\b", regex.DOTALL)
+_SQL_DANGEROUS_RE = regex.compile(r"^(DROP|TRUNCATE)\b")
+_SQL_DELETE_RE = regex.compile(r"^DELETE\b")
+_SQL_WRITE_RE = regex.compile(r"^(INSERT|UPDATE|DELETE|CREATE|ALTER|GRANT|REVOKE)\b")
+
+
 def _classify_sql(command: str) -> CommandType:
     """Classify a SQL command."""
     cmd = command.strip()
     upper = cmd.upper()
 
     # READ: SELECT, SHOW, EXPLAIN, DESCRIBE/DESC, WITH...SELECT (CTE)
-    if re.match(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC)\b", upper):
+    if _SQL_READ_RE.match(upper):
         return CommandType.READ
-    if re.match(r"^WITH\s+.*\bSELECT\b", upper, re.DOTALL):
+    if _SQL_CTE_READ_RE.match(upper):
         return CommandType.READ
 
     # DANGEROUS: DROP, TRUNCATE, DELETE without WHERE
-    if re.match(r"^(DROP|TRUNCATE)\b", upper):
+    if _SQL_DANGEROUS_RE.match(upper):
         return CommandType.DANGEROUS
-    if re.match(r"^DELETE\b", upper) and "WHERE" not in upper:
+    if _SQL_DELETE_RE.match(upper) and "WHERE" not in upper:
         return CommandType.DANGEROUS
 
     # WRITE: INSERT, UPDATE, DELETE (with WHERE), CREATE, ALTER, GRANT, REVOKE
-    if re.match(r"^(INSERT|UPDATE|DELETE|CREATE|ALTER|GRANT|REVOKE)\b", upper):
+    if _SQL_WRITE_RE.match(upper):
         return CommandType.WRITE
 
     # Default: WRITE (conservative)
@@ -458,6 +459,14 @@ def _classify_elasticsearch(command: str) -> CommandType:
     return CommandType.WRITE
 
 
+# Pre-compiled Jenkins/Kettle path patterns
+_JENKINS_DANGEROUS_PATH_RE = regex.compile(
+    r"/(stop|delete|doDelete|disable)\b", regex.IGNORECASE
+)
+_KETTLE_START_RE = regex.compile(r"/(start|run|execute)", regex.IGNORECASE)
+_KETTLE_STOP_RE = regex.compile(r"/(stop|remove|clean)", regex.IGNORECASE)
+
+
 def _classify_jenkins(command: str) -> CommandType:
     """Classify a Jenkins HTTP command."""
     cmd = command.strip()
@@ -473,7 +482,7 @@ def _classify_jenkins(command: str) -> CommandType:
 
     # POST: build → WRITE, stop/delete → DANGEROUS
     if method == "POST":
-        if re.search(r"/(stop|delete|doDelete|disable)\b", path, re.IGNORECASE):
+        if _JENKINS_DANGEROUS_PATH_RE.search(path):
             return CommandType.DANGEROUS
         return CommandType.WRITE
 
@@ -496,17 +505,17 @@ def _classify_kettle(command: str) -> CommandType:
     if method in ("GET", "HEAD"):
         # GET status/transStatus/jobStatus are read-only
         # GET start* is a write operation
-        if re.search(r"/(start|run|execute)", path, re.IGNORECASE):
+        if _KETTLE_START_RE.search(path):
             return CommandType.WRITE
         # GET stop/remove are dangerous
-        if re.search(r"/(stop|remove|clean)", path, re.IGNORECASE):
+        if _KETTLE_STOP_RE.search(path):
             return CommandType.DANGEROUS
         return CommandType.READ
 
     if method == "POST":
-        if re.search(r"/(stop|remove|clean)", path, re.IGNORECASE):
+        if _KETTLE_STOP_RE.search(path):
             return CommandType.DANGEROUS
-        if re.search(r"/(start|run|execute)", path, re.IGNORECASE):
+        if _KETTLE_START_RE.search(path):
             return CommandType.WRITE
         return CommandType.WRITE
 
