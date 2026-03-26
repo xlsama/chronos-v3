@@ -17,8 +17,6 @@ COMPACT_THRESHOLD = 50
 # 最多压缩 5 次，之后不再压缩
 MAX_COMPACT_COUNT = 5
 
-
-
 def _format_message_for_summary(msg) -> str:
     """将单条消息格式化为可读文本，用于压缩摘要。"""
     if isinstance(msg, SystemMessage):
@@ -57,12 +55,9 @@ def _format_message_for_summary(msg) -> str:
 
 def _format_conversation(messages: list) -> str:
     """将消息列表格式化为可读的对话记录。"""
-    lines = []
-    for msg in messages:
-        formatted = _format_message_for_summary(msg)
-        if formatted:
-            lines.append(formatted)
-    return "\n\n".join(lines)
+    return "\n\n".join(
+        formatted for msg in messages if (formatted := _format_message_for_summary(msg))
+    )
 
 
 async def compact_context_node(state: OpsState) -> dict:
@@ -136,7 +131,7 @@ async def compact_context_node(state: OpsState) -> dict:
     )
     elapsed = time.monotonic() - t0
 
-    summary = response.content if hasattr(response, "content") else str(response)
+    summary = response.content
     log.info(
         "compact_context completed",
         elapsed=f"{elapsed:.2f}s",
@@ -164,7 +159,12 @@ async def compact_context_node(state: OpsState) -> dict:
     # 消息过多触发的 compact 只压缩，不发事件
     if is_hypothesis_transition:
         current_round = state.get("investigation_round", 1)
-        log.info("Hypothesis transition, ending round", round=current_round)
+        max_rounds = get_settings().max_investigation_rounds
+        log.info(
+            "Hypothesis transition, ending round",
+            round=current_round,
+            max_rounds=max_rounds,
+        )
         try:
             await publisher.publish(
                 channel,
@@ -177,7 +177,10 @@ async def compact_context_node(state: OpsState) -> dict:
             )
         except Exception as e:
             log.warning("Failed to publish round_ended event", error=str(e))
-        result["investigation_round"] = current_round + 1
+        next_round = current_round + 1
+        if next_round > max_rounds:
+            log.warning("Max investigation rounds reached", max_rounds=max_rounds)
+        result["investigation_round"] = next_round
 
     return result
 

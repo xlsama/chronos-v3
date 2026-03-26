@@ -3,7 +3,7 @@ import time
 import uuid
 from typing import Annotated
 
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import InjectedState
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -384,6 +384,24 @@ async def main_agent_node(state: OpsState) -> dict:
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
+
+    # 轮次超限：强制 Agent 输出结论
+    s = get_settings()
+    current_round = state.get("investigation_round", 1)
+    if current_round > s.max_investigation_rounds:
+        log.warning(
+            "Investigation round exceeded limit, forcing complete",
+            round=current_round,
+            max=s.max_investigation_rounds,
+        )
+        messages.append(
+            HumanMessage(
+                content=(
+                    f"[系统提示] 排查已达到最大轮次（{s.max_investigation_rounds}轮）。"
+                    "请根据目前已有的证据，立即调用 complete(answer_md=...) 输出排查结论。"
+                )
+            )
+        )
 
     tool_names = [t.name for t in tools]
     retry_count = state.get("tool_call_retry_count", 0)

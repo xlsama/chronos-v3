@@ -395,9 +395,8 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
 
   const shouldUseFixedContextLayout = contextActive && hasGatherContext && hasSubAgentContent;
 
-  const mainEvents = events;
   const hasInvestigation =
-    mainEvents.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
+    events.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
 
   // Transitional state: both sub-agents done but investigation phase hasn't started yet
   // (2-5s gap while main LLM processes context before emitting first token)
@@ -423,7 +422,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation;
 
   // Build paired timeline items
-  const timelineItems = useMemo(() => buildTimelineItems(mainEvents), [mainEvents]);
+  const timelineItems = useMemo(() => buildTimelineItems(events), [events]);
 
   // Store round state
   const currentRound = useIncidentStreamStore((s) => s.currentRound);
@@ -461,18 +460,18 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
 
   // Compute base timestamp and stats for investigation phase
   const { baseTimestamp, phaseSubtitle } = useMemo(() => {
-    if (mainEvents.length === 0) return { baseTimestamp: "", phaseSubtitle: "" };
+    if (events.length === 0) return { baseTimestamp: "", phaseSubtitle: "" };
 
-    const base = mainEvents[0].timestamp;
-    const last = mainEvents[mainEvents.length - 1].timestamp;
+    const base = events[0].timestamp;
+    const last = events[events.length - 1].timestamp;
     const dur = formatDuration(base, last);
-    const toolCount = mainEvents.filter((e) => e.event_type === "tool_use").length;
+    const toolCount = events.filter((e) => e.event_type === "tool_use").length;
 
     const parts: string[] = [];
     if (dur && dur !== "0s") parts.push(dur);
     if (toolCount > 0) parts.push(`${toolCount} 次工具调用`);
     return { baseTimestamp: base, phaseSubtitle: parts.join(" · ") };
-  }, [mainEvents]);
+  }, [events]);
 
   // Context gathering subtitle
   const contextSubtitle = useMemo(() => {
