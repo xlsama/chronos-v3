@@ -138,7 +138,7 @@ async def ssh_bash(server_id: str, command: str) -> dict:
         connector = await get_connector(server_id)
     except ValueError as e:
         log.error("Connection error", error=str(e))
-        return {"error": str(e)}
+        return {"exit_code": -1, "stdout": "", "stderr": "", "error": str(e)}
 
     # 执行前去除 2>/dev/null，确保 stderr 中的权限错误等信息不会丢失
     command = _strip_stderr_discard(command)
@@ -158,10 +158,20 @@ async def ssh_bash(server_id: str, command: str) -> dict:
         }
     except (OSError, ConnectionError) as e:
         log.error("SSH connection failed", error=str(e))
-        return {"error": f"SSH 连接失败: {e}"}
+        return {
+            "exit_code": -1,
+            "stdout": "",
+            "stderr": "",
+            "error": f"SSH 连接失败: {e}",
+        }
     except Exception as e:
         log.error("Unexpected error", error=str(e))
-        return {"error": f"执行异常: {e}"}
+        return {
+            "exit_code": -1,
+            "stdout": "",
+            "stderr": "",
+            "error": f"执行异常: {type(e).__name__}: {e}",
+        }
 
     stdout_compressed = compress_output(result.stdout)
     log.info("Result", elapsed=f"{exec_elapsed:.2f}s", exit_code=result.exit_code, stdout_len=len(stdout_compressed), stderr_len=len(result.stderr))

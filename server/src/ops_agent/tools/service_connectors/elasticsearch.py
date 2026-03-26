@@ -50,40 +50,48 @@ class ElasticsearchConnector(ServiceConnector):
         self._auth = (username, password) if username and password else None
 
     async def execute(self, command: str) -> ServiceResult:
-        method, path, body = _parse_es_command(command)
+        try:
+            method, path, body = _parse_es_command(command)
+        except ValueError as e:
+            return ServiceResult(success=False, output="", error=str(e))
+
         url = f"{self._base_url}{path}"
         body_preview = str(body)[:200] if body else ""
         log.info("Executing", method=method, path=path, body_preview=body_preview)
 
-        async with httpx.AsyncClient(timeout=30, verify=False) as client:
-            kwargs: dict = {}
-            if self._auth:
-                kwargs["auth"] = self._auth
-            if body is not None:
-                kwargs["json"] = body
+        try:
+            async with httpx.AsyncClient(timeout=30, verify=False) as client:
+                kwargs: dict = {}
+                if self._auth:
+                    kwargs["auth"] = self._auth
+                if body is not None:
+                    kwargs["json"] = body
 
-            resp = await client.request(method, url, **kwargs)
+                resp = await client.request(method, url, **kwargs)
 
-        if resp.status_code >= 400:
-            log.info("Error", status_code=resp.status_code)
-            return ServiceResult(
-                success=False,
-                output="",
-                error=f"HTTP {resp.status_code}: {resp.text[:1000]}",
-            )
+            if resp.status_code >= 400:
+                log.info("Error", status_code=resp.status_code)
+                return ServiceResult(
+                    success=False,
+                    output="",
+                    error=f"HTTP {resp.status_code}: {resp.text[:1000]}",
+                )
 
-        # Try to format as pretty JSON, fall back to raw text
-        content_type = resp.headers.get("content-type", "")
-        if "json" in content_type:
-            try:
-                output = json.dumps(resp.json(), indent=2, ensure_ascii=False)
-            except Exception:
+            # Try to format as pretty JSON, fall back to raw text
+            content_type = resp.headers.get("content-type", "")
+            if "json" in content_type:
+                try:
+                    output = json.dumps(resp.json(), indent=2, ensure_ascii=False)
+                except Exception:
+                    output = resp.text
+            else:
                 output = resp.text
-        else:
-            output = resp.text
 
-        log.info("Result", status_code=resp.status_code, output_len=len(output))
-        return ServiceResult(success=True, output=output)
+            log.info("Result", status_code=resp.status_code, output_len=len(output))
+            return ServiceResult(success=True, output=output)
+        except Exception as e:
+            log.error("Execute failed", error=str(e))
+            return ServiceResult(success=False, output="", error=f"{type(e).__name__}: {e}")
 
     async def close(self) -> None:
         pass  # httpx client is created per-request

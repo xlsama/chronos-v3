@@ -36,31 +36,35 @@ class MySQLConnector(ServiceConnector):
         return self._pool
 
     async def execute(self, command: str) -> ServiceResult:
-        pool = await self._get_pool()
-        cmd = command.strip()
-        upper = cmd.upper()
+        try:
+            pool = await self._get_pool()
+            cmd = command.strip()
+            upper = cmd.upper()
 
-        is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC|WITH\s)", upper))
-        log.info("Executing", mode="query" if is_query else "statement", command_len=len(cmd))
-        log.debug("Executing", command=cmd)
+            is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC|WITH\s)", upper))
+            log.info("Executing", mode="query" if is_query else "statement", command_len=len(cmd))
+            log.debug("Executing", command=cmd)
 
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(cmd)
-                if is_query:
-                    rows = await cur.fetchall()
-                    columns = [d[0] for d in cur.description] if cur.description else []
-                    output = format_as_table(columns, rows)
-                    log.info("Query returned", row_count=len(rows))
-                    return ServiceResult(success=True, output=output, row_count=len(rows))
-                else:
-                    await conn.commit()
-                    log.info("Statement affected", row_count=cur.rowcount)
-                    return ServiceResult(
-                        success=True,
-                        output=f"执行成功: 影响 {cur.rowcount} 行",
-                        row_count=cur.rowcount,
-                    )
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(cmd)
+                    if is_query:
+                        rows = await cur.fetchall()
+                        columns = [d[0] for d in cur.description] if cur.description else []
+                        output = format_as_table(columns, rows)
+                        log.info("Query returned", row_count=len(rows))
+                        return ServiceResult(success=True, output=output, row_count=len(rows))
+                    else:
+                        await conn.commit()
+                        log.info("Statement affected", row_count=cur.rowcount)
+                        return ServiceResult(
+                            success=True,
+                            output=f"执行成功: 影响 {cur.rowcount} 行",
+                            row_count=cur.rowcount,
+                        )
+        except Exception as e:
+            log.error("Execute failed", error=str(e))
+            return ServiceResult(success=False, output="", error=f"{type(e).__name__}: {e}")
 
     async def close(self) -> None:
         if self._pool:

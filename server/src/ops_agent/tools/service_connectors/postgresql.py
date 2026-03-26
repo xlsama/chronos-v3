@@ -34,30 +34,34 @@ class PostgreSQLConnector(ServiceConnector):
         return self._pool
 
     async def execute(self, command: str) -> ServiceResult:
-        pool = await self._get_pool()
-        cmd = command.strip()
-        upper = cmd.upper()
+        try:
+            pool = await self._get_pool()
+            cmd = command.strip()
+            upper = cmd.upper()
 
-        # Determine if this is a query (returns rows) or a statement
-        is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|WITH\s)", upper))
-        log.info("Executing", mode="query" if is_query else "statement", command_len=len(cmd))
-        log.debug("Executing", command=cmd)
+            # Determine if this is a query (returns rows) or a statement
+            is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|WITH\s)", upper))
+            log.info("Executing", mode="query" if is_query else "statement", command_len=len(cmd))
+            log.debug("Executing", command=cmd)
 
-        async with pool.acquire() as conn:
-            if is_query:
-                rows = await conn.fetch(cmd)
-                if not rows:
-                    log.info("Query returned 0 rows")
-                    return ServiceResult(success=True, output="(0 rows)", row_count=0)
-                columns = list(rows[0].keys())
-                data = [tuple(row.values()) for row in rows]
-                output = format_as_table(columns, data)
-                log.info("Query returned", row_count=len(data))
-                return ServiceResult(success=True, output=output, row_count=len(data))
-            else:
-                result = await conn.execute(cmd)
-                log.info("Statement result", result=result)
-                return ServiceResult(success=True, output=f"执行成功: {result}")
+            async with pool.acquire() as conn:
+                if is_query:
+                    rows = await conn.fetch(cmd)
+                    if not rows:
+                        log.info("Query returned 0 rows")
+                        return ServiceResult(success=True, output="(0 rows)", row_count=0)
+                    columns = list(rows[0].keys())
+                    data = [tuple(row.values()) for row in rows]
+                    output = format_as_table(columns, data)
+                    log.info("Query returned", row_count=len(data))
+                    return ServiceResult(success=True, output=output, row_count=len(data))
+                else:
+                    result = await conn.execute(cmd)
+                    log.info("Statement result", result=result)
+                    return ServiceResult(success=True, output=f"执行成功: {result}")
+        except Exception as e:
+            log.error("Execute failed", error=str(e))
+            return ServiceResult(success=False, output="", error=f"{type(e).__name__}: {e}")
 
     async def close(self) -> None:
         if self._pool:

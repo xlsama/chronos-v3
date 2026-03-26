@@ -66,10 +66,14 @@ class RedisConnector(ServiceConnector):
         args_str = " ".join(parts[1:])
         log.info("Executing", command=parts[0], args_len=len(args_str))
         log.debug("Executing", command=parts[0], args=args_str)
-        result = await client.execute_command(*parts)
-        output = _format_redis_result(result)
-        log.info("Result", output_len=len(output))
-        return ServiceResult(success=True, output=output)
+        try:
+            result = await client.execute_command(*parts)
+            output = _format_redis_result(result)
+            log.info("Result", output_len=len(output))
+            return ServiceResult(success=True, output=output)
+        except Exception as e:
+            log.error("Execute failed", error=str(e))
+            return ServiceResult(success=False, output="", error=f"{type(e).__name__}: {e}")
 
     async def close(self) -> None:
         if self._client:

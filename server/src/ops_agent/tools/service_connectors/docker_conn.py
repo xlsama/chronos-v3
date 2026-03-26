@@ -315,9 +315,12 @@ class DockerConnector(ServiceConnector):
             return await asyncio.to_thread(self._execute_sync, command)
         except Exception as e:
             error_msg = str(e)
+            log.error("Execute failed", error=error_msg)
             if "404" in error_msg or "not found" in error_msg.lower():
                 return ServiceResult(success=False, output="", error=f"容器或镜像不存在: {e}")
-            raise
+            return ServiceResult(
+                success=False, output="", error=f"{type(e).__name__}: {e}"
+            )
 
     async def close(self) -> None:
         if self._client:

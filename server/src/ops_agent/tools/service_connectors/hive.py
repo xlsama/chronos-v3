@@ -34,28 +34,32 @@ class HiveConnector(ServiceConnector):
         return self._conn
 
     def _execute_sync(self, command: str) -> ServiceResult:
-        conn = self._get_conn()
-        cmd = command.strip()
-        upper = cmd.upper()
-
-        is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC|WITH\s)", upper))
-        log.info("Executing", mode="query" if is_query else "statement", command_len=len(cmd))
-        log.debug("Executing", command=cmd)
-
-        cursor = conn.cursor()
         try:
-            cursor.execute(cmd)
-            if is_query:
-                rows = cursor.fetchall()
-                columns = [d[0] for d in cursor.description] if cursor.description else []
-                output = format_as_table(columns, rows)
-                log.info("Query returned", row_count=len(rows))
-                return ServiceResult(success=True, output=output, row_count=len(rows))
-            else:
-                log.info("Statement executed")
-                return ServiceResult(success=True, output="执行成功")
-        finally:
-            cursor.close()
+            conn = self._get_conn()
+            cmd = command.strip()
+            upper = cmd.upper()
+
+            is_query = bool(re.match(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC|WITH\s)", upper))
+            log.info("Executing", mode="query" if is_query else "statement", command_len=len(cmd))
+            log.debug("Executing", command=cmd)
+
+            cursor = conn.cursor()
+            try:
+                cursor.execute(cmd)
+                if is_query:
+                    rows = cursor.fetchall()
+                    columns = [d[0] for d in cursor.description] if cursor.description else []
+                    output = format_as_table(columns, rows)
+                    log.info("Query returned", row_count=len(rows))
+                    return ServiceResult(success=True, output=output, row_count=len(rows))
+                else:
+                    log.info("Statement executed")
+                    return ServiceResult(success=True, output="执行成功")
+            finally:
+                cursor.close()
+        except Exception as e:
+            log.error("Execute failed", error=str(e))
+            return ServiceResult(success=False, output="", error=f"{type(e).__name__}: {e}")
 
     async def execute(self, command: str) -> ServiceResult:
         return await asyncio.to_thread(self._execute_sync, command)
