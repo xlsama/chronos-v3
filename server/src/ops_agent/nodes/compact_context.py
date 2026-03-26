@@ -1,4 +1,3 @@
-import asyncio
 import time
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -13,7 +12,7 @@ from src.ops_agent.prompts.compact import COMPACT_SYSTEM_PROMPT, COMPACT_USER_PR
 from src.ops_agent.state import OpsState
 
 # 每次 tool call/response 约 11-12k tokens，30 条消息 ≈ 15 轮 tool call
-COMPACT_THRESHOLD = 50
+COMPACT_THRESHOLD = 100
 # 最多压缩 5 次，之后不再压缩
 MAX_COMPACT_COUNT = 5
 
@@ -120,14 +119,11 @@ async def compact_context_node(state: OpsState) -> dict:
     )
 
     t0 = time.monotonic()
-    response = await asyncio.wait_for(
-        llm.ainvoke(
-            [
-                SystemMessage(content=COMPACT_SYSTEM_PROMPT),
-                HumanMessage(content=user_prompt),
-            ]
-        ),
-        timeout=60,
+    response = await llm.ainvoke(
+        [
+            SystemMessage(content=COMPACT_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ]
     )
     elapsed = time.monotonic() - t0
 

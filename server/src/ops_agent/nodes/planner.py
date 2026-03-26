@@ -1,4 +1,3 @@
-import asyncio
 import time
 import uuid
 
@@ -80,47 +79,46 @@ async def planner_node(state: OpsState) -> dict:
     chunk_count = 0
     publish_errors = 0
     t0 = time.monotonic()
-    async with asyncio.timeout(60):
-        async for chunk in llm.astream(messages):
-            text = chunk.content if hasattr(chunk, "content") else ""
-            if text:
-                chunk_count += 1
-                content += text
-                if first_token_time is None:
-                    first_token_time = time.monotonic()
-                    ttft = first_token_time - t0
-                    log.info("First token received", ttft=f"{ttft:.2f}s")
-                    try:
-                        await publisher.publish(
-                            channel,
-                            "planner_progress",
-                            {
-                                "status": "first_token_received",
-                                "ttft": round(ttft, 2),
-                                "phase": "planning",
-                            },
-                        )
-                    except Exception as e:
-                        log.warning("Failed to publish first_token progress", error=str(e))
-                if chunk_count % 10 == 0:
-                    log.debug(
-                        "Streaming progress",
-                        chunks=chunk_count,
-                        chars=len(content),
-                        elapsed=f"{time.monotonic() - t0:.1f}s",
-                    )
+    async for chunk in llm.astream(messages):
+        text = chunk.content if hasattr(chunk, "content") else ""
+        if text:
+            chunk_count += 1
+            content += text
+            if first_token_time is None:
+                first_token_time = time.monotonic()
+                ttft = first_token_time - t0
+                log.info("First token received", ttft=f"{ttft:.2f}s")
                 try:
                     await publisher.publish(
-                        channel, "thinking", {"content": text, "phase": "planning"}
+                        channel,
+                        "planner_progress",
+                        {
+                            "status": "first_token_received",
+                            "ttft": round(ttft, 2),
+                            "phase": "planning",
+                        },
                     )
                 except Exception as e:
-                    publish_errors += 1
-                    if publish_errors <= 3:
-                        log.warning(
-                            "Failed to publish thinking event",
-                            error=str(e),
-                            chunk=chunk_count,
-                        )
+                    log.warning("Failed to publish first_token progress", error=str(e))
+            if chunk_count % 10 == 0:
+                log.debug(
+                    "Streaming progress",
+                    chunks=chunk_count,
+                    chars=len(content),
+                    elapsed=f"{time.monotonic() - t0:.1f}s",
+                )
+            try:
+                await publisher.publish(
+                    channel, "thinking", {"content": text, "phase": "planning"}
+                )
+            except Exception as e:
+                publish_errors += 1
+                if publish_errors <= 3:
+                    log.warning(
+                        "Failed to publish thinking event",
+                        error=str(e),
+                        chunk=chunk_count,
+                    )
     elapsed = time.monotonic() - t0
     ttft_str = f"{first_token_time - t0:.2f}s" if first_token_time else "no_tokens"
     log.info(

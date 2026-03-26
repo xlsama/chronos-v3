@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 import time
@@ -178,7 +177,7 @@ async def _run_evaluator(state: OpsState) -> dict:
     tool_call_count = 0
     for i in range(MAX_EVAL_TOOL_CALLS + 1):
         t0 = time.monotonic()
-        response = await asyncio.wait_for(llm_with_tools.ainvoke(messages), timeout=60)
+        response = await llm_with_tools.ainvoke(messages)
         elapsed = time.monotonic() - t0
 
         content = response.content if hasattr(response, "content") else ""
