@@ -131,7 +131,7 @@ def build_tools():
     ) -> str:
         """更新调查计划。当你获得新证据、确认或排除某个假设时，调用此工具更新计划。
         输入完整的更新后调查计划（Markdown 格式），会替换当前计划。
-        更新假设状态时，修改对应标题中的状态标记：[pending] → [investigating] → [confirmed] 或 [eliminated]。
+        更新假设状态时，修改对应标题中的状态标记：[待验证] → [排查中] → [已确认] 或 [已排除]。
         同时更新正向/反向证据列表和下一步行动。
         - plan_md: 更新后的完整调查计划 Markdown
         """
@@ -141,7 +141,7 @@ def build_tools():
         old_plan = await _read_plan_from_db(incident_id)
         old_statuses = _extract_hypothesis_statuses(old_plan)
         new_statuses = _extract_hypothesis_statuses(plan_md)
-        terminal = ("confirmed", "eliminated")
+        terminal = ("已确认", "已排除")
         changed_hypotheses = [
             h
             for h in new_statuses
@@ -302,10 +302,20 @@ def _build_runtime_hints(state: OpsState) -> str:
 
 
 def _extract_hypothesis_statuses(plan_md: str) -> dict[str, str]:
-    """从 plan markdown 中提取所有假设的状态。返回 {"H1": "pending", "H2": "investigating", ...}"""
+    """从 plan markdown 中提取所有假设的状态。返回 {"H1": "待验证", "H2": "排查中", ...}"""
     if not plan_md:
         return {}
-    return dict(re.findall(r"### (H\d+) \[(pending|investigating|confirmed|eliminated)\]", plan_md))
+    matches = re.findall(
+        r"### (H\d+) \[(待验证|排查中|已确认|已排除|pending|investigating|confirmed|eliminated)\]",
+        plan_md,
+    )
+    en_to_zh = {
+        "pending": "待验证",
+        "investigating": "排查中",
+        "confirmed": "已确认",
+        "eliminated": "已排除",
+    }
+    return {h: en_to_zh.get(s, s) for h, s in matches}
 
 
 async def _read_plan_from_db(incident_id: str) -> str:
@@ -326,6 +336,7 @@ async def _build_plan_context(incident_id: str) -> str:
     if plan_md:
         return f"## 当前调查计划\n\n{plan_md}"
     return ""
+
 
 async def main_agent_node(state: OpsState) -> dict:
     sid = state["incident_id"][:8]

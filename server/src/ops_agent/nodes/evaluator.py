@@ -115,10 +115,10 @@ def _apply_hypothesis_updates_md(plan_md: str, updates: list[dict]) -> str | Non
             continue
         h_id = u["id"]
         new_status = u["status"]
-        if new_status not in ("confirmed", "eliminated", "investigating"):
+        if new_status not in ("已确认", "已排除", "排查中"):
             continue
-        # 替换假设标题中的状态: ### H1 [pending] → ### H1 [confirmed]
-        pattern = rf"(### {re.escape(h_id)} )\[(pending|investigating|confirmed|eliminated)\]"
+        # 替换假设标题中的状态: ### H1 [待验证] → ### H1 [已确认]
+        pattern = rf"(### {re.escape(h_id)} )\[(待验证|排查中|已确认|已排除|pending|investigating|confirmed|eliminated)\]"
         replacement = rf"\1[{new_status}]"
         new_text = re.sub(pattern, replacement, updated)
         if new_text != updated:
@@ -127,7 +127,7 @@ def _apply_hypothesis_updates_md(plan_md: str, updates: list[dict]) -> str | Non
         # 追加评估证据
         evidence = u.get("evidence", "")
         if evidence:
-            evidence_label = "正向证据" if new_status == "confirmed" else "反向证据"
+            evidence_label = "正向证据" if new_status == "已确认" else "反向证据"
             # 找到对应假设的证据行并追加
             pattern_ev = (
                 rf"(### {re.escape(h_id)} \[{re.escape(new_status)}\].*?"
@@ -140,11 +140,7 @@ def _apply_hypothesis_updates_md(plan_md: str, updates: list[dict]) -> str | Non
                     new_evidence = f"[评估验证] {evidence}"
                 else:
                     new_evidence = f"{current_evidence}; [评估验证] {evidence}"
-                updated = (
-                    updated[: match.start(2)]
-                    + new_evidence
-                    + updated[match.end(2) :]
-                )
+                updated = updated[: match.start(2)] + new_evidence + updated[match.end(2) :]
 
     return updated if changed else None
 
@@ -217,9 +213,7 @@ async def _run_evaluator(state: OpsState) -> dict:
             args = tc.get("args", {})
 
             if name not in tool_map:
-                messages.append(
-                    ToolMessage(content=f"未知工具: {name}", tool_call_id=tc["id"])
-                )
+                messages.append(ToolMessage(content=f"未知工具: {name}", tool_call_id=tc["id"]))
                 continue
 
             tool_call_count += 1
@@ -319,9 +313,7 @@ async def evaluator_node(state: OpsState) -> dict:
                 # 写入 DB
                 try:
                     async with get_session_factory()() as session:
-                        incident = await session.get(
-                            Incident, uuid.UUID(state["incident_id"])
-                        )
+                        incident = await session.get(Incident, uuid.UUID(state["incident_id"]))
                         if incident:
                             incident.plan_md = updated_md
                             await session.commit()
@@ -345,22 +337,20 @@ async def evaluator_node(state: OpsState) -> dict:
                     updates=[u.get("id") for u in hypothesis_updates],
                 )
 
-    # 验证失败打回时，回退 [confirmed] → [investigating]，防止重复触发 evaluator
+    # 验证失败打回时，回退 [已确认] → [排查中]，防止重复触发 evaluator
     if result.get("recommendation") == "return_to_agent":
         plan_md = await _read_plan_from_db(state["incident_id"])
         if plan_md:
             reverted_md = re.sub(
-                r"(### H\d+) \[confirmed\]",
-                r"\1 [investigating]",
+                r"(### H\d+) \[(已确认|confirmed)\]",
+                r"\1 [排查中]",
                 plan_md,
             )
             if reverted_md != plan_md:
                 log.info("Reverting confirmed hypotheses to investigating after eval failure")
                 try:
                     async with get_session_factory()() as session:
-                        incident = await session.get(
-                            Incident, uuid.UUID(state["incident_id"])
-                        )
+                        incident = await session.get(Incident, uuid.UUID(state["incident_id"]))
                         if incident:
                             incident.plan_md = reverted_md
                             await session.commit()

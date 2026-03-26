@@ -26,7 +26,7 @@ def route_after_approval(state: OpsState) -> str:
 def _has_hypothesis_transition(state: OpsState) -> bool:
     """检测最近一轮 tool 执行中 update_plan 是否触发了假设状态变更。
 
-    update_plan 工具在检测到假设从 pending/investigating 变为 confirmed/eliminated 时，
+    update_plan 工具在检测到假设从 待验证/排查中 变为 已确认/已排除 时，
     会在返回值中包含"假设状态已变更"。检查 ToolMessage 的 content 来判断。
     """
     for msg in reversed(state["messages"]):
@@ -43,7 +43,7 @@ def route_after_tools(state: OpsState) -> str:
     sid = state["incident_id"][:8]
     log = get_logger(component="router", sid=sid)
 
-    # 假设状态变更（confirmed/eliminated）→ 压缩上下文，开启新轮次
+    # 假设状态变更（已确认/已排除）→ 压缩上下文，开启新轮次
     if _has_hypothesis_transition(state):
         log.info("route_after_tools -> compact_context (hypothesis transition)")
         return "compact_context"
