@@ -4,13 +4,16 @@ import time
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
+from src.db.connection import get_session_factory
 from src.env import get_settings
 from src.lib.logger import get_logger
+from src.lib.redis import get_redis
+from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.prompts.compact import COMPACT_SYSTEM_PROMPT, COMPACT_USER_PROMPT
 from src.ops_agent.state import OpsState
 
 # 每次 tool call/response 约 11-12k tokens，30 条消息 ≈ 15 轮 tool call
-COMPACT_THRESHOLD = 30
+COMPACT_THRESHOLD = 50
 # 最多压缩 5 次，之后不再压缩
 MAX_COMPACT_COUNT = 5
 
@@ -120,6 +123,22 @@ async def compact_context_node(state: OpsState) -> dict:
         first_human_msg,
         SystemMessage(content=f"## 排查进度摘要（第 {compact_count + 1} 次压缩）\n\n{summary}"),
     ]
+
+    # 发布 round_ended 事件（告知前端本轮排查结束，开启新轮次）
+    try:
+        channel = EventPublisher.channel_for_incident(state["incident_id"])
+        publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
+        await publisher.publish(
+            channel,
+            "round_ended",
+            {
+                "round": compact_count + 1,
+                "summary": summary[:500],
+                "phase": "investigation",
+            },
+        )
+    except Exception as e:
+        log.warning("Failed to publish round_ended event", error=str(e))
 
     return {
         "messages": compacted_messages,

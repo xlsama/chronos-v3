@@ -137,16 +137,18 @@ def build_tools():
         """
         incident_id = state["incident_id"]
         plan_log = get_logger(component="update_plan")
-        # 读取旧 plan，对比检测新增 confirmed
+        # 读取旧 plan，对比检测假设状态变更（confirmed 或 eliminated）
         old_plan = await _read_plan_from_db(incident_id)
-        old_confirmed = _extract_confirmed_ids(old_plan)
-        new_confirmed = _extract_confirmed_ids(plan_md)
-        has_new_confirmation = bool(new_confirmed - old_confirmed)
-        if has_new_confirmation:
-            plan_log.info(
-                "New hypothesis confirmed",
-                new=sorted(new_confirmed - old_confirmed),
-            )
+        old_statuses = _extract_hypothesis_statuses(old_plan)
+        new_statuses = _extract_hypothesis_statuses(plan_md)
+        terminal = ("confirmed", "eliminated")
+        changed_hypotheses = [
+            h
+            for h in new_statuses
+            if new_statuses[h] in terminal and old_statuses.get(h) not in terminal
+        ]
+        if changed_hypotheses:
+            plan_log.info("Hypothesis status changed", changed=changed_hypotheses)
         # 写入 DB
         try:
             async with get_session_factory()() as session:
@@ -165,9 +167,17 @@ def build_tools():
             )
         except Exception as e:
             plan_log.warning("Failed to publish plan_updated event", error=str(e))
-        if has_new_confirmation:
-            return "调查计划已更新，新假设已确认，等待系统验证"
+        if changed_hypotheses:
+            return "调查计划已更新，假设状态已变更"
         return "调查计划已更新"
+
+    @tool
+    def complete(answer_md: str) -> str:
+        """排查完成，输出最终结论。answer_md 是完整的排查报告（Markdown），包含根因、证据链、建议。
+        只在你已经验证问题已解决或已充分诊断后调用。
+        - answer_md: 排查结论的 Markdown 内容，直面问题，给出根因和建议
+        """
+        return answer_md
 
     return [
         ssh_bash,
@@ -178,6 +188,7 @@ def build_tools():
         read_skill,
         ask_human,
         update_plan,
+        complete,
     ]
 
 
@@ -290,11 +301,11 @@ def _build_runtime_hints(state: OpsState) -> str:
     return ""
 
 
-def _extract_confirmed_ids(plan_md: str) -> set[str]:
-    """从 plan markdown 中提取所有 [confirmed] 状态的假设 ID。"""
+def _extract_hypothesis_statuses(plan_md: str) -> dict[str, str]:
+    """从 plan markdown 中提取所有假设的状态。返回 {"H1": "pending", "H2": "investigating", ...}"""
     if not plan_md:
-        return set()
-    return set(re.findall(r"### (H\d+) \[confirmed\]", plan_md))
+        return {}
+    return dict(re.findall(r"### (H\d+) \[(pending|investigating|confirmed|eliminated)\]", plan_md))
 
 
 async def _read_plan_from_db(incident_id: str) -> str:
@@ -431,8 +442,8 @@ async def route_decision(state: OpsState) -> str:
             content_preview = last_message.content[:200]
 
         if state.get("ask_human_count", 0) >= 5:
-            log.warning("ask_human count exceeded limit, forcing evaluator")
-            return "evaluator"
+            log.warning("ask_human count exceeded limit, forcing complete")
+            return "complete"
 
         max_retries = get_settings().tool_call_max_retries
         retry_count = state.get("tool_call_retry_count", 0)
@@ -456,10 +467,13 @@ async def route_decision(state: OpsState) -> str:
         if name not in valid_tool_names:
             log.warning("route_decision: unknown tool -> ask_human", tool=name)
             return "ask_human"
+        if name == "complete":
+            log.info("route_decision: tool=complete -> complete")
+            return "complete"
         if name == "ask_human":
             if state.get("ask_human_count", 0) >= 5:
-                log.warning("ask_human count exceeded limit, forcing evaluator")
-                return "evaluator"
+                log.warning("ask_human count exceeded limit, forcing complete")
+                return "complete"
             log.info("route_decision: tool=ask_human -> ask_human")
             return "ask_human"
         if name in ("ssh_bash", "bash"):

@@ -50,7 +50,7 @@ function IncidentDetailPage() {
   const { scrollRef, bottomRef, isAtBottom, scrollToBottom } = useAutoScroll({
     enabled: isActive,
     threshold: 100,
-    smooth: true,
+    smooth: false,
   });
 
   // 审批操作后强制滚动到底部，防止 shouldAutoScroll 被中间布局状态错误置 false

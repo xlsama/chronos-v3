@@ -248,6 +248,11 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
     ...baseSSEFields,
   }),
   z.object({
+    event_type: z.literal("planner_progress"),
+    data: z.object({ status: z.string() }).passthrough(),
+    ...baseSSEFields,
+  }),
+  z.object({
     event_type: z.literal("plan_generated"),
     data: z.object({ plan_md: z.string() }).passthrough(),
     ...baseSSEFields,

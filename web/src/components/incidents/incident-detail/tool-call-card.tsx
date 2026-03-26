@@ -241,7 +241,7 @@ export function ToolCallCard({
               <ShellCodeBlock
                 code={command}
                 showPrompt={!isApproval || !!output}
-                className="overflow-x-auto rounded-md border border-border/50 bg-background p-2 text-xs"
+                className="overflow-x-auto rounded-md border border-border/50 bg-background px-4 py-2 text-xs"
               />
             </div>
           )}
@@ -249,7 +249,7 @@ export function ToolCallCard({
           {hasNonCommandArgs && (
             <div>
               <p className="mb-1 text-xs font-medium text-muted-foreground">Input</p>
-              <pre className="overflow-x-auto rounded-md border border-border/50 bg-background p-2 text-xs">
+              <pre className="overflow-x-auto rounded-md border border-border/50 bg-background px-4 py-2 text-xs">
                 {JSON.stringify(args, null, 2)}
               </pre>
             </div>
@@ -266,7 +266,7 @@ export function ToolCallCard({
           {output && (
             <div data-testid="tool-output">
               <p className="mb-1 text-xs font-medium text-muted-foreground">Output</p>
-              <div className="max-h-60 overflow-auto rounded-md border border-border/50 bg-background p-2 text-xs">
+              <div className="max-h-60 overflow-auto rounded-md border border-border/50 bg-background px-4 py-2 text-xs">
                 <Markdown content={output} variant="tiny" />
               </div>
             </div>

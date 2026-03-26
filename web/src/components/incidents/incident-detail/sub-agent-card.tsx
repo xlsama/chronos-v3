@@ -106,7 +106,7 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
           {hasArgs && (
             <div>
               <p className="mb-1 text-xs font-medium text-muted-foreground">Input</p>
-              <pre className="overflow-auto rounded-md border border-border/50 bg-background p-1.5 text-xs">
+              <pre className="overflow-auto rounded-md border border-border/50 bg-background px-3 py-1.5 text-xs">
                 {JSON.stringify(args, null, 2)}
               </pre>
             </div>
@@ -114,7 +114,7 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
           {output && (
             <div>
               <p className="mb-1 text-xs font-medium text-muted-foreground">Output</p>
-              <div className="max-h-40 overflow-auto rounded-md border border-border/50 bg-background p-1.5 text-xs">
+              <div className="max-h-40 overflow-auto rounded-md border border-border/50 bg-background px-3 py-1.5 text-xs">
                 <Markdown content={output} variant="tiny" />
               </div>
             </div>

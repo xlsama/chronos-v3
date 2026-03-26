@@ -50,6 +50,7 @@ export function useIncidentStream(
     setApprovalDecided,
     setPlannerPlanMd,
     appendPlannerThinking,
+    setPlannerProgress,
     setEvaluationResult,
     appendEvaluatorThinking,
     setConnected,
@@ -234,7 +235,7 @@ export function useIncidentStream(
               setEvaluationResult(event.data.result as never);
             } else if (event.event_type === "evaluation_started") {
               // skip
-            } else if (event.event_type === "planner_started") {
+            } else if (event.event_type === "planner_started" || event.event_type === "planner_progress") {
               // skip — phase update handled below
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
@@ -374,6 +375,9 @@ export function useIncidentStream(
               clearAskHumanStream();
             }
           } else if (event.event_type === "planner_started") {
+            updatePhase("planning");
+          } else if (event.event_type === "planner_progress") {
+            setPlannerProgress(event.data.status as string);
             updatePhase("planning");
           } else if (event.event_type === "thinking") {
             setWaitingForAgent(false);

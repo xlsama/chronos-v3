@@ -30,6 +30,7 @@ interface IncidentStreamState {
   kbAgentState: SubAgentState;
   plannerPlanMd: string;
   plannerThinkingContent: string;
+  plannerProgress: string;
   evaluationResult: EvaluationResult | null;
   evaluatorThinkingContent: string;
   phaseState: PhaseState;
@@ -48,6 +49,7 @@ interface IncidentStreamState {
   setPlannerPlanMd: (md: string) => void;
   appendPlannerThinking: (content: string) => void;
   clearPlannerThinking: () => void;
+  setPlannerProgress: (status: string) => void;
   setEvaluationResult: (result: EvaluationResult | null) => void;
   appendEvaluatorThinking: (content: string) => void;
   clearEvaluatorThinking: () => void;
@@ -92,6 +94,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   kbAgentState: emptySubAgent(),
   plannerPlanMd: "",
   plannerThinkingContent: "",
+  plannerProgress: "",
   evaluationResult: null,
   evaluatorThinkingContent: "",
   phaseState: initialPhaseState(),
@@ -199,12 +202,14 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       };
     }),
 
-  setPlannerPlanMd: (md) => set({ plannerPlanMd: md, plannerThinkingContent: "" }),
+  setPlannerPlanMd: (md) => set({ plannerPlanMd: md, plannerThinkingContent: "", plannerProgress: "" }),
 
   appendPlannerThinking: (content) =>
     set((state) => ({ plannerThinkingContent: state.plannerThinkingContent + content })),
 
   clearPlannerThinking: () => set({ plannerThinkingContent: "" }),
+
+  setPlannerProgress: (status) => set({ plannerProgress: status }),
 
   setEvaluationResult: (result) => set({ evaluationResult: result, evaluatorThinkingContent: "" }),
 
@@ -316,8 +321,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // planner_started → skip (no UI state needed)
-      if (event.event_type === "planner_started") {
+      // planner_started / planner_progress → skip (no UI state needed)
+      if (event.event_type === "planner_started" || event.event_type === "planner_progress") {
         continue;
       }
 
@@ -401,6 +406,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       kbAgentState: emptySubAgent(),
       plannerPlanMd: "",
       plannerThinkingContent: "",
+      plannerProgress: "",
       evaluationResult: null,
       evaluatorThinkingContent: "",
       phaseState: initialPhaseState(),

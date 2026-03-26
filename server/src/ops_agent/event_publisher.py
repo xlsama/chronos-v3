@@ -32,6 +32,7 @@ _EVENT_ROLE = {
     "planner_started": "system",
     "plan_generated": "system",
     "plan_updated": "system",
+    "planner_progress": "system",
     "evaluation_started": "system",
     "evaluation_completed": "system",
 }
@@ -201,6 +202,8 @@ class EventPublisher:
             return ""
         if event_type == "planner_started":
             return ""
+        if event_type == "planner_progress":
+            return data.get("status", "")
         return ""
 
     @staticmethod
@@ -282,6 +285,11 @@ class EventPublisher:
             return None
         if event_type == "planner_started":
             return {"phase": data.get("phase", "")}
+        if event_type == "planner_progress":
+            meta = {"status": data.get("status", ""), "phase": data.get("phase", "")}
+            if data.get("ttft") is not None:
+                meta["ttft"] = data["ttft"]
+            return meta
         if event_type == "plan_generated":
             return {"plan_md": data.get("plan_md", ""), "phase": data.get("phase", "")}
         if event_type == "plan_updated":

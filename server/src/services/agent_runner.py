@@ -478,7 +478,15 @@ class AgentRunner:
 
         if "confirm_resolution" in (state.next or ()):
             log.info("confirm_resolution interrupt")
-            # answer 已由 generate_summary 节点流式推送，这里只发 confirm 事件
+            # 从最后的 complete tool_call 中提取 answer_md，推送到前端
+            answer_md = self._extract_complete_answer(vals)
+            if answer_md:
+                await self.publisher.publish(
+                    channel, "answer", {"content": answer_md, "phase": "investigation"}
+                )
+                await self.publisher.publish(
+                    channel, "answer_done", {"phase": "investigation"}
+                )
             await self.publisher.publish(channel, "confirm_resolution_required", {})
 
         if vals.get("is_complete"):
@@ -509,6 +517,18 @@ class AgentRunner:
                 for tc in msg.tool_calls:
                     if tc["name"] in AgentRunner._APPROVAL_TOOLS:
                         return tc
+        return None
+
+    @staticmethod
+    def _extract_complete_answer(vals: dict) -> str | None:
+        """Extract answer_md from the last complete() tool call."""
+        messages = vals.get("messages", [])
+        for msg in reversed(messages):
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    if tc["name"] == "complete":
+                        return tc["args"].get("answer_md", "")
+                break
         return None
 
     @staticmethod
@@ -557,8 +577,6 @@ class AgentRunner:
             return "gather_context", "history"
         if node == "planner":
             return "planning", ""
-        if node == "evaluator":
-            return "evaluation", ""
         return "investigation", ""
 
     async def _process_event(self, channel: str, event: dict) -> None:
@@ -569,7 +587,7 @@ class AgentRunner:
         sid = channel.split(":")[-1][:8] if ":" in channel else ""
         stream_log = get_logger(component="stream", sid=sid)
 
-        if node in ("gather_context", "confirm_resolution", "planner", "evaluator", "generate_summary"):
+        if node in ("gather_context", "confirm_resolution", "planner"):
             return
 
         phase, agent = self._get_phase_agent(event)
