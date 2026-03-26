@@ -99,15 +99,16 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
         const fileNames = attachments.map((a) => a.filename).join(", ");
         fullContent += `\n\n[附件: ${fileNames}]`;
       }
-      return decideApproval(pendingSupplement!.approvalId, {
+      await decideApproval(pendingSupplement!.approvalId, {
         decision: "supplemented",
         decided_by: "admin",
         supplement_text: fullContent,
         silent: true,
       });
+      return fullContent;
     },
-    onSuccess: () => {
-      setApprovalDecided(pendingSupplement!.approvalId, "supplemented");
+    onSuccess: (fullContent) => {
+      setApprovalDecided(pendingSupplement!.approvalId, "supplemented", fullContent);
       setPendingSupplement(null);
       triggerScrollToBottom();
     },

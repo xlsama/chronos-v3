@@ -48,8 +48,10 @@ export function useIncidentStream(
     setResolutionConfirmResolved,
     setWaitingForAgent,
     setApprovalDecided,
-    setPlannerPlan,
+    setPlannerPlanMd,
+    appendPlannerThinking,
     setEvaluationResult,
+    appendEvaluatorThinking,
     setConnected,
     reset,
     loadHistory,
@@ -217,6 +219,7 @@ export function useIncidentStream(
               setApprovalDecided(
                 event.data.approval_id as string,
                 event.data.decision as string,
+                event.data.supplement_text as string | undefined,
               );
             } else if (event.event_type === "thinking_done" || event.event_type === "answer_done" || event.event_type === "ask_human_done") {
               // DB boundary marker, skip
@@ -226,11 +229,13 @@ export function useIncidentStream(
             } else if (event.event_type === "resolution_confirmed") {
               setResolutionConfirmResolved(true);
             } else if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
-              setPlannerPlan(event.data.plan as never);
+              setPlannerPlanMd((event.data.plan_md as string) || "");
             } else if (event.event_type === "evaluation_completed") {
               setEvaluationResult(event.data.result as never);
             } else if (event.event_type === "evaluation_started") {
               // skip
+            } else if (event.event_type === "planner_started") {
+              // skip — phase update handled below
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
                 setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
@@ -288,6 +293,7 @@ export function useIncidentStream(
             setApprovalDecided(
               event.data.approval_id as string,
               event.data.decision as string,
+              event.data.supplement_text as string | undefined,
             );
           } else if (event.event_type === "done") {
             setWaitingForAgent(false);
@@ -367,20 +373,33 @@ export function useIncidentStream(
               setAskHumanQuestion(askHumanStreamContent);
               clearAskHumanStream();
             }
+          } else if (event.event_type === "planner_started") {
+            updatePhase("planning");
           } else if (event.event_type === "thinking") {
             setWaitingForAgent(false);
-            updatePhase("investigation");
-            appendThinking(event.data.content as string);
+            if (phase === "planning") {
+              updatePhase("planning");
+              appendPlannerThinking(event.data.content as string);
+            } else if (phase === "evaluation") {
+              appendEvaluatorThinking(event.data.content as string);
+            } else {
+              updatePhase("investigation");
+              appendThinking(event.data.content as string);
+            }
           } else if (event.event_type === "thinking_done") {
-            // Flush thinking buffer
-            const { thinkingContent } = useIncidentStreamStore.getState();
-            if (thinkingContent) {
-              addEvent({
-                event_type: "thinking",
-                data: { content: thinkingContent },
-                timestamp: event.timestamp,
-              });
-              clearThinking();
+            if (phase === "planning" || phase === "evaluation") {
+              // Planner/evaluator thinking done — structured result event will follow
+            } else {
+              // Flush thinking buffer
+              const { thinkingContent } = useIncidentStreamStore.getState();
+              if (thinkingContent) {
+                addEvent({
+                  event_type: "thinking",
+                  data: { content: thinkingContent },
+                  timestamp: event.timestamp,
+                });
+                clearThinking();
+              }
             }
           } else if (event.event_type === "answer") {
             setWaitingForAgent(false);
@@ -409,13 +428,15 @@ export function useIncidentStream(
               clearAnswer();
             }
           } else if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
-            setPlannerPlan(event.data.plan as never);
+            setPlannerPlanMd((event.data.plan_md as string) || "");
             updatePhase(phase || "planning");
           } else if (event.event_type === "evaluation_started") {
-            updatePhase("evaluation");
+            // Add to investigation timeline as inline card
+            addEvent(event);
           } else if (event.event_type === "evaluation_completed") {
             setEvaluationResult(event.data.result as never);
-            updatePhase("evaluation");
+            // Add to investigation timeline as inline card
+            addEvent(event);
           } else if (event.event_type === "agent_status") {
             // main-phase agent_status: ignore (only relevant for gather_context)
           } else {

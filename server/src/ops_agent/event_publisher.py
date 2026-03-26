@@ -29,6 +29,7 @@ _EVENT_ROLE = {
     "agent_interrupted": "system",
     "confirm_resolution_required": "system",
     "resolution_confirmed": "system",
+    "planner_started": "system",
     "plan_generated": "system",
     "plan_updated": "system",
     "evaluation_started": "system",
@@ -198,6 +199,8 @@ class EventPublisher:
             return ""
         if event_type == "resolution_confirmed":
             return ""
+        if event_type == "planner_started":
+            return ""
         return ""
 
     @staticmethod
@@ -265,15 +268,28 @@ class EventPublisher:
                 "tool_call_id": data.get("tool_call_id", ""),
             }
         if event_type == "approval_decided":
-            return {
+            meta: dict = {
                 "approval_id": data.get("approval_id", ""),
                 "decision": data.get("decision", ""),
                 "decided_by": data.get("decided_by", ""),
             }
+            if data.get("supplement_text"):
+                meta["supplement_text"] = data["supplement_text"]
+            return meta
         if event_type == "confirm_resolution_required":
             return None
         if event_type == "resolution_confirmed":
             return None
+        if event_type == "planner_started":
+            return {"phase": data.get("phase", "")}
+        if event_type == "plan_generated":
+            return {"plan_md": data.get("plan_md", ""), "phase": data.get("phase", "")}
+        if event_type == "plan_updated":
+            return {"plan_md": data.get("plan_md", ""), "phase": data.get("phase", "")}
+        if event_type == "evaluation_started":
+            return {"attempt": data.get("attempt"), "phase": data.get("phase", "")}
+        if event_type == "evaluation_completed":
+            return {"result": data.get("result"), "phase": data.get("phase", "")}
         return None
 
     @staticmethod

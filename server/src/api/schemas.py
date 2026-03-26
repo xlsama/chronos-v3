@@ -186,6 +186,7 @@ class IncidentResponse(BaseModel):
     status: str
     severity: str
     summary_title: str | None
+    plan_md: str | None = None
     thread_id: str | None
     saved_to_memory: bool
     is_archived: bool
@@ -403,6 +404,21 @@ class BatchCreateResult(BaseModel):
     created: int
     skipped: int
     errors: list[str]
+
+
+class BatchTestItem(BaseModel):
+    id: uuid.UUID
+    name: str
+    type: str  # "service" | "server"
+    success: bool
+    message: str
+
+
+class BatchTestResponse(BaseModel):
+    results: list[BatchTestItem]
+    total: int
+    success_count: int
+    failure_count: int
 
 
 class SkillCreate(BaseModel):

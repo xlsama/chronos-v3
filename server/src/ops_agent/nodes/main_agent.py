@@ -1,10 +1,15 @@
-import asyncio
+import re
 import time
+import uuid
+from typing import Annotated
 
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import InjectedState
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+from src.db.connection import get_session_factory
+from src.db.models import Incident
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import OpsState
 from src.env import get_settings
@@ -15,6 +20,8 @@ from src.ops_agent.tools.service_exec_tool import (
     list_services as _list_services,
 )
 from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
+from src.ops_agent.event_publisher import EventPublisher
+from src.lib.redis import get_redis
 from src.services.skill_service import SkillService
 from src.lib.logger import get_logger
 
@@ -118,9 +125,49 @@ def build_tools():
             return f"未找到: {path}"
 
     @tool
-    def complete(answer_md: str) -> str:
-        """排查完成后调用。answer_md 是给用户看的正式回答，要直面问题、给出结论和建议。"""
-        return answer_md
+    async def update_plan(
+        plan_md: str,
+        state: Annotated[dict, InjectedState],
+    ) -> str:
+        """更新调查计划。当你获得新证据、确认或排除某个假设时，调用此工具更新计划。
+        输入完整的更新后调查计划（Markdown 格式），会替换当前计划。
+        更新假设状态时，修改对应标题中的状态标记：[pending] → [investigating] → [confirmed] 或 [eliminated]。
+        同时更新正向/反向证据列表和下一步行动。
+        - plan_md: 更新后的完整调查计划 Markdown
+        """
+        incident_id = state["incident_id"]
+        plan_log = get_logger(component="update_plan")
+        # 读取旧 plan，对比检测新增 confirmed
+        old_plan = await _read_plan_from_db(incident_id)
+        old_confirmed = _extract_confirmed_ids(old_plan)
+        new_confirmed = _extract_confirmed_ids(plan_md)
+        has_new_confirmation = bool(new_confirmed - old_confirmed)
+        if has_new_confirmation:
+            plan_log.info(
+                "New hypothesis confirmed",
+                new=sorted(new_confirmed - old_confirmed),
+            )
+        # 写入 DB
+        try:
+            async with get_session_factory()() as session:
+                incident = await session.get(Incident, uuid.UUID(incident_id))
+                if incident:
+                    incident.plan_md = plan_md
+                    await session.commit()
+        except Exception as e:
+            plan_log.warning("Failed to save plan to DB", error=str(e))
+        # 发布 SSE
+        try:
+            channel = EventPublisher.channel_for_incident(incident_id)
+            publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
+            await publisher.publish(
+                channel, "plan_updated", {"plan_md": plan_md, "phase": "investigation"}
+            )
+        except Exception as e:
+            plan_log.warning("Failed to publish plan_updated event", error=str(e))
+        if has_new_confirmation:
+            return "调查计划已更新，新假设已确认，等待系统验证"
+        return "调查计划已更新"
 
     return [
         ssh_bash,
@@ -130,7 +177,7 @@ def build_tools():
         list_services,
         read_skill,
         ask_human,
-        complete,
+        update_plan,
     ]
 
 
@@ -209,8 +256,8 @@ def _log_retry(retry_state):
     before_sleep=_log_retry,
 )
 async def _invoke_llm_with_retry(llm, messages):
-    """Invoke LLM with retry and timeout."""
-    return await asyncio.wait_for(llm.ainvoke(messages), timeout=120)
+    """Invoke LLM with retry."""
+    return await llm.ainvoke(messages)
 
 
 def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> AIMessage:
@@ -243,47 +290,31 @@ def _build_runtime_hints(state: OpsState) -> str:
     return ""
 
 
-def _build_plan_context(state: OpsState) -> str:
-    """格式化调查计划为 system prompt 段落。"""
-    plan = state.get("investigation_plan")
-    if not plan:
-        return ""
+def _extract_confirmed_ids(plan_md: str) -> set[str]:
+    """从 plan markdown 中提取所有 [confirmed] 状态的假设 ID。"""
+    if not plan_md:
+        return set()
+    return set(re.findall(r"### (H\d+) \[confirmed\]", plan_md))
 
-    version = state.get("plan_version", 1)
-    lines = [f"## 当前调查计划 (v{version})\n"]
-    lines.append(f"- 症状分类: {plan.get('symptom_category', '未知')}")
-    lines.append(f"- 影响范围: {plan.get('target_scope', '未知')}")
-    lines.append(f"- 当前阶段: {plan.get('current_phase', '未知')}")
 
-    hypotheses = plan.get("hypotheses", [])
-    if hypotheses:
-        lines.append("\n### 假设列表")
-        for h in hypotheses:
-            status_icon = {
-                "pending": "⏳",
-                "investigating": "🔍",
-                "confirmed": "✅",
-                "eliminated": "❌",
-            }.get(h.get("status", "pending"), "⏳")
-            lines.append(
-                f"- {status_icon} [{h.get('id', '?')}] {h.get('description', '')}"
-                f" (优先级: {h.get('priority', '?')}, 观测面: {', '.join(h.get('observation_surfaces', []))})"
-            )
-            if h.get("evidence_for"):
-                lines.append(f"  支持证据: {'; '.join(h['evidence_for'])}")
-            if h.get("evidence_against"):
-                lines.append(f"  反对证据: {'; '.join(h['evidence_against'])}")
+async def _read_plan_from_db(incident_id: str) -> str:
+    """从数据库读取调查计划 Markdown。"""
+    try:
+        async with get_session_factory()() as session:
+            incident = await session.get(Incident, uuid.UUID(incident_id))
+            if incident and incident.plan_md:
+                return incident.plan_md
+    except Exception:
+        pass
+    return ""
 
-    null_hyp = plan.get("null_hypothesis")
-    if null_hyp:
-        lines.append(f"\n### 空假设\n{null_hyp}")
 
-    next_action = plan.get("next_action")
-    if next_action:
-        lines.append(f"\n### 下一步\n{next_action}")
-
-    return "\n".join(lines)
-
+async def _build_plan_context(incident_id: str) -> str:
+    """从数据库读取调查计划并包装为 system prompt 上下文。"""
+    plan_md = await _read_plan_from_db(incident_id)
+    if plan_md:
+        return f"## 当前调查计划\n\n{plan_md}"
+    return ""
 
 async def main_agent_node(state: OpsState) -> dict:
     sid = state["incident_id"][:8]
@@ -320,7 +351,7 @@ async def main_agent_node(state: OpsState) -> dict:
         history_summary,
         state["description"],
     )
-    plan_context = _build_plan_context(state)
+    plan_context = await _build_plan_context(state["incident_id"])
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         description=state["description"],
         severity=state["severity"],
@@ -366,12 +397,8 @@ async def main_agent_node(state: OpsState) -> dict:
             content_len=len(safe_response.content or ""),
         )
 
-    # 递增 plan 更新计数器
-    plan_counter = state.get("tool_call_count_since_plan_update", 0) + 1
-
     return {
         "messages": [safe_response],
-        "tool_call_count_since_plan_update": plan_counter,
     }
 
 
@@ -404,8 +431,8 @@ async def route_decision(state: OpsState) -> str:
             content_preview = last_message.content[:200]
 
         if state.get("ask_human_count", 0) >= 5:
-            log.warning("ask_human count exceeded limit, forcing complete")
-            return "complete"
+            log.warning("ask_human count exceeded limit, forcing evaluator")
+            return "evaluator"
 
         max_retries = get_settings().tool_call_max_retries
         retry_count = state.get("tool_call_retry_count", 0)
@@ -429,13 +456,10 @@ async def route_decision(state: OpsState) -> str:
         if name not in valid_tool_names:
             log.warning("route_decision: unknown tool -> ask_human", tool=name)
             return "ask_human"
-        if name == "complete":
-            log.info("route_decision: tool=complete -> complete")
-            return "complete"
         if name == "ask_human":
             if state.get("ask_human_count", 0) >= 5:
-                log.warning("ask_human count exceeded limit, forcing complete")
-                return "complete"
+                log.warning("ask_human count exceeded limit, forcing evaluator")
+                return "evaluator"
             log.info("route_decision: tool=ask_human -> ask_human")
             return "ask_human"
         if name in ("ssh_bash", "bash"):

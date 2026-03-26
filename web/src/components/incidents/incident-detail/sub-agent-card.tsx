@@ -85,7 +85,7 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
   const isExecuting = !item.toolResult;
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-white/60 text-xs">
+    <div className="rounded-lg border border-blue-200 bg-blue-50/50 text-xs">
       <button
         className="flex w-full items-center gap-1.5 p-2 text-left"
         onClick={() => setExpanded(!expanded)}
@@ -102,15 +102,21 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
         )}
       </button>
       {expanded && (
-        <div className="space-y-1.5 border-t border-blue-100 p-2">
+        <div className="space-y-2 border-t border-blue-100 p-2">
           {hasArgs && (
-            <pre className="overflow-auto rounded border-l-2 border-blue-400 bg-background p-1.5 pl-3 text-xs shadow-sm">
-              {JSON.stringify(args, null, 2)}
-            </pre>
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Input</p>
+              <pre className="overflow-auto rounded-md border border-border/50 bg-background p-1.5 text-xs">
+                {JSON.stringify(args, null, 2)}
+              </pre>
+            </div>
           )}
           {output && (
-            <div className="max-h-40 overflow-auto rounded border-l-2 border-green-400 bg-background p-1.5 pl-3 text-xs shadow-sm">
-              <Markdown content={output} variant="tiny" />
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Output</p>
+              <div className="max-h-40 overflow-auto rounded-md border border-border/50 bg-background p-1.5 text-xs">
+                <Markdown content={output} variant="tiny" />
+              </div>
             </div>
           )}
         </div>
@@ -204,14 +210,14 @@ export function SubAgentCard({
         "flex min-h-0 flex-col rounded-lg border",
         status === "failed"
           ? "border-red-200 bg-red-50/30"
-          : "border-blue-200 bg-blue-50/50",
+          : "border-border/60 bg-card",
         fixedLayout && expanded && "flex-1 overflow-hidden",
         className,
       )}
       data-testid="sub-agent-card"
     >
       <button
-        className="flex w-full items-center gap-2 p-3 text-left text-sm font-medium text-blue-800"
+        className="flex w-full items-center gap-2 p-3 text-left text-sm font-medium text-foreground"
         onClick={() => setUserExpanded(!expanded)}
       >
         {expanded ? (
@@ -222,13 +228,13 @@ export function SubAgentCard({
         <Icon className="h-4 w-4" />
         <span>{config.label}</span>
         {"subAgentName" in config && (
-          <span className="ml-1.5 rounded bg-blue-100 px-1 py-px text-[9px] font-normal text-blue-500">
+          <span className="ml-1.5 rounded bg-muted px-1 py-px text-[9px] font-normal text-muted-foreground">
             {config.subAgentName}
           </span>
         )}
         <span className="ml-auto inline-flex shrink-0 items-center gap-4">
           {status !== "started" && sources.length > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-normal text-blue-700">
+            <span className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
               <FileText className="h-3 w-3 shrink-0 opacity-60" />
               {sources.map((s, i) => (
                 <span key={s.id} className="inline-flex shrink-0 items-center">
@@ -236,7 +242,7 @@ export function SubAgentCard({
                   <span
                     role="button"
                     tabIndex={0}
-                    className="cursor-pointer hover:text-blue-900 hover:underline"
+                    className="cursor-pointer hover:text-foreground hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       setPreviewSource(s);
@@ -254,7 +260,7 @@ export function SubAgentCard({
               ))}
             </span>
           )}
-          <span className="shrink-0 text-xs text-blue-600">
+          <span className="shrink-0 text-xs text-muted-foreground">
             {statusText}
           </span>
         </span>
@@ -262,17 +268,17 @@ export function SubAgentCard({
 
       {expanded && (hasEvents || status === "started") && (
         <div
-          className="flex-1 min-h-0 overflow-y-auto space-y-2 px-3 pb-3 pl-9 text-sm text-blue-900/80"
+          className="flex-1 min-h-0 overflow-y-auto space-y-2 px-3 pb-3 pl-9 text-sm text-foreground/80"
           ref={scrollContainerRef}
         >
           {status === "started" && !hasEvents && (
             <div className="space-y-4">
-              <Skeleton className="h-3 w-11/12 bg-blue-200/50" />
-              <Skeleton className="h-3 w-3/5 bg-blue-200/50" />
-              <Skeleton className="h-3 w-4/5 bg-blue-200/50" />
-              <Skeleton className="h-3 w-2/3 bg-blue-200/50" />
-              <Skeleton className="h-3 w-5/6 bg-blue-200/50" />
-              <Skeleton className="h-3 w-1/2 bg-blue-200/50" />
+              <Skeleton className="h-3 w-11/12 bg-muted/50" />
+              <Skeleton className="h-3 w-3/5 bg-muted/50" />
+              <Skeleton className="h-3 w-4/5 bg-muted/50" />
+              <Skeleton className="h-3 w-2/3 bg-muted/50" />
+              <Skeleton className="h-3 w-5/6 bg-muted/50" />
+              <Skeleton className="h-3 w-1/2 bg-muted/50" />
             </div>
           )}
           {subAgentItems.map((item, i) => {

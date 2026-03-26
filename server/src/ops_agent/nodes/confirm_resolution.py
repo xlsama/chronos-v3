@@ -1,4 +1,4 @@
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import HumanMessage
 from langgraph.types import interrupt
 
 from src.lib.logger import get_logger
@@ -20,20 +20,10 @@ async def confirm_resolution_node(state: OpsState) -> dict:
         return {"is_complete": True}
 
     log.info("User wants to continue investigation")
-    new_messages = []
-    for msg in reversed(state["messages"]):
-        if hasattr(msg, "tool_calls") and msg.tool_calls:
-            for tc in msg.tool_calls:
-                if tc["name"] == "complete":
-                    new_messages.append(
-                        ToolMessage(
-                            content="用户表示问题未解决，需要继续排查。",
-                            tool_call_id=tc["id"],
-                        )
-                    )
-            break
-    new_messages.append(HumanMessage(content=user_response))
-    return {"messages": new_messages, "is_complete": False}
+    return {
+        "messages": [HumanMessage(content=f"用户表示问题未解决: {user_response}")],
+        "is_complete": False,
+    }
 
 
 def route_after_resolution(state: OpsState) -> str:

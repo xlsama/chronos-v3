@@ -37,8 +37,8 @@ def _format_message_for_summary(msg) -> str:
                     parts.append(f"[调用 service_exec] {args.get('command', '')}")
                 elif name == "ask_human":
                     parts.append(f"[调用 ask_human] {args.get('question', '')}")
-                elif name == "complete":
-                    parts.append(f"[调用 complete] {args.get('answer_md', '')[:200]}")
+                elif name == "update_plan":
+                    parts.append(f"[调用 update_plan] {args.get('plan_md', '')[:200]}")
                 else:
                     parts.append(f"[调用 {name}] {args}")
         return "\n".join(parts) if parts else ""

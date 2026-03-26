@@ -26,10 +26,6 @@ class AgentRunner:
         self.publisher = publisher
         self.redis = redis
         self.graph = compile_graph(checkpointer=checkpointer)
-        # Streaming answer state
-        self._answer_stream_active = False
-        self._answer_args_buffer = ""
-        self._answer_published_len = 0
         self._thinking_done_sent = False
         # Streaming ask_human state
         self._ask_human_stream_active = False
@@ -100,7 +96,7 @@ class AgentRunner:
         severity: str,
         image_attachments: list[dict] | None = None,
     ) -> str:
-        self._reset_answer_stream_state()
+        self._thinking_done_sent = False
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
         sid = incident_id[:8]
@@ -171,7 +167,7 @@ class AgentRunner:
         image_attachments: list[dict] | None = None,
     ) -> None:
         """Resume graph from ask_human interrupt with user's response."""
-        self._reset_answer_stream_state()
+        self._thinking_done_sent = False
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
         channel = EventPublisher.channel_for_incident(incident_id)
@@ -232,7 +228,7 @@ class AgentRunner:
         approval_id: str = "",
         approval_tool_name: str = "",
     ) -> None:
-        self._reset_answer_stream_state()
+        self._thinking_done_sent = False
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
         sid = incident_id[:8]
@@ -297,7 +293,7 @@ class AgentRunner:
         image_attachments: list[dict] | None = None,
     ) -> None:
         """Resume graph after human interrupt: inject human message and continue from main_agent."""
-        self._reset_answer_stream_state()
+        self._thinking_done_sent = False
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
         channel = EventPublisher.channel_for_incident(incident_id)
@@ -482,6 +478,7 @@ class AgentRunner:
 
         if "confirm_resolution" in (state.next or ()):
             log.info("confirm_resolution interrupt")
+            # answer 已由 generate_summary 节点流式推送，这里只发 confirm 事件
             await self.publisher.publish(channel, "confirm_resolution_required", {})
 
         if vals.get("is_complete"):
@@ -534,29 +531,10 @@ class AgentRunner:
                 return msg.content
         return None
 
-    def _reset_answer_stream_state(self) -> None:
-        self._answer_stream_active = False
-        self._answer_args_buffer = ""
-        self._answer_published_len = 0
-        self._thinking_done_sent = False
-        self._thinking_content_log_buffer = ""
-
     def _reset_ask_human_stream_state(self) -> None:
         self._ask_human_stream_active = False
         self._ask_human_args_buffer = ""
         self._ask_human_published_len = 0
-
-    def _extract_answer_delta(self) -> str | None:
-        for suffix in ['"}', '" }']:
-            try:
-                parsed = json.loads(self._answer_args_buffer + suffix)
-                content = parsed.get("answer_md", "")
-                delta = content[self._answer_published_len :]
-                self._answer_published_len = len(content)
-                return delta if delta else None
-            except (json.JSONDecodeError, ValueError):
-                continue
-        return None
 
     def _extract_ask_human_delta(self) -> str | None:
         """Same as _extract_answer_delta but extracts the question field."""
@@ -577,6 +555,10 @@ class AgentRunner:
         node = metadata.get("langgraph_node", "")
         if node == "gather_context":
             return "gather_context", "history"
+        if node == "planner":
+            return "planning", ""
+        if node == "evaluator":
+            return "evaluation", ""
         return "investigation", ""
 
     async def _process_event(self, channel: str, event: dict) -> None:
@@ -587,7 +569,7 @@ class AgentRunner:
         sid = channel.split(":")[-1][:8] if ":" in channel else ""
         stream_log = get_logger(component="stream", sid=sid)
 
-        if node in ("gather_context", "confirm_resolution"):
+        if node in ("gather_context", "confirm_resolution", "planner", "evaluator", "generate_summary"):
             return
 
         phase, agent = self._get_phase_agent(event)
@@ -599,25 +581,6 @@ class AgentRunner:
 
             if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                 for tcc in chunk.tool_call_chunks:
-                    if tcc.get("name") == "complete":
-                        self._answer_stream_active = True
-                        self._answer_args_buffer = ""
-                        self._answer_published_len = 0
-                        if not self._thinking_done_sent:
-                            await self.publisher.publish(
-                                channel,
-                                "thinking_done",
-                                {
-                                    "phase": phase,
-                                    "agent": agent,
-                                },
-                            )
-                            self._thinking_done_sent = True
-                        stream_log.info(
-                            "Answer stream started",
-                            thinking_chars=len(self._thinking_content_log_buffer),
-                        )
-
                     if tcc.get("name") == "ask_human":
                         self._ask_human_stream_active = True
                         self._ask_human_args_buffer = ""
@@ -627,29 +590,13 @@ class AgentRunner:
                             await self.publisher.publish(
                                 channel,
                                 "thinking_done",
-                                {
-                                    "phase": phase,
-                                    "agent": agent,
-                                },
+                                {"phase": phase, "agent": agent},
                             )
                             self._thinking_done_sent = True
                         stream_log.info(
                             "Ask_human stream started",
                             thinking_chars=len(self._thinking_content_log_buffer),
                         )
-
-                    if self._answer_stream_active and tcc.get("args"):
-                        self._answer_args_buffer += tcc["args"]
-                        delta = self._extract_answer_delta()
-                        if delta:
-                            await self.publisher.publish(
-                                channel,
-                                "answer",
-                                {
-                                    "content": delta,
-                                    "phase": phase,
-                                },
-                            )
 
                     if self._ask_human_stream_active and tcc.get("args"):
                         self._ask_human_args_buffer += tcc["args"]
@@ -658,16 +605,10 @@ class AgentRunner:
                             await self.publisher.publish(
                                 channel,
                                 "ask_human",
-                                {
-                                    "question": delta,
-                                },
+                                {"question": delta},
                             )
 
-            if (
-                chunk.content
-                and not self._answer_stream_active
-                and not self._ask_human_stream_active
-            ):
+            if chunk.content and not self._ask_human_stream_active:
                 self._thinking_content_log_buffer += chunk.content
                 await self.publisher.publish(
                     channel,
@@ -693,13 +634,7 @@ class AgentRunner:
             for tc in tool_calls:
                 main_log.info("LLM tool_call", name=tc["name"], args=tc.get("args", {}))
 
-            if self._answer_stream_active:
-                answer_len = self._answer_published_len
-                stream_log.info("Answer stream done", answer_chars=answer_len)
-                stream_log.debug("Answer content", content=self._answer_args_buffer)
-                await self.publisher.publish(channel, "answer_done", {"phase": phase})
-                self._reset_answer_stream_state()
-            elif self._ask_human_stream_active:
+            if self._ask_human_stream_active:
                 ask_human_len = self._ask_human_published_len
                 stream_log.info("Ask_human stream done", question_chars=ask_human_len)
                 await self.publisher.publish(channel, "ask_human_done", {})
@@ -717,23 +652,6 @@ class AgentRunner:
                         "agent": agent,
                     },
                 )
-                if hasattr(output, "tool_calls") and output.tool_calls:
-                    for tc in output.tool_calls:
-                        if tc["name"] == "complete":
-                            answer_md = tc["args"].get("answer_md", "")
-                            if answer_md:
-                                await self.publisher.publish(
-                                    channel,
-                                    "answer",
-                                    {
-                                        "content": answer_md,
-                                        "phase": phase,
-                                    },
-                                )
-                                await self.publisher.publish(
-                                    channel, "answer_done", {"phase": phase}
-                                )
-                            break
 
         elif kind == "on_tool_start":
             name = event.get("name", "")

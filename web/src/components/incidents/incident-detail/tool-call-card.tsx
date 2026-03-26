@@ -6,7 +6,7 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  ShieldAlert,
+  UserCheck,
   AlertTriangle,
   MessageSquarePlus,
 } from "lucide-react";
@@ -60,7 +60,9 @@ export function ToolCallCard({
   const setPendingSupplement = useIncidentStreamStore((s) => s.setPendingSupplement);
   const triggerScrollToBottom = useIncidentStreamStore((s) => s.triggerScrollToBottom);
 
-  const resolvedDecision = approvalId ? (decidedApprovals[approvalId] ?? null) : null;
+  const approvalEntry = approvalId ? (decidedApprovals[approvalId] ?? null) : null;
+  const resolvedDecision = approvalEntry?.decision ?? null;
+  const supplementText = approvalEntry?.supplementText;
   const isSupplementing = pendingSupplement?.approvalId === approvalId;
   const isExpired =
     incidentStatus === "stopped" ||
@@ -114,8 +116,6 @@ export function ToolCallCard({
           name: "text-red-900",
           spinner: "text-red-500",
           divider: "border-red-100",
-          cmdBorder: "border-red-400",
-          argBorder: "border-red-400",
           borderWidth: "border-2",
         }
       : {
@@ -126,8 +126,6 @@ export function ToolCallCard({
           name: "text-yellow-900",
           spinner: "text-yellow-500",
           divider: "border-yellow-100",
-          cmdBorder: "border-yellow-400",
-          argBorder: "border-yellow-400",
           borderWidth: "border-2",
         }
     : {
@@ -138,13 +136,11 @@ export function ToolCallCard({
         name: "text-blue-900",
         spinner: "text-blue-500",
         divider: "border-blue-100",
-        cmdBorder: "border-blue-400",
-        argBorder: "border-blue-400",
         borderWidth: "border",
       };
 
   // Decision badge component
-  const decisionBadge = resolvedDecision ? (
+  const baseBadge = resolvedDecision ? (
     <span
       className={cn(
         "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
@@ -163,6 +159,8 @@ export function ToolCallCard({
           : "已拒绝"}
     </span>
   ) : null;
+
+  const decisionBadge = baseBadge;
 
   return (
     <div
@@ -186,7 +184,7 @@ export function ToolCallCard({
           isHigh ? (
             <AlertTriangle className={cn("h-4 w-4 shrink-0", colors.icon)} />
           ) : (
-            <ShieldAlert className={cn("h-4 w-4 shrink-0", colors.icon)} />
+            <UserCheck className={cn("h-4 w-4 shrink-0", colors.icon)} />
           )
         ) : (
           <Wrench className={cn("h-4 w-4 shrink-0", colors.icon)} />
@@ -236,28 +234,25 @@ export function ToolCallCard({
             </div>
           )}
 
-          {/* Command */}
+          {/* Input */}
           {command && (
-            <ShellCodeBlock
-              code={command}
-              showPrompt={!isApproval || !!output}
-              className={cn(
-                "overflow-x-auto rounded bg-background p-2 text-xs shadow-sm",
-                isApproval && !output ? "border-l-0" : cn("border-l-2 pl-3", colors.cmdBorder),
-              )}
-            />
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Input</p>
+              <ShellCodeBlock
+                code={command}
+                showPrompt={!isApproval || !!output}
+                className="overflow-x-auto rounded-md border border-border/50 bg-background p-2 text-xs"
+              />
+            </div>
           )}
 
-          {/* Non-command args */}
           {hasNonCommandArgs && (
-            <pre
-              className={cn(
-                "overflow-x-auto rounded border-l-2 bg-background p-2 pl-3 text-xs shadow-sm",
-                colors.argBorder,
-              )}
-            >
-              {JSON.stringify(args, null, 2)}
-            </pre>
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Input</p>
+              <pre className="overflow-x-auto rounded-md border border-border/50 bg-background p-2 text-xs">
+                {JSON.stringify(args, null, 2)}
+              </pre>
+            </div>
           )}
 
           {/* Explanation */}
@@ -267,13 +262,23 @@ export function ToolCallCard({
             </p>
           )}
 
-          {/* Result */}
+          {/* Output */}
           {output && (
-            <div
-              className="max-h-60 overflow-auto rounded border-l-2 border-green-400 bg-background p-2 pl-3 text-xs shadow-sm"
-              data-testid="tool-output"
-            >
-              <Markdown content={output} variant="tiny" />
+            <div data-testid="tool-output">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Output</p>
+              <div className="max-h-60 overflow-auto rounded-md border border-border/50 bg-background p-2 text-xs">
+                <Markdown content={output} variant="tiny" />
+              </div>
+            </div>
+          )}
+
+          {/* Supplement content */}
+          {resolvedDecision === "supplemented" && supplementText && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">补充内容</p>
+              <div className="rounded-md border border-border/50 bg-background p-2 text-sm">
+                <Markdown content={supplementText} variant="compact" />
+              </div>
             </div>
           )}
 

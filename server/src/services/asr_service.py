@@ -31,6 +31,26 @@ def _convert_to_pcm(audio_data: bytes) -> bytes:
     return b"".join(pcm_parts)
 
 
+async def _wait_for_msg_type(ws, expected: str, timeout: float = 10) -> dict:
+    """Read WebSocket messages until we get the expected type."""
+    async with asyncio.timeout(timeout):
+        async for raw in ws:
+            if isinstance(raw, bytes):
+                continue
+            try:
+                msg = orjson.loads(raw)
+            except Exception:
+                continue
+            msg_type = msg.get("type", "")
+            log.debug("ASR ws msg", msg_type=msg_type)
+            if msg_type == expected:
+                return msg
+            if msg_type == "error":
+                error_msg = msg.get("error", {}).get("message", "unknown error")
+                raise RuntimeError(f"STT error: {error_msg}")
+    raise TimeoutError(f"Timeout waiting for {expected}")
+
+
 async def transcribe_audio(audio_data: bytes, filename: str) -> str:
     """Convert audio to PCM, stream to DashScope Realtime API, return text."""
     settings = get_settings()
@@ -39,6 +59,9 @@ async def transcribe_audio(audio_data: bytes, filename: str) -> str:
     pcm_data = await asyncio.to_thread(_convert_to_pcm, audio_data)
     if not pcm_data:
         return ""
+
+    duration_s = len(pcm_data) / (16000 * 2)
+    log.info("ASR pcm ready", pcm_bytes=len(pcm_data), duration_s=round(duration_s, 2))
 
     # Connect to DashScope Realtime API
     url = f"{settings.dashscope_ws_url}?model={settings.stt_model}"
@@ -52,41 +75,63 @@ async def transcribe_audio(audio_data: bytes, filename: str) -> str:
 
     texts: list[str] = []
     try:
-        # Stream PCM chunks
+        # 1. Wait for session.created
+        await _wait_for_msg_type(ws, "session.created")
+
+        # 2. Configure session for manual-mode ASR
+        await ws.send(json.dumps({
+            "type": "session.update",
+            "session": {
+                "modalities": ["text"],
+                "input_audio_format": "pcm",
+                "sample_rate": 16000,
+                "input_audio_transcription": {"language": "zh"},
+                "turn_detection": None,
+            },
+        }))
+        await _wait_for_msg_type(ws, "session.updated")
+
+        # 3. Stream PCM chunks
         for offset in range(0, len(pcm_data), CHUNK_BYTES):
             chunk = pcm_data[offset : offset + CHUNK_BYTES]
-            msg = json.dumps(
-                {
-                    "type": "input_audio_buffer.append",
-                    "audio": base64.b64encode(chunk).decode("ascii"),
-                }
-            )
-            await ws.send(msg)
+            await ws.send(json.dumps({
+                "type": "input_audio_buffer.append",
+                "audio": base64.b64encode(chunk).decode("ascii"),
+            }))
 
-        # Signal end of audio
-        await ws.send(json.dumps({"type": "session.finish"}))
+        # 4. Commit audio buffer to trigger transcription
+        await ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
 
-        # Collect results
-        async for raw in ws:
-            if isinstance(raw, bytes):
-                continue
-            try:
-                msg = orjson.loads(raw)
-            except Exception:
-                continue
+        # 5. Wait for transcription result
+        async with asyncio.timeout(30):
+            async for raw in ws:
+                if isinstance(raw, bytes):
+                    continue
+                try:
+                    msg = orjson.loads(raw)
+                except Exception:
+                    continue
 
-            msg_type = msg.get("type", "")
-            if msg_type == "conversation.item.input_audio_transcription.completed":
-                text = msg.get("transcript", "")
-                if text:
-                    texts.append(text)
-            elif msg_type == "session.finished":
-                break
-            elif msg_type == "error":
-                error_msg = msg.get("error", {}).get("message", "unknown error")
-                log.error("STT upstream error", message=error_msg)
-                raise RuntimeError(f"STT error: {error_msg}")
+                msg_type = msg.get("type", "")
+                log.debug("ASR ws msg", msg_type=msg_type)
+
+                if msg_type == "conversation.item.input_audio_transcription.completed":
+                    text = msg.get("transcript", "")
+                    if text:
+                        texts.append(text)
+                        log.info("ASR transcript", text_len=len(text), preview=text[:80])
+                    break
+                elif msg_type == "error":
+                    error_msg = msg.get("error", {}).get("message", "unknown error")
+                    log.error("STT upstream error", message=error_msg)
+                    raise RuntimeError(f"STT error: {error_msg}")
+    except TimeoutError:
+        log.error("ASR websocket timeout")
     finally:
         await ws.close()
 
-    return "".join(texts)
+    result = "".join(texts)
+    if not result:
+        log.warning("ASR returned empty text", session_done=session_done,
+                     transcription_done=transcription_done)
+    return result

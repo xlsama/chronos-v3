@@ -1,11 +1,13 @@
 import asyncio
 import json
+import re
 import time
-
+import uuid
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
 from src.db.connection import get_session_factory
+from src.db.models import Incident
 from src.env import get_settings
 from src.lib.logger import get_logger
 from src.lib.redis import get_redis
@@ -89,6 +91,64 @@ def _parse_evaluation_result(text: str) -> dict | None:
         return None
 
 
+async def _read_plan_from_db(incident_id: str) -> str:
+    """从数据库读取调查计划 Markdown。"""
+    try:
+        async with get_session_factory()() as session:
+            incident = await session.get(Incident, uuid.UUID(incident_id))
+            if incident and incident.plan_md:
+                return incident.plan_md
+    except Exception:
+        pass
+    return ""
+
+
+def _apply_hypothesis_updates_md(plan_md: str, updates: list[dict]) -> str | None:
+    """根据 hypothesis_updates 更新 Markdown 计划中的假设状态。"""
+    if not plan_md or not updates:
+        return None
+
+    updated = plan_md
+    changed = False
+    for u in updates:
+        if not isinstance(u, dict) or "id" not in u or "status" not in u:
+            continue
+        h_id = u["id"]
+        new_status = u["status"]
+        if new_status not in ("confirmed", "eliminated", "investigating"):
+            continue
+        # 替换假设标题中的状态: ### H1 [pending] → ### H1 [confirmed]
+        pattern = rf"(### {re.escape(h_id)} )\[(pending|investigating|confirmed|eliminated)\]"
+        replacement = rf"\1[{new_status}]"
+        new_text = re.sub(pattern, replacement, updated)
+        if new_text != updated:
+            updated = new_text
+            changed = True
+        # 追加评估证据
+        evidence = u.get("evidence", "")
+        if evidence:
+            evidence_label = "正向证据" if new_status == "confirmed" else "反向证据"
+            # 找到对应假设的证据行并追加
+            pattern_ev = (
+                rf"(### {re.escape(h_id)} \[{re.escape(new_status)}\].*?"
+                rf"- \*\*{evidence_label}\*\*: )(.*?)(\n|$)"
+            )
+            match = re.search(pattern_ev, updated, re.DOTALL)
+            if match:
+                current_evidence = match.group(2).strip()
+                if current_evidence == "（暂无）":
+                    new_evidence = f"[评估验证] {evidence}"
+                else:
+                    new_evidence = f"{current_evidence}; [评估验证] {evidence}"
+                updated = (
+                    updated[: match.start(2)]
+                    + new_evidence
+                    + updated[match.end(2) :]
+                )
+
+    return updated if changed else None
+
+
 async def _run_evaluator(state: OpsState) -> dict:
     """运行评估器的 LLM + tool 调用循环。"""
     sid = state["incident_id"][:8]
@@ -99,30 +159,19 @@ async def _run_evaluator(state: OpsState) -> dict:
         model=s.mini_model,
         base_url=s.llm_base_url,
         api_key=s.dashscope_api_key,
+        streaming=True,
     )
 
     tools = _build_eval_tools()
     tool_map = {t.name: t for t in tools}
     llm_with_tools = llm.bind_tools(tools)
 
-    # 从 main_agent 的最后一个 complete() 调用中提取 answer_md
-    answer_md = ""
-    for msg in reversed(state["messages"]):
-        if hasattr(msg, "tool_calls") and msg.tool_calls:
-            for tc in msg.tool_calls:
-                if tc.get("name") == "complete":
-                    answer_md = tc.get("args", {}).get("answer_md", "")
-                    break
-            if answer_md:
-                break
-
-    plan = state.get("investigation_plan")
-    plan_str = json.dumps(plan, ensure_ascii=False, indent=2) if plan else "无调查计划"
+    # 从 DB 读取调查计划（包含 confirmed 假设）
+    plan_md = await _read_plan_from_db(state["incident_id"])
 
     user_prompt = EVALUATOR_USER_PROMPT.format(
         description=state["description"],
-        answer_md=answer_md,
-        investigation_plan=plan_str,
+        investigation_plan=plan_md or "无调查计划",
     )
 
     messages = [
@@ -148,11 +197,9 @@ async def _run_evaluator(state: OpsState) -> dict:
         )
 
         if not tool_calls:
-            # 尝试从 content 中解析 JSON 结果
             result = _parse_evaluation_result(content)
             if result:
                 return result
-            # LLM 没有返回有效的 JSON，构造默认结果
             log.warning("Evaluator returned no valid JSON", content=content[:500])
             return {
                 "outcome_type": "insufficient_evidence",
@@ -165,17 +212,13 @@ async def _run_evaluator(state: OpsState) -> dict:
 
         messages.append(response)
 
-        # 执行 tool calls
         for tc in tool_calls:
             name = tc["name"]
             args = tc.get("args", {})
 
             if name not in tool_map:
                 messages.append(
-                    ToolMessage(
-                        content=f"未知工具: {name}",
-                        tool_call_id=tc["id"],
-                    )
+                    ToolMessage(content=f"未知工具: {name}", tool_call_id=tc["id"])
                 )
                 continue
 
@@ -201,7 +244,6 @@ async def _run_evaluator(state: OpsState) -> dict:
                 )
             )
 
-    # 最终兜底
     return {
         "outcome_type": "insufficient_evidence",
         "verification_passed": False,
@@ -227,10 +269,7 @@ async def evaluator_node(state: OpsState) -> dict:
         await publisher.publish(
             channel,
             "evaluation_started",
-            {
-                "attempt": attempts + 1,
-                "phase": "evaluation",
-            },
+            {"attempt": attempts + 1, "phase": "evaluation"},
         )
     except Exception as e:
         log.warning("Failed to publish evaluation_started event", error=str(e))
@@ -265,13 +304,80 @@ async def evaluator_node(state: OpsState) -> dict:
         await publisher.publish(
             channel,
             "evaluation_completed",
-            {
-                "result": result,
-                "phase": "evaluation",
-            },
+            {"result": result, "phase": "evaluation"},
         )
     except Exception as e:
         log.warning("Failed to publish evaluation_completed event", error=str(e))
+
+    # 根据评估结果更新调查计划中的假设状态（Markdown 格式）
+    hypothesis_updates = result.get("hypothesis_updates")
+    if hypothesis_updates:
+        plan_md = await _read_plan_from_db(state["incident_id"])
+        if plan_md:
+            updated_md = _apply_hypothesis_updates_md(plan_md, hypothesis_updates)
+            if updated_md:
+                # 写入 DB
+                try:
+                    async with get_session_factory()() as session:
+                        incident = await session.get(
+                            Incident, uuid.UUID(state["incident_id"])
+                        )
+                        if incident:
+                            incident.plan_md = updated_md
+                            await session.commit()
+                except Exception as e:
+                    log.warning("Failed to update plan in DB", error=str(e))
+                # 发布 plan_updated 事件
+                try:
+                    channel = EventPublisher.channel_for_incident(state["incident_id"])
+                    publisher = EventPublisher(
+                        redis=get_redis(), session_factory=get_session_factory()
+                    )
+                    await publisher.publish(
+                        channel,
+                        "plan_updated",
+                        {"plan_md": updated_md, "phase": "evaluation"},
+                    )
+                except Exception as e:
+                    log.warning("Failed to publish plan_updated after evaluation", error=str(e))
+                log.info(
+                    "Plan updated after evaluation",
+                    updates=[u.get("id") for u in hypothesis_updates],
+                )
+
+    # 验证失败打回时，回退 [confirmed] → [investigating]，防止重复触发 evaluator
+    if result.get("recommendation") == "return_to_agent":
+        plan_md = await _read_plan_from_db(state["incident_id"])
+        if plan_md:
+            reverted_md = re.sub(
+                r"(### H\d+) \[confirmed\]",
+                r"\1 [investigating]",
+                plan_md,
+            )
+            if reverted_md != plan_md:
+                log.info("Reverting confirmed hypotheses to investigating after eval failure")
+                try:
+                    async with get_session_factory()() as session:
+                        incident = await session.get(
+                            Incident, uuid.UUID(state["incident_id"])
+                        )
+                        if incident:
+                            incident.plan_md = reverted_md
+                            await session.commit()
+                except Exception as e:
+                    log.warning("Failed to revert plan in DB", error=str(e))
+                try:
+                    channel = EventPublisher.channel_for_incident(state["incident_id"])
+                    publisher = EventPublisher(
+                        redis=get_redis(), session_factory=get_session_factory()
+                    )
+                    await publisher.publish(
+                        channel,
+                        "plan_updated",
+                        {"plan_md": reverted_md, "phase": "evaluation"},
+                    )
+                except Exception as e:
+                    log.warning("Failed to publish reverted plan", error=str(e))
 
     return {
         "evaluation_result": result,
@@ -280,7 +386,7 @@ async def evaluator_node(state: OpsState) -> dict:
 
 
 def route_after_evaluation(state: OpsState) -> str:
-    """评估后的路由：验证通过去确认，否则打回给 Agent。"""
+    """评估后的路由：验证通过去生成总结，否则打回给 Agent。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="evaluator", sid=sid)
 
@@ -288,18 +394,19 @@ def route_after_evaluation(state: OpsState) -> str:
     result = state.get("evaluation_result", {})
     recommendation = result.get("recommendation", "confirm_with_user")
 
-    # 超过最大尝试次数，强制交给用户
     if attempts >= MAX_EVAL_ATTEMPTS:
         log.info(
-            "route_after_evaluation: max attempts reached -> confirm_resolution", attempts=attempts
+            "route_after_evaluation: max attempts reached -> generate_summary",
+            attempts=attempts,
         )
-        return "confirm_resolution"
+        return "generate_summary"
 
     if recommendation == "return_to_agent":
         log.info(
-            "route_after_evaluation: -> main_agent", reason=result.get("evidence_summary", "")[:200]
+            "route_after_evaluation: -> main_agent",
+            reason=result.get("evidence_summary", "")[:200],
         )
         return "main_agent"
 
-    log.info("route_after_evaluation: -> confirm_resolution")
-    return "confirm_resolution"
+    log.info("route_after_evaluation: -> generate_summary")
+    return "generate_summary"

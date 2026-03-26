@@ -82,12 +82,27 @@ async def _start_agent_background(
                 elif a.parsed_content:
                     description = f"{description}\n\n## 附件内容\n\n### 附件: {a.filename}\n\n{a.parsed_content}"
 
-        thread_id = await runner.start(
-            incident_id=incident_id,
-            description=description,
-            severity=severity,
-            image_attachments=image_attachments,
-        )
+        # runner.start() publishes its own error event on failure,
+        # so we catch separately to avoid double-publishing.
+        try:
+            thread_id = await runner.start(
+                incident_id=incident_id,
+                description=description,
+                severity=severity,
+                image_attachments=image_attachments,
+            )
+        except Exception as e:
+            log.error("Agent start failed", sid=sid, error=str(e))
+            try:
+                async with factory() as err_session:
+                    incident = await err_session.get(Incident, uuid.UUID(incident_id))
+                    if incident:
+                        incident.status = "error"
+                        await err_session.commit()
+            except Exception:
+                log.error("Failed to update incident status to error", incident_id=incident_id)
+            return
+
         # Write thread_id back after agent completes
         async with factory() as session:
             incident = await session.get(Incident, uuid.UUID(incident_id))
@@ -96,21 +111,17 @@ async def _start_agent_background(
                 await session.commit()
                 log.info("Thread ID saved", sid=sid, thread=thread_id)
     except Exception as e:
-        log.error("Failed to start agent", incident_id=incident_id, error=str(e))
-        # Publish error event to SSE channel
+        log.error("Failed to start agent (preparation)", incident_id=incident_id, error=str(e))
         try:
             channel = EventPublisher.channel_for_incident(incident_id)
-            publisher = EventPublisher(get_redis())
+            publisher = EventPublisher(get_redis(), session_factory=get_session_factory())
             await publisher.publish(
                 channel,
                 "error",
-                {
-                    "message": AgentRunner._format_agent_error(e),
-                },
+                {"message": AgentRunner._format_agent_error(e)},
             )
         except Exception:
             log.error("Failed to publish error event", incident_id=incident_id)
-        # Update incident status to error
         try:
             factory = get_session_factory()
             async with factory() as err_session:
@@ -256,6 +267,14 @@ def _message_to_event(m: Message) -> dict:
         data = metadata or {}
     elif m.event_type == "resolution_confirmed":
         data = {}
+    elif m.event_type == "planner_started":
+        data = metadata or {}
+    elif m.event_type in ("plan_generated", "plan_updated"):
+        data = metadata or {}
+    elif m.event_type == "evaluation_completed":
+        data = metadata or {}
+    elif m.event_type == "evaluation_started":
+        data = metadata or {}
     else:
         data = {"content": m.content}
 

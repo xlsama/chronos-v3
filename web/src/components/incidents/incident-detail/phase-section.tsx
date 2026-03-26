@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown, ChevronRight, Check } from "lucide-react";
 import type { PhaseStatus } from "@/stores/incident-stream";
@@ -49,6 +49,20 @@ export function PhaseSection({
   const derivedExpanded = defaultExpanded ?? status === "active";
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
   const expanded = userToggled ?? derivedExpanded;
+
+  const prevStatusRef = useRef<PhaseStatus | null>(null);
+
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (prev === null || prev === status) return;
+
+    if (status === "active") {
+      setUserToggled(null);
+    } else if (prev === "active" && status === "completed" && !isLast) {
+      setUserToggled(false);
+    }
+  }, [status, isLast]);
 
   return (
     <div className={cn("relative pl-6", !isLast && "pb-4")} data-testid="phase-section">

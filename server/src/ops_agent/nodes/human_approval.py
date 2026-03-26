@@ -7,19 +7,22 @@ _APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
 
 
 async def human_approval_node(state: OpsState) -> dict:
-    """This node is an interrupt point.
-    LangGraph will pause here until the user approves/rejects.
-    The approval logic is handled externally via the checkpoint resume mechanism.
+    """This node is an interrupt point (interrupt_before).
 
-    On initial entry (before interrupt): sets needs_approval + pending_tool_call.
-    On resume (after interrupt): checks approval_decision to route accordingly.
+    With interrupt_before, the graph pauses BEFORE this node runs.
+    On resume, Command(update={"approval_decision": ...}) sets the decision,
+    then this node runs for the first time.
+
+    We check approval_decision FIRST so that the decision set by Command(update=...)
+    is processed immediately, injecting ToolMessages before routing continues.
     """
     sid = state["incident_id"][:8]
     log = get_logger(component="approval", sid=sid)
 
-    if state.get("needs_approval"):
-        # Resume path: check approval decision
-        decision = state.get("approval_decision")
+    decision = state.get("approval_decision")
+
+    if decision:
+        # Decision set by Command(update=...) on resume
         log.info("Resume", decision=decision)
 
         if decision in ("rejected", "supplemented"):
@@ -49,24 +52,25 @@ async def human_approval_node(state: OpsState) -> dict:
                 has_supplement=bool(supplement),
                 injected_messages=len(tool_messages),
             )
+            # Keep approval_decision so route_after_approval can read it;
+            # next Command(update=...) will overwrite it.
             return {
                 "messages": tool_messages,
                 "needs_approval": False,
                 "pending_tool_call": None,
-                "approval_decision": None,
                 "approval_supplement": None,
             }
 
         # Approved: clear approval state, continue to tools
-        updates: dict = {
+        log.info("Approved")
+        return {
             "needs_approval": False,
             "pending_tool_call": None,
             "approval_decision": None,
             "approval_supplement": None,
         }
-        return updates
 
-    # Initial entry: extract pending tool call that needs approval
+    # No decision yet: initial entry, extract pending tool call for UI display
     last_message = state["messages"][-1]
     approval_calls = [tc for tc in last_message.tool_calls if tc["name"] in _APPROVAL_TOOLS]
 

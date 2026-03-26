@@ -124,6 +124,8 @@ export function useVoiceInput({
         const { text } = await transcribeAudio(blob);
         if (text && !cancelledRef.current) {
           onTranscriptRef.current(text);
+        } else if (!cancelledRef.current) {
+          toast.info("未识别到语音内容");
         }
       } catch {
         if (!cancelledRef.current) {

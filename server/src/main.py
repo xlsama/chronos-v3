@@ -18,6 +18,7 @@ from src.api.incident_history import router as incident_history_router
 from src.api.notification_settings import router as notification_settings_router
 from src.api.skills import router as skills_router
 from src.api.services import router as services_router
+from src.api.connections import router as connections_router
 from src.api.versions import router as versions_router
 from src.env import get_settings
 from src.lib.errors import AppError
@@ -116,4 +117,5 @@ app.include_router(incident_history_router)
 app.include_router(notification_settings_router)
 app.include_router(skills_router)
 app.include_router(services_router)
+app.include_router(connections_router)
 app.include_router(versions_router)

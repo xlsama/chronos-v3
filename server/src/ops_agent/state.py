@@ -16,11 +16,6 @@ class OpsState(MessagesState):
     ask_human_count: int
     tool_call_retry_count: int
 
-    # --- Planner ---
-    investigation_plan: dict | None
-    plan_version: int
-    tool_call_count_since_plan_update: int
-
     # --- Context Manager ---
     investigation_summary: str | None
     message_count_at_last_compact: int

@@ -20,7 +20,8 @@ import { TimelineDivider } from "./timeline-divider";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
 import { PlannerContent } from "./planner-phase-section";
-import { EvaluatorContent } from "./evaluator-phase-section";
+import { EvaluationInlineCard, LiveEvaluatorThinkingSection } from "./evaluator-phase-section";
+import type { EvaluationResult } from "@/stores/incident-stream";
 
 interface EventTimelineProps {
   incidentId: string;
@@ -38,6 +39,7 @@ type TimelineItem =
   | { type: "skill_read"; event: SSEEvent }
   | { type: "answer"; event: SSEEvent }
   | { type: "agent_interrupted"; event: SSEEvent }
+  | { type: "evaluation"; event: SSEEvent }
   | { type: "done"; event: SSEEvent };
 
 function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
@@ -123,6 +125,21 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
       case "answer":
         items.push({ type: "answer", event });
         break;
+      case "evaluation_started": {
+        // Push loading card; will be replaced in-place by evaluation_completed
+        items.push({ type: "evaluation", event });
+        break;
+      }
+      case "evaluation_completed": {
+        // Replace pending evaluation_started item if exists
+        const pendingIdx = items.findLastIndex((it) => it.type === "evaluation" && !it.event.data.result);
+        if (pendingIdx !== -1) {
+          items[pendingIdx] = { type: "evaluation", event };
+        } else {
+          items.push({ type: "evaluation", event });
+        }
+        break;
+      }
       case "thinking_done":
       case "agent_status":
         break; // Don't render
@@ -350,8 +367,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     kbAgentState.status !== "idle";
   const hasGatherContext = hasHistory || hasKB;
 
-  const plannerPlan = useIncidentStreamStore((s) => s.plannerPlan);
-  const evaluationResult = useIncidentStreamStore((s) => s.evaluationResult);
+  const plannerPlanMd = useIncidentStreamStore((s) => s.plannerPlanMd);
 
   const hasSubAgentContent =
     historyAgentState.events.length > 0 ||
@@ -384,10 +400,9 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   // Phase visibility
   const showContextGathering =
     hasGatherContext || phaseState.contextGathering !== "pending" || isActiveIncident;
-  const showPlanning = !!plannerPlan || phaseState.planning !== "pending";
+  const showPlanning = !!plannerPlanMd || phaseState.planning !== "pending";
   const showInvestigation =
     hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation;
-  const showEvaluation = !!evaluationResult || phaseState.evaluation !== "pending";
 
   // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(mainEvents), [mainEvents]);
@@ -425,7 +440,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           subtitle={contextSubtitle}
           status={phaseState.contextGathering}
           defaultExpanded={phaseState.investigation === "pending" || undefined}
-          isLast={!showPlanning && !showInvestigation && !showEvaluation}
+          isLast={!showPlanning && !showInvestigation}
           contentClassName={cn(
             shouldUseFixedContextLayout && [
               "overflow-hidden",
@@ -471,9 +486,9 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
       {/* Phase 2: Planning */}
       {showPlanning && (
         <PhaseSection
-          title="调查规划"
+          title="制定计划"
           status={phaseState.planning}
-          isLast={!showInvestigation && !showEvaluation}
+          isLast={!showInvestigation}
         >
           <PlannerContent />
         </PhaseSection>
@@ -486,7 +501,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           subtitle={phaseSubtitle}
           status={isTransitioningToInvestigation ? "active" : phaseState.investigation}
           defaultExpanded
-          isLast={!showEvaluation}
+          isLast
         >
           <div className="space-y-3">
             {timelineItems.map((item, i) => {
@@ -657,6 +672,14 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                       <AnswerCard content={item.event.data.content as string} />
                     </div>
                   );
+                case "evaluation": {
+                  const evalResult = item.event.data.result as EvaluationResult | undefined;
+                  return (
+                    <div key={i}>
+                      <EvaluationInlineCard result={evalResult} />
+                    </div>
+                  );
+                }
                 default:
                   return null;
               }
@@ -675,6 +698,9 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
             {/* Live thinking stream — isolated component to avoid re-rendering timeline */}
             <LiveThinkingSection />
 
+            {/* Live evaluator thinking — shown while evaluator is running */}
+            <LiveEvaluatorThinkingSection />
+
             {/* Live ask_human stream — shows question as it streams in */}
             <LiveAskHumanSection />
 
@@ -684,17 +710,6 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
             {/* Resolution confirm card */}
             <ResolutionConfirmCard incidentId={incidentId} incidentStatus={incidentStatus} />
           </div>
-        </PhaseSection>
-      )}
-
-      {/* Phase 4: Evaluation */}
-      {showEvaluation && (
-        <PhaseSection
-          title="自动验证"
-          status={phaseState.evaluation}
-          isLast
-        >
-          <EvaluatorContent />
         </PhaseSection>
       )}
     </div>
