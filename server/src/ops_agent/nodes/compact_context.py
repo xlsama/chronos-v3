@@ -86,21 +86,25 @@ async def compact_context_node(state: OpsState) -> dict:
             break
     reason = "hypothesis_transition" if is_hypothesis_transition else "message_limit"
 
-    # 发布 round_started 事件（告知前端开始压缩）
-    try:
-        channel = EventPublisher.channel_for_incident(state["incident_id"])
-        publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
-        await publisher.publish(
-            channel,
-            "round_started",
-            {
-                "round": compact_count + 1,
-                "reason": reason,
-                "phase": "investigation",
-            },
-        )
-    except Exception as e:
-        log.warning("Failed to publish round_started event", error=str(e))
+    # 初始化 publisher（round_started / round_ended 都需要）
+    channel = EventPublisher.channel_for_incident(state["incident_id"])
+    publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
+
+    # 只在假设状态变更时发布 round_started 事件
+    # message_limit 触发的压缩是静默的，不向前端发送任何事件
+    if is_hypothesis_transition:
+        try:
+            await publisher.publish(
+                channel,
+                "round_started",
+                {
+                    "round": compact_count + 1,
+                    "reason": reason,
+                    "phase": "investigation",
+                },
+            )
+        except Exception as e:
+            log.warning("Failed to publish round_started event", error=str(e))
 
     # 格式化对话记录（跳过第一条 HumanMessage，它是事件描述，会单独传入）
     conversation = _format_conversation(messages[1:])

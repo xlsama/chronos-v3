@@ -60,7 +60,9 @@ export function PhaseSection({
     if (status === "active") {
       setUserToggled(null);
     } else if (prev === "active" && status === "completed" && !isLast) {
-      setUserToggled(false);
+      // Delay collapse so the next phase expands first, avoiding a jarring jump
+      const timer = setTimeout(() => setUserToggled(false), 300);
+      return () => clearTimeout(timer);
     }
   }, [status, isLast]);
 
@@ -103,7 +105,7 @@ export function PhaseSection({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
             style={{ overflow: "hidden" }}
           >
             <div className={cn("pt-1 pb-3", contentClassName)}>{children}</div>

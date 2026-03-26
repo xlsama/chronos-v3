@@ -384,7 +384,11 @@ export function useIncidentStream(
               appendPlannerThinking(event.data.content as string);
             } else {
               updatePhase("investigation");
-              appendThinking(event.data.content as string);
+              const { suppressLiveThinking: suppress } =
+                useIncidentStreamStore.getState();
+              if (!suppress) {
+                appendThinking(event.data.content as string);
+              }
             }
           } else if (event.event_type === "thinking_done") {
             if (phase === "planning") {
@@ -443,6 +447,7 @@ export function useIncidentStream(
           } else if (event.event_type === "round_ended") {
             endRound(event.data.round as number, (event.data.summary as string) || "");
             addEvent(event);
+            setSuppressLiveThinking(true);
           } else if (event.event_type === "agent_status") {
             // main-phase agent_status: ignore (only relevant for gather_context)
           } else {

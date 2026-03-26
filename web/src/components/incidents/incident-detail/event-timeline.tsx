@@ -39,7 +39,6 @@ type TimelineItem =
   | { type: "skill_read"; event: SSEEvent; round: number }
   | { type: "answer"; event: SSEEvent; round: number }
   | { type: "agent_interrupted"; event: SSEEvent; round: number }
-  | { type: "round_ended"; event: SSEEvent; round: number; data: Record<string, unknown> }
   | { type: "done"; event: SSEEvent; round: number };
 
 function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
@@ -75,10 +74,8 @@ function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
         if (pendingRoundIdx !== undefined) {
           (items[pendingRoundIdx] as { endEvent?: SSEEvent }).endEvent = event;
           pendingRoundIdx = undefined;
-        } else {
-          items.push({ type: "round_progress", startEvent: event, endEvent: event, round: currentRound });
         }
-        items.push({ type: "round_ended" as const, round: currentRound, event, data: event.data });
+        // 不再 push 单独的 round_ended item，round_progress 完成态已足够
         currentRound++;
         suppressNextThinking = true;
         break;
@@ -416,12 +413,19 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     phaseState.investigation === "pending" &&
     bothSubAgentsDone;
 
+  // Transitional state: plan generated but investigation LLM hasn't emitted first token yet
+  const isTransitioningFromPlanning =
+    isActiveIncident &&
+    phaseState.planning === "active" &&
+    phaseState.investigation === "pending" &&
+    !!plannerPlanMd;
+
   // Phase visibility
   const showContextGathering =
     hasGatherContext || phaseState.contextGathering !== "pending" || isActiveIncident;
   const showPlanning = !!plannerPlanMd || phaseState.planning !== "pending";
   const showInvestigation =
-    hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation;
+    hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation || isTransitioningFromPlanning;
 
   // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(events), [events]);
@@ -682,18 +686,6 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           </div>
         );
       }
-      case "round_ended": {
-        const summary = item.data.summary as string | undefined;
-        return (
-          <div key={i} className="flex items-center gap-3 py-2">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground">
-              本轮小结: {summary?.slice(0, 80)}...
-            </span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-        );
-      }
       default:
         return null;
     }
@@ -767,7 +759,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
         <PhaseSection
           title="排查处置"
           subtitle={phaseSubtitle}
-          status={isTransitioningToInvestigation ? "active" : phaseState.investigation}
+          status={(isTransitioningToInvestigation || isTransitioningFromPlanning) ? "active" : phaseState.investigation}
           defaultExpanded
           isLast
         >
@@ -820,7 +812,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
             )}
 
             {/* Transitional indicator — waiting for first investigation event after context gathering */}
-            {isTransitioningToInvestigation && timelineItems.length === 0 && !hasThinking && (
+            {(isTransitioningToInvestigation || isTransitioningFromPlanning) && timelineItems.length === 0 && !hasThinking && (
               <div className="px-1 py-2">
                 <TextDotsLoader text="Agent 思考中" size="sm" />
               </div>

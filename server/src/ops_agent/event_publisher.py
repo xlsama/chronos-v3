@@ -206,6 +206,10 @@ class EventPublisher:
             return ""
         if event_type == "planner_progress":
             return data.get("status", "")
+        if event_type == "round_started":
+            return data.get("reason", "")
+        if event_type == "round_ended":
+            return data.get("summary", "")[:500]
         return ""
 
     @staticmethod
@@ -300,6 +304,13 @@ class EventPublisher:
             return {"attempt": data.get("attempt"), "phase": data.get("phase", "")}
         if event_type == "evaluation_completed":
             return {"result": data.get("result"), "phase": data.get("phase", "")}
+        if event_type in ("round_started", "round_ended"):
+            return {
+                "round": data.get("round"),
+                "reason": data.get("reason", ""),
+                "summary": data.get("summary", ""),
+                "phase": data.get("phase", ""),
+            }
         return None
 
     @staticmethod

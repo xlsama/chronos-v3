@@ -588,7 +588,7 @@ class AgentRunner:
         sid = channel.split(":")[-1][:8] if ":" in channel else ""
         stream_log = get_logger(component="stream", sid=sid)
 
-        if node in ("gather_context", "confirm_resolution", "planner"):
+        if node in ("gather_context", "confirm_resolution", "planner", "compact_context"):
             return
 
         phase, agent = self._get_phase_agent(event)
