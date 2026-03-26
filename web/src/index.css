@@ -528,6 +528,12 @@
   margin: 0.375rem !important;
 }
 
+/* ── text-shimmer 动画 ── */
+
+@keyframes shimmer {
+  to { background-position: -200% center; }
+}
+
 /* ── loading-dots 动画 ── */
 
 @keyframes loading-dots {

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2, Mic, Paperclip, Plus, Send, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
+import { TextDotsLoader } from "@/components/ui/loader";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 import {
   FileUpload,
   FileUploadContent,
@@ -49,7 +51,7 @@ export function PromptComposer({
 
   const preRecordTextRef = useRef("");
 
-  const { state: voiceState, interimText, analyserNode, startRecording, stopRecording, cancelRecording } =
+  const { state: voiceState, analyserNode, startRecording, stopRecording, cancelRecording } =
     useVoiceInput({
       onTranscript: useCallback((transcript: string) => {
         setText((prev) => {
@@ -62,13 +64,14 @@ export function PromptComposer({
       }, []),
     });
 
-  const isRecording = voiceState === "recording" || voiceState === "connecting";
+  const isRecording = voiceState === "recording";
+  const isTranscribing = voiceState === "transcribing";
+  const isVoiceActive = isRecording || isTranscribing;
 
-  useEffect(() => {
-    if (voiceState === "connecting") {
-      preRecordTextRef.current = text;
-    }
-  }, [voiceState, text]);
+  const handleStartRecording = useCallback(() => {
+    preRecordTextRef.current = text;
+    startRecording();
+  }, [text, startRecording]);
 
   useEffect(() => {
     return () => {
@@ -154,63 +157,66 @@ export function PromptComposer({
         disabled={disabled}
         className={accentMode === "flowing" ? "flowing-gradient-border" : undefined}
       >
-        {files.length > 0 && !isRecording && (
-          <div className="flex flex-wrap gap-2 px-2 pt-2">
-            {files.map((f, i) => (
-              <div
-                key={i}
-                className="bg-muted group relative flex items-center gap-2 rounded-lg p-1.5 pr-7"
-              >
-                {f.previewUrl ? (
-                  <img
-                    src={f.previewUrl}
-                    alt={f.file.name}
-                    className="size-10 rounded object-cover"
-                  />
-                ) : (
-                  <div className="bg-background flex size-10 items-center justify-center rounded text-xs">
-                    <Paperclip className="size-4" />
-                  </div>
-                )}
-                <div className="max-w-[120px]">
-                  <p className="truncate text-xs font-medium">{f.file.name}</p>
-                  <p className="text-muted-foreground text-xs">
-                    {formatSize(f.file.size)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeFile(i)}
-                  className="bg-muted-foreground/20 hover:bg-muted-foreground/40 absolute top-0.5 right-0.5 rounded-full p-0.5"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <PromptInputTextarea
-          placeholder={placeholder}
-          onPaste={handlePaste}
-          disabled={isRecording}
-          data-testid="prompt-textarea"
-        />
-
-        <AnimatePresence>
-          {isRecording && (
+        <AnimatePresence mode="wait">
+          {isVoiceActive ? (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-3 overflow-hidden border-t px-4 py-2"
+              key="voice-active"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-3 px-4 py-3"
             >
-              <AudioVisualizer analyserNode={analyserNode} className="shrink-0" />
-              <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">
-                {voiceState === "connecting"
-                  ? "正在连接..."
-                  : interimText || "正在聆听..."}
-              </span>
+              {isRecording ? (
+                <>
+                  <AudioVisualizer analyserNode={analyserNode} className="shrink-0" />
+                  <TextShimmer className="text-sm" duration={2}>正在聆听...</TextShimmer>
+                </>
+              ) : (
+                <TextDotsLoader text="正在识别" size="sm" />
+              )}
+            </motion.div>
+          ) : (
+            <motion.div key="input" initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              {files.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-2 pt-2">
+                  {files.map((f, i) => (
+                    <div
+                      key={i}
+                      className="bg-muted group relative flex items-center gap-2 rounded-lg p-1.5 pr-7"
+                    >
+                      {f.previewUrl ? (
+                        <img
+                          src={f.previewUrl}
+                          alt={f.file.name}
+                          className="size-10 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="bg-background flex size-10 items-center justify-center rounded text-xs">
+                          <Paperclip className="size-4" />
+                        </div>
+                      )}
+                      <div className="max-w-[120px]">
+                        <p className="truncate text-xs font-medium">{f.file.name}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {formatSize(f.file.size)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className="bg-muted-foreground/20 hover:bg-muted-foreground/40 absolute top-0.5 right-0.5 rounded-full p-0.5"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <PromptInputTextarea
+                placeholder={placeholder}
+                onPaste={handlePaste}
+                data-testid="prompt-textarea"
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -218,7 +224,7 @@ export function PromptComposer({
         <PromptInputActions className="justify-between px-2 pb-1">
           <PromptInputAction tooltip="上传文件">
             <FileUploadTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8 rounded-full" disabled={isRecording}>
+              <Button variant="ghost" size="icon" className="size-8 rounded-full" disabled={isVoiceActive}>
                 <Plus className="size-4" />
               </Button>
             </FileUploadTrigger>
@@ -250,6 +256,14 @@ export function PromptComposer({
                     <Check className="size-4" />
                   </Button>
                 </motion.div>
+              ) : isTranscribing ? (
+                <motion.div
+                  key="transcribing-actions"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                />
+
               ) : (
                 <motion.div
                   key="normal-actions"
@@ -261,7 +275,7 @@ export function PromptComposer({
                       variant="ghost"
                       size="icon"
                       className="size-8 rounded-full"
-                      onClick={startRecording}
+                      onClick={handleStartRecording}
                       disabled={disabled || isLoading}
                     >
                       <Mic className="size-4" />
