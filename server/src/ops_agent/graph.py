@@ -19,6 +19,7 @@ from src.ops_agent.state import CoordinatorState
 
 # --- confirm_resolution ---
 
+
 async def confirm_resolution_node(state: CoordinatorState) -> dict:
     sid = state["incident_id"][:8]
     log = get_logger(component="confirm_resolution", sid=sid)
@@ -45,6 +46,7 @@ def route_after_resolution(state: CoordinatorState) -> str:
 
 # --- 审批/ask_human 透传节点 ---
 
+
 async def sub_agent_approval_node(state: CoordinatorState) -> dict:
     """透传节点 — interrupt_before 已暂停图，resume 后直接通过，路由回 run_sub_agent。
 
@@ -70,6 +72,7 @@ async def sub_agent_ask_human_node(state: CoordinatorState) -> dict:
 
 # --- run_sub_agent 出口路由 ---
 
+
 def route_after_sub_agent(state: CoordinatorState) -> str:
     """run_sub_agent 之后的路由：子 Agent 完成→coordinator，中断→透传节点。"""
     log = get_logger(component="route_after_sub_agent", sid=state["incident_id"][:8])
@@ -86,6 +89,7 @@ def route_after_sub_agent(state: CoordinatorState) -> str:
 
 # --- retry ---
 
+
 async def coordinator_retry_node(state: CoordinatorState) -> dict:
     """coordinator_agent 未调用工具时重试。"""
     count = state.get("tool_call_retry_count", 0)
@@ -98,7 +102,7 @@ async def coordinator_retry_node(state: CoordinatorState) -> dict:
                 content=(
                     "[RETRY_TOOL_CALL]\n"
                     "你刚才的回复没有调用任何工具。你必须始终以工具调用结束每轮回复。\n"
-                    '- 启动子 Agent → 调用 launch_investigation(hypothesis_id, hypothesis_desc)\n'
+                    "- 启动子 Agent → 调用 launch_investigation(hypothesis_id, hypothesis_desc)\n"
                     "- 更新计划 → 调用 update_plan(plan_md)\n"
                     '- 排查完成 → 调用 complete(answer_md="结论")\n'
                     "请重新回复，这次必须调用一个工具。"
@@ -110,6 +114,7 @@ async def coordinator_retry_node(state: CoordinatorState) -> dict:
 
 
 # --- 图构建 ---
+
 
 def build_graph():
     # coordinator 工具：仅 update_plan（launch_investigation 和 complete 由路由特殊处理）

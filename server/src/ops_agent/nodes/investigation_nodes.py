@@ -16,7 +16,7 @@ RETRY_MESSAGE = (
     "你刚才的回复没有调用任何工具。你必须始终以工具调用结束每一轮回复。\n"
     '- 需要向用户提问 → 调用 ask_human(question="你的具体问题")\n'
     "- 需要执行命令排查 → 调用对应的执行工具\n"
-    '- 调查完成 → 调用 report(status=..., summary=..., report=...)\n'
+    "- 调查完成 → 调用 report(status=..., summary=..., report=...)\n"
     "请重新回复，这次必须调用一个工具。"
 )
 
@@ -103,7 +103,9 @@ async def investigation_ask_human_node(state: InvestigationState) -> dict:
                 messages = [ToolMessage(content=text, tool_call_id=tc["id"])]
                 if images:
                     messages.append(
-                        HumanMessage(content=_build_multimodal_content("用户补充了以下截图：", images))
+                        HumanMessage(
+                            content=_build_multimodal_content("用户补充了以下截图：", images)
+                        )
                     )
                 return {
                     "messages": messages,

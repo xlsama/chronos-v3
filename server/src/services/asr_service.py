@@ -140,9 +140,5 @@ async def transcribe_audio(audio_data: bytes, filename: str) -> str:
 
     result = "".join(texts)
     if not result:
-        log.warning(
-            "ASR returned empty text",
-            session_done=session_done,
-            transcription_done=transcription_done,
-        )
+        log.warning("ASR returned empty text")
     return result

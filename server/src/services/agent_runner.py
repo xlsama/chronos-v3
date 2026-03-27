@@ -480,7 +480,6 @@ class AgentRunner:
                 break
         return None
 
-
     @staticmethod
     def _extract_ask_human_question(vals: dict) -> str | None:
         """Extract the question from the last AI message.

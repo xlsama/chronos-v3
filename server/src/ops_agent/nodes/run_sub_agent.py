@@ -159,8 +159,7 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
 
         prior_findings = _format_prior_findings(results)
         initial_prompt = (
-            f"事件描述: {state['description']}\n\n"
-            f"请验证假设 {hypothesis_id}: {hypothesis_desc}"
+            f"事件描述: {state['description']}\n\n请验证假设 {hypothesis_id}: {hypothesis_desc}"
         )
 
         initial_state = {
@@ -225,7 +224,13 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
             approval_id_for_resume = state["pending_approval_id"]
 
         result = await _resume_sub_agent(
-            sub_graph, config, state, channel, publisher, hypothesis_id, log,
+            sub_graph,
+            config,
+            state,
+            channel,
+            publisher,
+            hypothesis_id,
+            log,
             approval_id=approval_id_for_resume,
         )
 
@@ -246,9 +251,14 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
         if result["interrupt_type"] == "human_approval":
             pending = result.get("pending_tool_call")
             approval_id = await _create_and_publish_approval(
-                publisher, channel, pending,
-                incident_id, state["description"], state["severity"],
-                hypothesis["id"], log,
+                publisher,
+                channel,
+                pending,
+                incident_id,
+                state["description"],
+                state["severity"],
+                hypothesis["id"],
+                log,
             )
             return_state["needs_approval"] = True
             return_state["pending_tool_call"] = pending
@@ -318,8 +328,13 @@ async def _stream_sub_agent(
     try:
         async for event in sub_graph.astream_events(initial_state, config=config, version="v2"):
             bridge_result = await _bridge_event(
-                event, channel, publisher, hypothesis_id,
-                thinking_buffer, ask_human_active, ask_human_streamed,
+                event,
+                channel,
+                publisher,
+                hypothesis_id,
+                thinking_buffer,
+                ask_human_active,
+                ask_human_streamed,
             )
             thinking_buffer = bridge_result["thinking_buffer"]
             ask_human_active = bridge_result["ask_human_active"]
@@ -352,7 +367,13 @@ async def _stream_sub_agent(
 
 
 async def _resume_sub_agent(
-    sub_graph, config, coordinator_state, channel, publisher, hypothesis_id, log,
+    sub_graph,
+    config,
+    coordinator_state,
+    channel,
+    publisher,
+    hypothesis_id,
+    log,
     approval_id: str = "",
 ) -> dict:
     """恢复子 Agent（传递审批决定或用户输入）。"""
@@ -391,9 +412,15 @@ async def _resume_sub_agent(
     try:
         async for event in sub_graph.astream_events(resume_input, config=config, version="v2"):
             bridge_result = await _bridge_event(
-                event, channel, publisher, hypothesis_id,
-                thinking_buffer, ask_human_active, ask_human_streamed,
-                approval_id=approval_id, approval_tool_name=approval_tool_name,
+                event,
+                channel,
+                publisher,
+                hypothesis_id,
+                thinking_buffer,
+                ask_human_active,
+                ask_human_streamed,
+                approval_id=approval_id,
+                approval_tool_name=approval_tool_name,
             )
             thinking_buffer = bridge_result["thinking_buffer"]
             ask_human_active = bridge_result["ask_human_active"]
@@ -428,9 +455,15 @@ async def _resume_sub_agent(
 
 
 async def _bridge_event(
-    event, channel, publisher, hypothesis_id,
-    thinking_buffer, ask_human_active, ask_human_streamed,
-    approval_id: str = "", approval_tool_name: str = "",
+    event,
+    channel,
+    publisher,
+    hypothesis_id,
+    thinking_buffer,
+    ask_human_active,
+    ask_human_streamed,
+    approval_id: str = "",
+    approval_tool_name: str = "",
 ) -> dict:
     """桥接子 Agent 事件到 SSE channel，附加 sub_agent_id。"""
     kind = event.get("event")
