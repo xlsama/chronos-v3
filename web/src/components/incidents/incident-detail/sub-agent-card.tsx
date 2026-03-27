@@ -545,6 +545,14 @@ export function SubAgentCard({
       {/* Expanded content: investigation mode */}
       {expanded && !isContextGathering && (
         <div className="space-y-3 border-t border-border/40 px-3 pb-3 pt-2 pl-11">
+          {/* Skeleton loading state */}
+          {isActive && status === "running" && !hasEvents && (
+            <div className="animate-in fade-in duration-200 space-y-4 min-h-[100px]">
+              <Skeleton className="h-3 w-3/5 bg-muted/50" />
+              <Skeleton className="h-3 w-4/5 bg-muted/50" />
+              <Skeleton className="h-3 w-1/2 bg-muted/50" />
+            </div>
+          )}
           {cardItems.map((item, i) => {
             switch (item.type) {
               case "thinking":
