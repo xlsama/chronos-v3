@@ -471,7 +471,7 @@ async def _bridge_event(
 
     elif kind == "on_tool_start":
         name = event.get("name", "")
-        if name in ("report_findings", "ask_human", "read_skill"):
+        if name in ("report", "ask_human", "read_skill"):
             pass
         else:
             run_id = event.get("run_id", "")
@@ -489,7 +489,7 @@ async def _bridge_event(
 
     elif kind == "on_tool_end":
         name = event.get("name", "")
-        if name in ("report_findings", "ask_human"):
+        if name in ("report", "ask_human"):
             pass
         elif name == "read_skill":
             args = event["data"].get("input", {})
@@ -565,7 +565,7 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
     for msg in reversed(messages):
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             for tc in msg.tool_calls:
-                if tc["name"] == "report_findings":
+                if tc["name"] == "report":
                     args = tc.get("args", {})
                     return HypothesisResult(
                         hypothesis_id=hypothesis["id"],

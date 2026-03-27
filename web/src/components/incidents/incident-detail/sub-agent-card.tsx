@@ -225,7 +225,7 @@ function buildCardItems(events: SSEEvent[]): CardItem[] {
         break;
       case "tool_use": {
         const name = event.data.name as string;
-        if (name === "report_findings") break;
+        if (name === "report") break;
         const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
         const approvalId = event.data.approval_id as string | undefined;
         const approvalIdx = approvalId ? pendingApprovals.get(approvalId) : undefined;
@@ -243,7 +243,7 @@ function buildCardItems(events: SSEEvent[]): CardItem[] {
       }
       case "tool_result": {
         const name = event.data.name as string;
-        if (name === "report_findings") break;
+        if (name === "report") break;
         const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
         const pendingIdx = pendingTools.get(callId);
         if (pendingIdx !== undefined) {
@@ -657,7 +657,7 @@ export function SubAgentCard({
             </div>
           )}
 
-          {/* Summary from report_findings */}
+          {/* Summary from report */}
           {summary && status !== "running" && (
             <Markdown content={summary} variant="compact" />
           )}

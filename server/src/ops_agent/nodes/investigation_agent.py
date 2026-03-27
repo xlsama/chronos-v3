@@ -106,7 +106,7 @@ def build_investigation_tools():
             return f"未找到: {path}"
 
     @tool
-    def report_findings(status: str, summary: str, report: str) -> str:
+    def report(status: str, summary: str, report: str) -> str:
         """调查完成后调用，报告本次调查的完整结果。
         - status: "confirmed"（假设成立）/ "eliminated"（假设排除）/ "inconclusive"（证据不足）
         - summary: 一句话结论摘要
@@ -122,7 +122,7 @@ def build_investigation_tools():
         list_services,
         read_skill,
         ask_human,
-        report_findings,
+        report,
     ]
 
 
@@ -258,8 +258,8 @@ async def route_investigation_decision(state: InvestigationState) -> str:
         if name not in valid_tool_names:
             log.warning("unknown tool -> ask_human", tool=name)
             return "ask_human"
-        if name == "report_findings":
-            log.info("tool=report_findings -> complete")
+        if name == "report":
+            log.info("tool=report -> complete")
             return "complete"
         if name == "ask_human":
             if state.get("ask_human_count", 0) >= 5:
