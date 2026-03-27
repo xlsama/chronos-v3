@@ -1,17 +1,17 @@
 export const severityColors: Record<string, string> = {
-  P0: "bg-red-100 text-red-800 border-transparent",
-  P1: "bg-orange-100 text-orange-800 border-transparent",
-  P2: "bg-yellow-100 text-yellow-800 border-transparent",
-  P3: "bg-blue-100 text-blue-800 border-transparent",
+  P0: "bg-red-50 text-red-700 border-transparent dark:bg-red-950/40 dark:text-red-400",
+  P1: "bg-orange-50 text-orange-700 border-transparent dark:bg-orange-950/40 dark:text-orange-400",
+  P2: "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-950/40 dark:text-amber-400",
+  P3: "bg-sky-50 text-sky-700 border-transparent dark:bg-sky-950/40 dark:text-sky-400",
 };
 
 export const statusColors: Record<string, string> = {
-  open: "bg-red-100 text-red-800 border-transparent",
-  investigating: "bg-yellow-100 text-yellow-800 border-transparent",
-  resolved: "bg-green-100 text-green-800 border-transparent",
-  stopped: "bg-gray-100 text-gray-800 border-transparent",
-  interrupted: "bg-orange-100 text-orange-800 border-transparent",
-  error: "bg-red-100 text-red-800 border-transparent",
+  open: "bg-red-50 text-red-700 border-transparent dark:bg-red-950/40 dark:text-red-400",
+  investigating: "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-950/40 dark:text-amber-400",
+  resolved: "bg-emerald-50 text-emerald-700 border-transparent dark:bg-emerald-950/40 dark:text-emerald-400",
+  stopped: "bg-slate-50 text-slate-600 border-transparent dark:bg-slate-800/40 dark:text-slate-400",
+  interrupted: "bg-orange-50 text-orange-700 border-transparent dark:bg-orange-950/40 dark:text-orange-400",
+  error: "bg-red-50 text-red-700 border-transparent dark:bg-red-950/40 dark:text-red-400",
 };
 
 export const statusLabels: Record<string, string> = {

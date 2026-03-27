@@ -58,7 +58,7 @@ function SkillItem({ skill, onSelect }: SkillItemProps) {
     <>
       <div className="border-b last:border-b-0">
         <div
-          className="group flex cursor-pointer items-center gap-3 p-4 hover:bg-muted/50"
+          className="group flex cursor-pointer items-center gap-3 border-l-2 border-l-transparent p-4 transition-colors hover:bg-muted/50 hover:border-l-primary/60"
           onClick={onSelect}
         >
           <div className="flex-1 min-w-0">

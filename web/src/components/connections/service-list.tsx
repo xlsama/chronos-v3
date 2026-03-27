@@ -52,9 +52,9 @@ import { ServiceForm } from "./service-form";
 import { listVariants, listItemVariants } from "@/lib/motion";
 
 const statusBadgeColors: Record<string, string> = {
-  online: "bg-green-100 text-green-800 border-transparent",
-  offline: "bg-red-100 text-red-800 border-transparent",
-  unknown: "bg-gray-100 text-gray-800 border-transparent",
+  online: "bg-emerald-50 text-emerald-700 border-transparent dark:bg-emerald-950/40 dark:text-emerald-400",
+  offline: "bg-red-50 text-red-700 border-transparent dark:bg-red-950/40 dark:text-red-400",
+  unknown: "bg-slate-50 text-slate-600 border-transparent dark:bg-slate-800/40 dark:text-slate-400",
 };
 
 const statusLabel: Record<string, string> = {
@@ -64,9 +64,9 @@ const statusLabel: Record<string, string> = {
 };
 
 const statusConfig: Record<string, { color: string; icon: typeof Wifi }> = {
-  online: { color: "text-green-500", icon: Wifi },
-  offline: { color: "text-red-500", icon: WifiOff },
-  unknown: { color: "text-gray-400", icon: WifiOff },
+  online: { color: "text-emerald-500", icon: Wifi },
+  offline: { color: "text-red-400", icon: WifiOff },
+  unknown: { color: "text-slate-400", icon: WifiOff },
 };
 
 const typeLabels: Record<string, string> = {

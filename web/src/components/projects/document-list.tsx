@@ -40,10 +40,10 @@ interface DocumentListProps {
 }
 
 const statusColors: Record<string, string> = {
-  indexed: "bg-green-100 text-green-800 border-transparent",
-  indexing: "bg-blue-100 text-blue-800 border-transparent",
-  pending: "bg-yellow-100 text-yellow-800 border-transparent",
-  index_failed: "bg-red-100 text-red-800 border-transparent",
+  indexed: "bg-emerald-50 text-emerald-700 border-transparent dark:bg-emerald-950/40 dark:text-emerald-400",
+  indexing: "bg-sky-50 text-sky-700 border-transparent dark:bg-sky-950/40 dark:text-sky-400",
+  pending: "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-950/40 dark:text-amber-400",
+  index_failed: "bg-red-50 text-red-700 border-transparent dark:bg-red-950/40 dark:text-red-400",
 };
 
 const statusLabels: Record<string, string> = {
@@ -150,7 +150,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
                     </p>
                   </div>
                   {doc.doc_type === "agents_config" && (
-                    <Badge className="bg-gray-100 text-gray-800 border-transparent">
+                    <Badge className="bg-slate-50 text-slate-600 border-transparent dark:bg-slate-800/40 dark:text-slate-400">
                       概要
                     </Badge>
                   )}
@@ -168,7 +168,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
                       <Badge
                         className={
                           statusColors[doc.status] ??
-                          "bg-gray-100 text-gray-800 border-transparent"
+                          "bg-slate-50 text-slate-600 border-transparent dark:bg-slate-800/40 dark:text-slate-400"
                         }
                       >
                         {statusLabels[doc.status] ?? doc.status}
