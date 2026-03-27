@@ -28,6 +28,11 @@ class AgentRunner:
         self._ask_human_args_buffer = ""
         self._ask_human_published_len = 0
         self._ask_human_streamed = False
+        # Streaming complete (answer) state — mirrors ask_human pattern
+        self._complete_stream_active = False
+        self._complete_args_buffer = ""
+        self._complete_published_len = 0
+        self._complete_streamed = False
         # Thinking content log buffer
         self._thinking_content_log_buffer = ""
         # Active approval context (set by resume(), consumed by _process_event)
@@ -429,13 +434,17 @@ class AgentRunner:
         # confirm_resolution 中断 —— coordinator 调用了 complete，等待用户确认
         if "confirm_resolution" in next_nodes:
             log.info("confirm_resolution interrupt")
-            # 从 coordinator_agent 的 complete tool_call 中提取排查结论
-            answer_md = self._extract_complete_answer(vals)
-            if answer_md:
-                await self.publisher.publish(
-                    channel, "answer", {"content": answer_md, "phase": "investigation"}
-                )
-                await self.publisher.publish(channel, "answer_done", {"phase": "investigation"})
+            if not self._complete_streamed:
+                # Fallback: 没有流式推送过，一次性发送
+                answer_md = self._extract_complete_answer(vals)
+                if answer_md:
+                    await self.publisher.publish(
+                        channel, "answer", {"content": answer_md, "phase": "investigation"}
+                    )
+                    await self.publisher.publish(
+                        channel, "answer_done", {"phase": "investigation"}
+                    )
+            self._complete_streamed = False
             await self.publisher.publish(channel, "confirm_resolution_required", {})
 
         if vals.get("is_complete"):
@@ -518,6 +527,24 @@ class AgentRunner:
                 continue
         return None
 
+    def _reset_complete_stream_state(self) -> None:
+        self._complete_stream_active = False
+        self._complete_args_buffer = ""
+        self._complete_published_len = 0
+
+    def _extract_complete_delta(self) -> str | None:
+        """Extract incremental answer_md content from streaming complete() tool call."""
+        for suffix in ['"}', '" }']:
+            try:
+                parsed = json.loads(self._complete_args_buffer + suffix)
+                content = parsed.get("answer_md", "")
+                delta = content[self._complete_published_len :]
+                self._complete_published_len = len(content)
+                return delta if delta else None
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return None
+
     def _get_phase_agent(self, event: dict) -> tuple[str, str]:
         """Extract phase and agent from event metadata."""
         metadata = event.get("metadata", {})
@@ -568,6 +595,23 @@ class AgentRunner:
                             thinking_chars=len(self._thinking_content_log_buffer),
                         )
 
+                    if tcc.get("name") == "complete":
+                        self._complete_stream_active = True
+                        self._complete_args_buffer = ""
+                        self._complete_published_len = 0
+                        self._complete_streamed = True
+                        if not self._thinking_done_sent:
+                            await self.publisher.publish(
+                                channel,
+                                "thinking_done",
+                                {"phase": phase, "agent": agent},
+                            )
+                            self._thinking_done_sent = True
+                        stream_log.info(
+                            "Complete stream started",
+                            thinking_chars=len(self._thinking_content_log_buffer),
+                        )
+
                     if self._ask_human_stream_active and tcc.get("args"):
                         self._ask_human_args_buffer += tcc["args"]
                         delta = self._extract_ask_human_delta()
@@ -578,7 +622,17 @@ class AgentRunner:
                                 {"question": delta},
                             )
 
-            if chunk.content and not self._ask_human_stream_active:
+                    if self._complete_stream_active and tcc.get("args"):
+                        self._complete_args_buffer += tcc["args"]
+                        delta = self._extract_complete_delta()
+                        if delta:
+                            await self.publisher.publish(
+                                channel,
+                                "answer",
+                                {"content": delta, "phase": phase},
+                            )
+
+            if chunk.content and not self._ask_human_stream_active and not self._complete_stream_active:
                 self._thinking_content_log_buffer += chunk.content
                 await self.publisher.publish(
                     channel,
@@ -609,6 +663,14 @@ class AgentRunner:
                 stream_log.info("Ask_human stream done", question_chars=ask_human_len)
                 await self.publisher.publish(channel, "ask_human_done", {})
                 self._reset_ask_human_stream_state()
+            elif self._complete_stream_active:
+                stream_log.info(
+                    "Complete stream done", answer_chars=self._complete_published_len
+                )
+                await self.publisher.publish(
+                    channel, "answer_done", {"phase": phase}
+                )
+                self._reset_complete_stream_state()
             else:
                 thinking_len = len(self._thinking_content_log_buffer)
                 stream_log.info("Thinking done (no tool_call)", thinking_chars=thinking_len)
