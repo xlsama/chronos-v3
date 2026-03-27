@@ -388,13 +388,6 @@ export function SubAgentCard({
   // Investigation status badge config
   const statusBadge = !isContextGathering ? STATUS_CONFIG[status] : undefined;
 
-  // 只取第一句作为卡片标题，避免显示过长的排查细节
-  const displayTitle = useMemo(() => {
-    if (!title) return title;
-    const idx = title.indexOf("。");
-    return idx > 0 ? title.slice(0, idx) : title;
-  }, [title]);
-
   // Base timestamp for relative time in investigation mode
   const baseTimestamp = events.length > 0 ? events[0].timestamp : "";
 
@@ -424,11 +417,11 @@ export function SubAgentCard({
         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
         {isLoading ? (
           <TextShimmer className="truncate font-medium" duration={2}>
-            {isContextGathering ? agentConfig?.label ?? agentName : displayTitle}
+            {isContextGathering ? agentConfig?.label ?? agentName : title}
           </TextShimmer>
         ) : (
           <span className="truncate font-medium">
-            {isContextGathering ? agentConfig?.label ?? agentName : displayTitle}
+            {isContextGathering ? agentConfig?.label ?? agentName : title}
           </span>
         )}
 

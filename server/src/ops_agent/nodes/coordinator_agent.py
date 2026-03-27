@@ -24,13 +24,16 @@ def build_coordinator_tools():
     from langchain_core.tools import tool
 
     @tool
-    def launch_investigation(hypothesis_id: str, hypothesis_desc: str) -> str:
+    def launch_investigation(
+        hypothesis_id: str, hypothesis_title: str, hypothesis_desc: str
+    ) -> str:
         """启动一个子 Agent 来验证指定假设。
         子 Agent 会独立执行排查（SSH 命令、数据库查询等），完成后返回调查结果。
         - hypothesis_id: 假设编号，如 "H1"
-        - hypothesis_desc: 假设描述
+        - hypothesis_title: 假设短标题（15字以内，如"数据库连接池耗尽"、"查询条件过滤异常"）
+        - hypothesis_desc: 假设详细描述（含具体排查方向和步骤）
         """
-        return f"子 Agent 已启动，正在验证假设 {hypothesis_id}: {hypothesis_desc}"
+        return f"子 Agent 已启动，正在验证假设 {hypothesis_id}: {hypothesis_title}"
 
     @tool
     async def update_plan(

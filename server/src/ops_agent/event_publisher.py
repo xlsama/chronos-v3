@@ -330,6 +330,7 @@ class EventPublisher:
         if event_type == "sub_agent_started":
             return {
                 "hypothesis_id": data.get("hypothesis_id", ""),
+                "hypothesis_title": data.get("hypothesis_title", ""),
                 "hypothesis_desc": data.get("hypothesis_desc", ""),
                 "sub_agent_thread_id": data.get("sub_agent_thread_id", ""),
                 "phase": data.get("phase", ""),

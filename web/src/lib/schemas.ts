@@ -277,7 +277,11 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
   z.object({
     event_type: z.literal("sub_agent_started"),
     data: z
-      .object({ hypothesis_id: z.string(), hypothesis_desc: z.string() })
+      .object({
+        hypothesis_id: z.string(),
+        hypothesis_title: z.string(),
+        hypothesis_desc: z.string(),
+      })
       .passthrough(),
     ...baseSSEFields,
   }),

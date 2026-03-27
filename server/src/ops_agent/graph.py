@@ -102,7 +102,7 @@ async def coordinator_retry_node(state: CoordinatorState) -> dict:
                 content=(
                     "[RETRY_TOOL_CALL]\n"
                     "你刚才的回复没有调用任何工具。你必须始终以工具调用结束每轮回复。\n"
-                    "- 启动子 Agent → 调用 launch_investigation(hypothesis_id, hypothesis_desc)\n"
+                    "- 启动子 Agent → 调用 launch_investigation(hypothesis_id, hypothesis_title, hypothesis_desc)\n"
                     "- 更新计划 → 调用 update_plan(plan_md)\n"
                     '- 排查完成 → 调用 complete(answer_md="结论")\n'
                     "请重新回复，这次必须调用一个工具。"

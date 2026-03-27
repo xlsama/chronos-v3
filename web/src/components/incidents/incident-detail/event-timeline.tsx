@@ -784,7 +784,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                       return (
                         <SubAgentCard
                           key={`inv-${m.inv.hypothesisId}`}
-                          title={m.inv.hypothesisDesc}
+                          title={m.inv.hypothesisTitle}
                           events={m.inv.events}
                           status={m.inv.status}
                           isActive={m.inv.hypothesisId === activeInvestigationId}

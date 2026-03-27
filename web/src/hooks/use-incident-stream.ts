@@ -483,6 +483,7 @@ export function useIncidentStream(
             updatePhase("investigation");
             startInvestigation(
               event.data.hypothesis_id as string,
+              event.data.hypothesis_title as string,
               event.data.hypothesis_desc as string,
             );
           } else if (event.event_type === "sub_agent_completed") {

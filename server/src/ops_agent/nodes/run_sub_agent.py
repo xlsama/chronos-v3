@@ -29,7 +29,7 @@ def _format_prior_findings(results: list[HypothesisResult]) -> str:
     return "\n".join(lines)
 
 
-def _extract_launch_info(state: CoordinatorState) -> tuple[str, str, str]:
+def _extract_launch_info(state: CoordinatorState) -> tuple[str, str, str, str]:
     """从最近的 launch_investigation tool_call 中提取假设信息和 tool_call_id。"""
     for msg in reversed(state["messages"]):
         if hasattr(msg, "tool_calls") and msg.tool_calls:
@@ -38,11 +38,12 @@ def _extract_launch_info(state: CoordinatorState) -> tuple[str, str, str]:
                     args = tc.get("args", {})
                     return (
                         args.get("hypothesis_id", "H1"),
+                        args.get("hypothesis_title", ""),
                         args.get("hypothesis_desc", ""),
                         tc["id"],
                     )
             break
-    return "H1", "", ""
+    return "H1", "", "", ""
 
 
 async def _create_and_publish_approval(
@@ -151,8 +152,10 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
 
     if not is_resume:
         # 从 launch_investigation tool_call 中提取假设信息
-        hypothesis_id, hypothesis_desc, launch_tool_call_id = _extract_launch_info(state)
-        hypothesis = {"id": hypothesis_id, "desc": hypothesis_desc}
+        hypothesis_id, hypothesis_title, hypothesis_desc, launch_tool_call_id = (
+            _extract_launch_info(state)
+        )
+        hypothesis = {"id": hypothesis_id, "title": hypothesis_title, "desc": hypothesis_desc}
 
         sub_thread_id = str(uuid.uuid4())
         log.info("Creating sub-agent", hypothesis=hypothesis_id, thread_id=sub_thread_id)
@@ -192,6 +195,7 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
                 "sub_agent_started",
                 {
                     "hypothesis_id": hypothesis_id,
+                    "hypothesis_title": hypothesis_title,
                     "hypothesis_desc": hypothesis_desc,
                     "sub_agent_thread_id": sub_thread_id,
                     "phase": "investigation",
@@ -207,9 +211,10 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
     else:
         # 恢复已有的子 Agent
         hypothesis_id = state.get("active_hypothesis_id", "H1")
+        hypothesis_title = state.get("active_hypothesis_title", "")
         hypothesis_desc = state.get("active_hypothesis_desc", "")
         launch_tool_call_id = state.get("pending_launch_tool_call_id", "")
-        hypothesis = {"id": hypothesis_id, "desc": hypothesis_desc}
+        hypothesis = {"id": hypothesis_id, "title": hypothesis_title, "desc": hypothesis_desc}
 
         log.info("Resuming sub-agent", hypothesis=hypothesis_id, thread_id=sub_thread_id)
 
@@ -244,6 +249,7 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
         return_state: dict = {
             "active_sub_agent_thread_id": sub_thread_id,
             "active_hypothesis_id": hypothesis["id"],
+            "active_hypothesis_title": hypothesis["title"],
             "active_hypothesis_desc": hypothesis["desc"],
             "pending_launch_tool_call_id": launch_tool_call_id,
             "sub_agent_status": "waiting_for_human",
@@ -308,6 +314,7 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
         "hypothesis_results": results,
         "active_sub_agent_thread_id": None,
         "active_hypothesis_id": None,
+        "active_hypothesis_title": None,
         "active_hypothesis_desc": None,
         "pending_launch_tool_call_id": None,
         "sub_agent_status": "completed",

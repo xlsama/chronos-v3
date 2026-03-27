@@ -17,6 +17,7 @@ interface SubAgentState {
 
 export interface InvestigationSubAgent {
   hypothesisId: string;
+  hypothesisTitle: string;
   hypothesisDesc: string;
   status: "running" | "completed" | "confirmed" | "eliminated" | "failed" | "cancelled";
   summary?: string;
@@ -54,7 +55,7 @@ interface IncidentStreamState {
   clearPlannerThinking: () => void;
   setPlannerProgress: (status: string) => void;
   endRound: (round: number, summary: string) => void;
-  startInvestigation: (hypothesisId: string, hypothesisDesc: string) => void;
+  startInvestigation: (hypothesisId: string, hypothesisTitle: string, hypothesisDesc: string) => void;
   completeInvestigation: (hypothesisId: string, status: string, summary: string) => void;
   cancelAllRunningInvestigations: () => void;
   addInvestigationEvent: (hypothesisId: string, event: SSEEvent) => void;
@@ -226,12 +227,13 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       roundSummaries: [...state.roundSummaries, { round, summary }],
     })),
 
-  startInvestigation: (hypothesisId, hypothesisDesc) =>
+  startInvestigation: (hypothesisId, hypothesisTitle, hypothesisDesc) =>
     set((state) => ({
       investigations: [
         ...state.investigations,
         {
           hypothesisId,
+          hypothesisTitle,
           hypothesisDesc,
           status: "running" as const,
           events: [],
@@ -400,9 +402,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       // sub_agent_started → create investigation entry
       if (event.event_type === "sub_agent_started") {
         const hId = event.data.hypothesis_id as string;
+        const hTitle = event.data.hypothesis_title as string;
         const hDesc = event.data.hypothesis_desc as string;
         loadedInvestigations.push({
           hypothesisId: hId,
+          hypothesisTitle: hTitle,
           hypothesisDesc: hDesc,
           status: "running",
           events: [],

@@ -33,6 +33,7 @@ class CoordinatorState(MessagesState):
 
     # 子 Agent 恢复信息（interrupt 恢复时需要）
     active_hypothesis_id: str | None
+    active_hypothesis_title: str | None
     active_hypothesis_desc: str | None
     pending_launch_tool_call_id: str | None  # launch_investigation 的 tool_call_id
 
