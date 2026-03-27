@@ -9,6 +9,8 @@ import {
   FileText,
   Loader2,
   Wrench,
+  Bug,
+  History,
   Check,
   X,
   AlertTriangle,
@@ -56,7 +58,7 @@ const AGENT_CONFIG: Record<
   string,
   { label: string; icon: typeof Search; subAgentName: string }
 > = {
-  history: { label: "历史事件检索", icon: Search, subAgentName: "Incident History Subagent" },
+  history: { label: "历史事件检索", icon: History, subAgentName: "Incident History Subagent" },
   kb: { label: "知识库检索", icon: BookOpen, subAgentName: "KB Subagent" },
 };
 
@@ -331,7 +333,7 @@ export function SubAgentCard({
 
   // Resolve config for context gathering
   const agentConfig = agentName ? AGENT_CONFIG[agentName] : undefined;
-  const Icon = agentConfig?.icon ?? Search;
+  const Icon = agentConfig?.icon ?? Bug;
   const isLoading = status === "started" || status === "running";
 
   // Stats
@@ -423,10 +425,15 @@ export function SubAgentCard({
           </span>
         )}
 
-        {/* Badge: subAgentName (context) or status badge (investigation, non-loading only) */}
+        {/* Badge: subAgentName (context) or investigation badge */}
         {isContextGathering && agentConfig?.subAgentName && (
           <span className="ml-1.5 shrink-0 rounded bg-muted px-1 py-px text-[9px] font-normal text-muted-foreground">
             {agentConfig.subAgentName}
+          </span>
+        )}
+        {!isContextGathering && (
+          <span className="ml-1.5 shrink-0 rounded bg-muted px-1 py-px text-[9px] font-normal text-muted-foreground">
+            Investigation Subagent
           </span>
         )}
         {!isLoading && statusBadge && (

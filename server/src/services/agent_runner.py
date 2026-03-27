@@ -246,8 +246,17 @@ class AgentRunner:
 
         from langgraph.types import Command
 
+        # 记录当前中断状态，便于调试
+        pre_state = await self.graph.aget_state(config)
+        pre_next = pre_state.next or ()
+
         decision = approval_result.get("decision", "approved")
-        log.info("Resuming agent (approval)", thread_id=thread_id, decision=decision)
+        log.info(
+            "Resuming agent (approval)",
+            thread_id=thread_id,
+            decision=decision,
+            pre_next_nodes=pre_next,
+        )
 
         # Only inject approval_id into tool events when approved;
         # rejected/supplemented flows re-enter main_agent and may call the same
@@ -285,6 +294,7 @@ class AgentRunner:
         await self.publisher.flush_remaining(channel)
         self._active_approval_id = ""
         self._active_approval_tool_name = ""
+        log.info("Resume stream completed", cancelled=cancelled)
         if cancelled:
             await self._handle_cancel_reason(incident_id, channel)
         else:

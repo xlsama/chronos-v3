@@ -46,11 +46,16 @@ def route_after_resolution(state: CoordinatorState) -> str:
 # --- 审批/ask_human 透传节点 ---
 
 async def sub_agent_approval_node(state: CoordinatorState) -> dict:
-    """透传节点 — 仅用于触发 interrupt，让 AgentRunner 发布审批事件。"""
+    """透传节点 — interrupt_before 已暂停图，resume 后直接通过，路由回 run_sub_agent。
+
+    审批事件由 run_sub_agent 发布，审批决定通过 Command(update=...) 注入 state。
+    此节点不调用 interrupt()，避免双重中断导致卡死。
+    """
     log = get_logger(component="sub_agent_approval", sid=state["incident_id"][:8])
-    log.info("Sub-agent approval interrupt")
-    interrupt({"type": "sub_agent_approval"})
-    log.info("Sub-agent approval resumed")
+    log.info(
+        "Sub-agent approval resumed",
+        decision=state.get("approval_decision"),
+    )
     return {}
 
 
