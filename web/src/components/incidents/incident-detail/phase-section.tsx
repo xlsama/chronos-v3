@@ -17,22 +17,26 @@ interface PhaseSectionProps {
 function TimelineNodeIndicator({ status }: { status: PhaseStatus }) {
   if (status === "completed") {
     return (
-      <span className="absolute left-0 top-2 z-10 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full bg-blue-500 text-white ring-2 ring-blue-500/20">
-        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+      <span className="absolute left-0 top-2 z-10 flex h-3.5 w-3.5 -translate-x-1/2 items-center justify-center rounded-full bg-emerald-500">
+        <Check className="h-2 w-2 text-white" strokeWidth={3} />
       </span>
     );
   }
   if (status === "active") {
     return (
-      <span className="absolute left-0 top-2 z-10 flex h-4 w-4 -translate-x-1/2 items-center justify-center">
-        <span className="absolute h-4 w-4 animate-pulse rounded-full bg-blue-500/20" />
-        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.5)]" />
+      <span className="absolute left-0 top-2 z-10 flex h-3.5 w-3.5 -translate-x-1/2 items-center justify-center">
+        <motion.span
+          className="absolute h-3.5 w-3.5 rounded-full bg-blue-400/15"
+          animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+        />
+        <span className="relative h-2 w-2 rounded-full bg-blue-400" />
       </span>
     );
   }
   return (
     <span className="absolute left-0 top-2.5 z-10 flex h-2.5 w-2.5 -translate-x-1/2 items-center justify-center">
-      <span className="h-2 w-2 rounded-full bg-muted-foreground/25 ring-2 ring-background" />
+      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/25" />
     </span>
   );
 }
@@ -71,7 +75,8 @@ export function PhaseSection({
       {/* Timeline vertical line */}
       <div
         className={cn(
-          "absolute left-0 w-px -translate-x-1/2 bg-border",
+          "absolute left-0 -translate-x-1/2",
+          "w-px bg-border/60",
           isLast ? "top-0 h-4" : "top-0 bottom-0",
         )}
         style={isLast ? { maskImage: "linear-gradient(to bottom, black, transparent)" } : undefined}
