@@ -64,6 +64,9 @@ class EventPublisher:
                 buf_key, {"content": "", "phase": phase, "agent": agent}
             )
             buf["content"] += data.get("content", "")
+            # Preserve sub_agent_id for investigation sub-agents
+            if data.get("sub_agent_id"):
+                buf["sub_agent_id"] = data["sub_agent_id"]
             await self._publish_sse(channel, event_type, data, ts)
             return
 
@@ -284,12 +287,17 @@ class EventPublisher:
                 "success": data.get("success", True),
             }
         if event_type == "approval_required":
-            return {
+            meta = {
                 "approval_id": data.get("approval_id", ""),
                 "tool_name": data.get("tool_name", ""),
                 "tool_args": data.get("tool_args", {}),
                 "tool_call_id": data.get("tool_call_id", ""),
             }
+            if data.get("sub_agent_id"):
+                meta["sub_agent_id"] = data["sub_agent_id"]
+            if data.get("phase"):
+                meta["phase"] = data["phase"]
+            return meta
         if event_type == "approval_decided":
             meta: dict = {
                 "approval_id": data.get("approval_id", ""),

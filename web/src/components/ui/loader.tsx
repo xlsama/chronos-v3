@@ -401,12 +401,12 @@ export function TextDotsLoader({
   };
 
   return (
-    <div className={cn("inline-flex items-center", className)}>
-      <span className={cn("text-muted-foreground", textSizes[size])}>{text}</span>
+    <div className={cn("inline-flex items-center text-muted-foreground", className)}>
+      <span className={textSizes[size]}>{text}</span>
       <span className="inline-flex">
-        <span className="text-muted-foreground animate-[loading-dots_1.4s_infinite_0.2s]">.</span>
-        <span className="text-muted-foreground animate-[loading-dots_1.4s_infinite_0.4s]">.</span>
-        <span className="text-muted-foreground animate-[loading-dots_1.4s_infinite_0.6s]">.</span>
+        <span className="animate-[loading-dots_1.4s_infinite_0.2s]">.</span>
+        <span className="animate-[loading-dots_1.4s_infinite_0.4s]">.</span>
+        <span className="animate-[loading-dots_1.4s_infinite_0.6s]">.</span>
       </span>
     </div>
   );

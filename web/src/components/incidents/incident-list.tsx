@@ -159,7 +159,7 @@ export function IncidentList({ statusFilter, severityFilter }: IncidentListProps
                       className="flex items-center gap-4 border-l-2 border-l-transparent p-4 pr-12 transition-colors hover:bg-muted/50 hover:border-l-primary/60"
                     >
                       <div className="flex-1 space-y-1">
-                        <p className="text-sm font-medium">{incident.summary_title || incident.description.slice(0, 80) + (incident.description.length > 80 ? "..." : "")}</p>
+                        <p className="text-sm">{incident.summary_title || incident.description.slice(0, 80) + (incident.description.length > 80 ? "..." : "")}</p>
                         <p className="text-xs text-muted-foreground line-clamp-1">
                           {incident.description}
                         </p>

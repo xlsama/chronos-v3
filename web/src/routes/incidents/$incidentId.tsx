@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowDown, ArrowLeft, Info, Square } from "lucide-react";
+import { ArrowDown, ArrowLeft, Check, Copy, Info, Square } from "lucide-react";
 import { getIncident, stopIncident } from "@/api/incidents";
 import { pageVariants, pageTransition } from "@/lib/motion";
 import { useIncidentStream } from "@/hooks/use-incident-stream";
@@ -44,6 +44,13 @@ function IncidentDetailPage() {
 
   const isConnected = useIncidentStreamStore((s) => s.isConnected);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [descCopied, setDescCopied] = useState(false);
+  const handleCopyDescription = async () => {
+    if (!incident) return;
+    await navigator.clipboard.writeText(incident.description);
+    setDescCopied(true);
+    setTimeout(() => setDescCopied(false), 2000);
+  };
 
   const isActive = incident?.status === "open" || incident?.status === "investigating" || incident?.status === "interrupted";
 
@@ -86,7 +93,7 @@ function IncidentDetailPage() {
 
   return (
     <motion.div
-      className="h-full"
+      className="flex h-full flex-col"
       variants={pageVariants}
       initial="initial"
       animate="animate"
@@ -144,7 +151,15 @@ function IncidentDetailPage() {
                 <Info className="h-4 w-4 text-muted-foreground" />
               </PopoverTrigger>
               <PopoverContent side="bottom" align="start" className="max-w-sm">
-                <p className="text-sm whitespace-pre-wrap">{incident.description}</p>
+                <div className="flex items-start gap-2">
+                  <p className="text-sm whitespace-pre-wrap flex-1">{incident.description}</p>
+                  <button
+                    onClick={handleCopyDescription}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                  >
+                    {descCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                  </button>
+                </div>
               </PopoverContent>
             </Popover>
           </div>

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import {
   Activity,
   BookOpen,
@@ -57,6 +58,37 @@ const contextItems = [
 
 const navItems = [{ to: "/skills", label: "技能", icon: Sparkles }] as const;
 
+function NavItem({
+  item,
+  isActive,
+}: {
+  item: { readonly to: string; readonly label: string; readonly icon: React.ComponentType<{ className?: string }> };
+  isActive: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <SidebarMenuItem
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <SidebarMenuButton
+        isActive={isActive}
+        tooltip={item.label}
+        render={<Link to={item.to} />}
+      >
+        <motion.span
+          className="inline-flex"
+          animate={hovered ? { rotate: [0, -6, 6, -4, 4, -2, 0] } : { rotate: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <item.icon />
+        </motion.span>
+        <span>{item.label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
 export function AppSidebar() {
   const { location } = useRouterState();
   const { theme, setTheme } = useTheme();
@@ -76,21 +108,13 @@ export function AppSidebar() {
     }>,
   ) => (
     <SidebarMenu>
-      {items.map((item) => {
-        const isActive = location.pathname.startsWith(item.to);
-        return (
-          <SidebarMenuItem key={item.to}>
-            <SidebarMenuButton
-              isActive={isActive}
-              tooltip={item.label}
-              render={<Link to={item.to} />}
-            >
-              <item.icon />
-              <span>{item.label}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        );
-      })}
+      {items.map((item) => (
+        <NavItem
+          key={item.to}
+          item={item}
+          isActive={location.pathname.startsWith(item.to)}
+        />
+      ))}
     </SidebarMenu>
   );
 

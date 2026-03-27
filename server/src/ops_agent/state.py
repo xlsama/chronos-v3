@@ -9,6 +9,7 @@ class HypothesisResult(TypedDict):
     status: str  # "confirmed" | "eliminated" | "inconclusive"
     summary: str  # 子 Agent 的排查发现摘要
     evidence: str  # 关键证据
+    action_taken: str  # 执行的修复操作及验证结果，未修复时为空字符串
 
 
 class CoordinatorState(MessagesState):
@@ -41,6 +42,7 @@ class CoordinatorState(MessagesState):
     pending_tool_call: dict | None
     approval_decision: str | None
     approval_supplement: str | None
+    pending_approval_id: str | None  # 子 Agent 审批的 ApprovalRequest ID
 
     # coordinator retry
     tool_call_retry_count: int

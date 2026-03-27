@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ShellCodeBlock } from "@/components/ui/shell-code-block";
 import { Markdown } from "@/components/ui/markdown";
+import { TextDotsLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
 import { decideApproval } from "@/api/approvals";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
@@ -23,6 +24,7 @@ interface ToolCallCardProps {
   args?: Record<string, unknown>;
   output?: string;
   isExecuting?: boolean;
+  status?: "success" | "error";
   relativeTime?: string;
   serverInfo?: string;
   serviceInfo?: string;
@@ -40,6 +42,7 @@ export function ToolCallCard({
   args,
   output,
   isExecuting,
+  status,
   relativeTime,
   serverInfo,
   serviceInfo,
@@ -179,15 +182,17 @@ export function ToolCallCard({
           <ChevronRight className={cn("h-3.5 w-3.5 shrink-0", colors.chevron)} />
         )}
 
-        {/* Approval icon */}
-        {isApproval ? (
+        {/* Icon: spinner when executing, error/normal icon otherwise */}
+        {isExecuting ? (
+          <Loader2 className={cn("h-4 w-4 shrink-0 animate-spin", colors.spinner)} />
+        ) : isApproval ? (
           isHigh ? (
             <AlertTriangle className={cn("h-4 w-4 shrink-0", colors.icon)} />
           ) : (
             <UserCheck className={cn("h-4 w-4 shrink-0", colors.icon)} />
           )
         ) : (
-          <Wrench className={cn("h-4 w-4 shrink-0", colors.icon)} />
+          <Wrench className={cn("h-4 w-4 shrink-0", status === "error" ? "text-orange-500 dark:text-orange-400" : colors.icon)} />
         )}
 
         <span className={cn("font-medium", colors.name)} data-testid="tool-name">
@@ -213,7 +218,15 @@ export function ToolCallCard({
           </span>
         )}
 
-        {isExecuting && <Loader2 className={cn("h-3.5 w-3.5 animate-spin", colors.spinner)} />}
+        {/* Execution status text */}
+        {isExecuting && (
+          <TextDotsLoader text="执行中" size="sm" className="text-muted-foreground" />
+        )}
+        {!isExecuting && status === "error" && (
+          <span className="inline-block rounded px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300">
+            失败
+          </span>
+        )}
 
         {/* Right side: decision badge + relative time */}
         <span className="ml-auto flex items-center gap-2">

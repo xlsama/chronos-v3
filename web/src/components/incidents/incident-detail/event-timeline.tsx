@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { MessageCircleQuestion, CheckCircle, RefreshCw, Check, Loader2, ChevronRight } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
@@ -20,7 +20,6 @@ import { TimelineDivider } from "./timeline-divider";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
 import { PlannerContent } from "./planner-phase-section";
-import { InvestigationCard } from "./investigation-card";
 
 interface EventTimelineProps {
   incidentId: string;
@@ -499,6 +498,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
               args={toolArgs}
               output={item.toolResult?.data.output as string | undefined}
               isExecuting={!item.toolResult}
+              status={item.toolResult?.data.status as "success" | "error" | undefined}
               relativeTime={relTime}
               serverInfo={serverInfo}
               serviceInfo={serviceInfo}
@@ -535,6 +535,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
               args={approvalArgs}
               output={item.toolResult?.data.output as string | undefined}
               isExecuting={!!item.toolCall && !item.toolResult}
+              status={item.toolResult?.data.status as "success" | "error" | undefined}
               relativeTime={approvalRelTime}
               serverInfo={approvalServerInfo}
               serviceInfo={approvalServiceInfo}
@@ -781,13 +782,18 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
                   return merged.map((m, i) => {
                     if (m.kind === "investigation") {
                       return (
-                        <InvestigationCard
+                        <SubAgentCard
                           key={`inv-${m.inv.hypothesisId}`}
-                          investigation={m.inv}
+                          title={m.inv.hypothesisDesc}
+                          events={m.inv.events}
+                          status={m.inv.status}
                           isActive={m.inv.hypothesisId === activeInvestigationId}
+                          streamingContent={m.inv.thinkingContent}
+                          summary={m.inv.summary}
                           serverMap={serverMap}
                           serviceMap={serviceMap}
                           incidentStatus={incidentStatus}
+                          forceExpanded={m.inv.hypothesisId === activeInvestigationId}
                         />
                       );
                     }

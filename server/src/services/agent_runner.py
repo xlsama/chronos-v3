@@ -3,19 +3,15 @@ import base64
 import json
 import uuid
 
-import orjson
 import redis.asyncio as aioredis
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from src.env import get_settings
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.graph import compile_graph
-from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
 from src.db.connection import get_session_factory
 from src.db.models import Incident
 from src.lib.logger import get_logger
-from src.services.approval_service import ApprovalService
-from src.services.notification_service import notify_fire_and_forget
 from src.services.post_incident import run_post_incident_tasks
 
 
@@ -130,6 +126,7 @@ class AgentRunner:
             "active_hypothesis_id": None,
             "active_hypothesis_desc": None,
             "pending_launch_tool_call_id": None,
+            "pending_approval_id": None,
             "sub_agent_status": None,
             "tool_call_retry_count": 0,
         }
@@ -412,83 +409,12 @@ class AgentRunner:
             is_complete=vals.get("is_complete"),
         )
 
-        # 子 Agent 审批中断 —— 从 CoordinatorState.pending_tool_call 获取待审批工具
+        # 子 Agent 审批/ask_human 中断 —— 已由 run_sub_agent_node 处理
         if "sub_agent_approval" in next_nodes:
-            pending = vals.get("pending_tool_call")
-            if pending:
-                args = pending.get("args", {})
-                tool_name = pending["name"]
-                command = args.get("command", "")
+            log.info("sub_agent_approval interrupt (already published by run_sub_agent)")
 
-                if tool_name in ("ssh_bash", "bash"):
-                    cmd_type = ShellSafety.classify(command, local=(tool_name == "bash"))
-                elif tool_name == "service_exec":
-                    from src.ops_agent.nodes.investigation_agent import _get_service_type
-
-                    service_type = await _get_service_type(args.get("service_id", ""))
-                    cmd_type = ServiceSafety.classify(service_type, command)
-                else:
-                    cmd_type = CommandType.WRITE
-
-                risk_level = "HIGH" if cmd_type == CommandType.DANGEROUS else "MEDIUM"
-                log.info(
-                    "sub_agent_approval interrupt",
-                    tool=tool_name,
-                    cmd_type=cmd_type.name,
-                    risk=risk_level,
-                )
-
-                # 获取当前假设 ID
-                hypotheses = vals.get("hypotheses", [])
-                current_idx = vals.get("current_hypothesis_index", 0)
-                sub_agent_id = hypotheses[current_idx]["id"] if current_idx < len(hypotheses) else ""
-
-                async with get_session_factory()() as session:
-                    approval = await ApprovalService(session).create(
-                        incident_id=uuid.UUID(incident_id),
-                        tool_name=pending["name"],
-                        tool_args=orjson.dumps(args).decode(),
-                        risk_level=risk_level,
-                        explanation=args.get("explanation"),
-                    )
-                log.info("Approval created", approval_id=str(approval.id))
-                await self.publisher.publish(
-                    channel,
-                    "approval_required",
-                    {
-                        "approval_id": str(approval.id),
-                        "tool_name": pending["name"],
-                        "tool_args": {**args, "risk_level": risk_level},
-                        "tool_call_id": pending.get("id", ""),
-                        "sub_agent_id": sub_agent_id,
-                    },
-                )
-                notify_fire_and_forget(
-                    "need_approval",
-                    incident_id,
-                    vals.get("description", "")[:80],
-                    severity=vals.get("severity", ""),
-                    command=command,
-                    risk_level=risk_level,
-                    explanation=args.get("explanation", ""),
-                )
-
-        # 子 Agent ask_human 中断
         if "sub_agent_ask_human" in next_nodes:
-            # ask_human 的问题已由子 Agent 通过 SSE 流式发送
-            # 这里只需发布 ask_human_done 信号（如果尚未发送）
-            hypotheses = vals.get("hypotheses", [])
-            current_idx = vals.get("current_hypothesis_index", 0)
-            sub_agent_id = hypotheses[current_idx]["id"] if current_idx < len(hypotheses) else ""
-            log.info("sub_agent_ask_human interrupt", sub_agent_id=sub_agent_id)
-            # ask_human 事件已由 run_sub_agent 的事件桥接发送
-            notify_fire_and_forget(
-                "ask_human",
-                incident_id,
-                vals.get("description", "")[:80],
-                severity=vals.get("severity", ""),
-                question="（子 Agent 提问）",
-            )
+            log.info("sub_agent_ask_human interrupt (already notified by run_sub_agent)")
 
         # confirm_resolution 中断 —— coordinator 调用了 complete，等待用户确认
         if "confirm_resolution" in next_nodes:
@@ -747,13 +673,21 @@ class AgentRunner:
                 main_log.info("Tool end (no SSE)", tool=name)
                 return
             run_id = event.get("run_id", "")
-            output_str = str(event["data"].get("output", ""))
-            main_log.info("Tool end", tool=name)
+            output_raw = event["data"].get("output", "")
+            output_str = str(output_raw)
+            status = "success"
+            if isinstance(output_raw, dict):
+                if output_raw.get("exit_code") not in (None, 0):
+                    status = "error"
+                elif output_raw.get("error"):
+                    status = "error"
+            main_log.info("Tool end", tool=name, status=status)
             main_log.debug("Tool output", output=output_str)
             tool_result_data: dict = {
                 "name": name,
                 "output": output_str,
                 "tool_call_id": run_id,
+                "status": status,
                 "phase": phase,
                 "agent": agent,
             }

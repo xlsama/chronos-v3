@@ -9,10 +9,14 @@ import {
   FileText,
   Loader2,
   Wrench,
+  Check,
+  X,
+  AlertTriangle,
+  HelpCircle,
 } from "lucide-react";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn, formatDuration, formatRelativeTime } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import {
@@ -25,6 +29,13 @@ import { getIncidentHistory } from "@/api/incident-history";
 import { DocumentViewer } from "@/components/projects/document-viewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { QueryContent } from "@/components/query-content";
+import { ThinkingBubble } from "./thinking-bubble";
+import { ToolCallCard } from "./tool-call-card";
+import { SkillReadCard } from "./skill-read-card";
+import { TextDotsLoader } from "@/components/ui/loader";
+
+
+// ─── Types ───────────────────────────────────────────────
 
 interface Source {
   type: "incident_history" | "document";
@@ -34,6 +45,12 @@ interface Source {
   page?: number;
 }
 
+type SubAgentStatus =
+  | "idle" | "started" | "completed" | "failed"
+  | "running" | "confirmed" | "eliminated" | "cancelled";
+
+// ─── Agent config (context gathering mode) ───────────────
+
 const AGENT_CONFIG: Record<
   string,
   { label: string; icon: typeof Search; subAgentName: string }
@@ -41,6 +58,54 @@ const AGENT_CONFIG: Record<
   history: { label: "历史事件检索", icon: Search, subAgentName: "Incident History Subagent" },
   kb: { label: "知识库检索", icon: BookOpen, subAgentName: "KB Subagent" },
 };
+
+// ─── Investigation status config ─────────────────────────
+
+const STATUS_CONFIG: Record<string, {
+  icon: typeof Check;
+  iconClass: string;
+  label: string;
+  labelClass: string;
+}> = {
+  running: {
+    icon: Loader2,
+    iconClass: "h-3 w-3 animate-spin",
+    label: "排查中",
+    labelClass: "text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-950/50",
+  },
+  completed: {
+    icon: Check,
+    iconClass: "h-3 w-3 text-gray-500",
+    label: "完成",
+    labelClass: "text-gray-700 bg-gray-50 dark:text-gray-300 dark:bg-gray-800/50",
+  },
+  confirmed: {
+    icon: Check,
+    iconClass: "h-3 w-3 text-green-600",
+    label: "已确认",
+    labelClass: "text-green-700 bg-green-50 dark:text-green-300 dark:bg-green-950/50",
+  },
+  eliminated: {
+    icon: X,
+    iconClass: "h-3 w-3 text-gray-400",
+    label: "已排除",
+    labelClass: "text-gray-500 bg-gray-50 dark:text-gray-400 dark:bg-gray-800/50",
+  },
+  failed: {
+    icon: AlertTriangle,
+    iconClass: "h-3 w-3 text-red-500",
+    label: "失败",
+    labelClass: "text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-950/50",
+  },
+  cancelled: {
+    icon: X,
+    iconClass: "h-3 w-3 text-gray-400",
+    label: "已取消",
+    labelClass: "text-gray-500 bg-gray-50 dark:text-gray-400 dark:bg-gray-800/50",
+  },
+};
+
+// ─── Context gathering: item builders ────────────────────
 
 interface PairedTool {
   type: "paired_tool";
@@ -83,6 +148,7 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
   const output = item.toolResult?.data.output as string | undefined;
   const hasArgs = args && Object.keys(args).length > 0;
   const isExecuting = !item.toolResult;
+  const status = item.toolResult?.data.status as "success" | "error" | undefined;
 
   return (
     <div className="rounded-lg border border-blue-200 bg-blue-50/50 text-xs dark:border-blue-500/15 dark:bg-blue-500/[0.06]">
@@ -95,10 +161,19 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
         ) : (
           <ChevronRight className="h-3 w-3 shrink-0 text-blue-400 dark:text-blue-400/60" />
         )}
-        <Wrench className="h-3 w-3 shrink-0 text-blue-600 dark:text-blue-400" />
+        {isExecuting ? (
+          <Loader2 className="h-3 w-3 shrink-0 animate-spin text-blue-500" />
+        ) : (
+          <Wrench className={cn("h-3 w-3 shrink-0", status === "error" ? "text-orange-500 dark:text-orange-400" : "text-blue-600 dark:text-blue-400")} />
+        )}
         <span className="font-mono font-semibold text-blue-800 dark:text-blue-200">{name}</span>
         {isExecuting && (
-          <Loader2 className="ml-auto h-3 w-3 animate-spin text-blue-500" />
+          <TextDotsLoader text="执行中" size="sm" className="ml-auto text-muted-foreground" />
+        )}
+        {!isExecuting && status === "error" && (
+          <span className="ml-auto inline-block rounded px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300">
+            失败
+          </span>
         )}
       </button>
       {expanded && (
@@ -125,43 +200,140 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
   );
 }
 
+// ─── Investigation: item builders ────────────────────────
+
+type CardItem =
+  | { type: "thinking"; event: SSEEvent }
+  | { type: "paired_tool"; toolCall: SSEEvent; toolResult?: SSEEvent }
+  | { type: "approval_tool"; approvalEvent: SSEEvent; toolCall?: SSEEvent; toolResult?: SSEEvent }
+  | { type: "ask_human"; event: SSEEvent }
+  | { type: "error"; event: SSEEvent }
+  | { type: "skill_read"; event: SSEEvent };
+
+function buildCardItems(events: SSEEvent[]): CardItem[] {
+  const items: CardItem[] = [];
+  const pendingTools = new Map<string, number>();
+  const pendingApprovals = new Map<string, number>();
+
+  for (const [idx, event] of events.entries()) {
+    switch (event.event_type) {
+      case "thinking":
+        items.push({ type: "thinking", event });
+        break;
+      case "tool_use": {
+        const name = event.data.name as string;
+        if (name === "report_findings") break;
+        const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
+        const approvalId = event.data.approval_id as string | undefined;
+        const approvalIdx = approvalId ? pendingApprovals.get(approvalId) : undefined;
+        if (approvalIdx !== undefined) {
+          const item = items[approvalIdx] as { toolCall?: SSEEvent };
+          item.toolCall = event;
+          pendingTools.set(callId, approvalIdx);
+          pendingApprovals.delete(approvalId!);
+        } else {
+          const itemIdx = items.length;
+          items.push({ type: "paired_tool", toolCall: event });
+          pendingTools.set(callId, itemIdx);
+        }
+        break;
+      }
+      case "tool_result": {
+        const name = event.data.name as string;
+        if (name === "report_findings") break;
+        const callId = (event.data.tool_call_id as string) || `${name}_${idx}`;
+        const pendingIdx = pendingTools.get(callId);
+        if (pendingIdx !== undefined) {
+          (items[pendingIdx] as { toolResult?: SSEEvent }).toolResult = event;
+          pendingTools.delete(callId);
+        }
+        break;
+      }
+      case "approval_required": {
+        const approvalId = event.data.approval_id as string;
+        const itemIdx = items.length;
+        items.push({ type: "approval_tool", approvalEvent: event });
+        if (approvalId) pendingApprovals.set(approvalId, itemIdx);
+        break;
+      }
+      case "ask_human":
+        items.push({ type: "ask_human", event });
+        break;
+      case "error":
+        items.push({ type: "error", event });
+        break;
+      case "skill_read":
+        if (event.data.success !== false) {
+          items.push({ type: "skill_read", event });
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return items;
+}
+
+// ─── Unified SubAgentCard ────────────────────────────────
+
 interface SubAgentCardProps {
-  agentName: string;
   events: SSEEvent[];
-  status: "idle" | "started" | "completed" | "failed";
-  streamingContent?: string;
+  status: SubAgentStatus;
+  className?: string;
   forceExpanded?: boolean;
   fixedLayout?: boolean;
-  className?: string;
+  streamingContent?: string;
+
+  // Context gathering mode (activated when agentName is provided)
+  agentName?: string;
+
+  // Investigation mode (activated when agentName is absent)
+  title?: string;
+  summary?: string;
+  isActive?: boolean;
+  serverMap?: Map<string, string>;
+  serviceMap?: Map<string, string>;
+  incidentStatus?: string;
 }
 
 export function SubAgentCard({
-  agentName,
   events,
   status,
-  streamingContent,
+  className,
   forceExpanded,
   fixedLayout,
-  className,
+  streamingContent,
+  agentName,
+  title,
+  summary,
+  isActive,
+  serverMap,
+  serviceMap,
+  incidentStatus,
 }: SubAgentCardProps) {
-  const [userExpanded, setUserExpanded] = useState(!!forceExpanded);
-  const expanded = forceExpanded || userExpanded;
+  const isContextGathering = !!agentName;
+
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(
+    forceExpanded ? true : null,
+  );
+  const expanded = forceExpanded || (userExpanded ?? (isActive || false));
 
   const { scrollRef: scrollContainerRef } = useAutoScroll({
     enabled: forceExpanded,
     threshold: 50,
   });
 
-  // Preview state
+  // Preview state (context gathering only)
   const [previewSource, setPreviewSource] = useState<Source | null>(null);
 
   const hasEvents = events.length > 0 || !!streamingContent;
-  const config = AGENT_CONFIG[agentName] ?? {
-    label: agentName,
-    icon: Search,
-  };
-  const Icon = config.icon;
 
+  // Resolve config for context gathering
+  const agentConfig = agentName ? AGENT_CONFIG[agentName] : undefined;
+  const Icon = agentConfig?.icon ?? Search;
+  const isLoading = status === "started" || status === "running";
+
+  // Stats
   const { toolCallCount, duration } = useMemo(() => {
     const count = events.filter((e) => e.event_type === "tool_use").length;
     let dur = "";
@@ -171,7 +343,9 @@ export function SubAgentCard({
     return { toolCallCount: count, duration: dur };
   }, [events]);
 
+  // Sources (context gathering only)
   const sources = useMemo(() => {
+    if (!isContextGathering) return [];
     const all: Source[] = [];
     const seen = new Set<string>();
     for (const e of events) {
@@ -185,23 +359,34 @@ export function SubAgentCard({
       }
     }
     return all;
-  }, [events]);
+  }, [events, isContextGathering]);
 
-  const subAgentItems = useMemo(() => buildSubAgentItems(events), [events]);
+  // Build items per mode
+  const subAgentItems = useMemo(
+    () => (isContextGathering ? buildSubAgentItems(events) : []),
+    [events, isContextGathering],
+  );
+  const cardItems = useMemo(
+    () => (isContextGathering ? [] : buildCardItems(events)),
+    [events, isContextGathering],
+  );
 
-  const statusText =
-    status === "idle"
-      ? "等待中..."
-      : status === "started"
-        ? "检索中..."
-        : status === "failed"
-          ? "检索失败"
-          : [
-            duration && duration !== "0s" ? duration : null,
-            toolCallCount > 0 ? `${toolCallCount} 次调用` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ") || "完成";
+  // Status text for right side (loading status is shown on the left now)
+  const statsText = (() => {
+    if (isContextGathering && status === "failed") return "检索失败";
+    if (isLoading) return "";
+    const parts = [
+      duration && duration !== "0s" ? duration : null,
+      toolCallCount > 0 ? `${toolCallCount} 次调用` : null,
+    ].filter(Boolean).join(" · ");
+    return parts || (isContextGathering ? "完成" : "");
+  })();
+
+  // Investigation status badge config
+  const statusBadge = !isContextGathering ? STATUS_CONFIG[status] : undefined;
+
+  // Base timestamp for relative time in investigation mode
+  const baseTimestamp = events.length > 0 ? events[0].timestamp : "";
 
   return (
     <div
@@ -216,24 +401,57 @@ export function SubAgentCard({
       )}
       data-testid="sub-agent-card"
     >
+      {/* Header */}
       <button
         className="flex w-full items-center gap-2 p-3 text-left text-sm font-medium text-foreground"
         onClick={() => setUserExpanded(!expanded)}
       >
         {expanded ? (
-          <ChevronDown className="h-4 w-4" />
+          <ChevronDown className="h-4 w-4 shrink-0" />
         ) : (
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 shrink-0" />
         )}
-        <Icon className="h-4 w-4" />
-        <span>{config.label}</span>
-        {"subAgentName" in config && (
-          <span className="ml-1.5 rounded bg-muted px-1 py-px text-[9px] font-normal text-muted-foreground">
-            {config.subAgentName}
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="truncate font-medium">
+          {isContextGathering ? agentConfig?.label ?? agentName : title}
+        </span>
+
+        {/* Badge: subAgentName (context) or status badge (investigation, non-loading only) */}
+        {isContextGathering && agentConfig?.subAgentName && (
+          <span className="ml-1.5 shrink-0 rounded bg-muted px-1 py-px text-[9px] font-normal text-muted-foreground">
+            {agentConfig.subAgentName}
           </span>
         )}
+        {!isLoading && statusBadge && (
+          <span
+            className={cn(
+              "ml-1.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+              statusBadge.labelClass,
+            )}
+          >
+            {(() => {
+              const BadgeIcon = statusBadge.icon;
+              return <BadgeIcon className={statusBadge.iconClass} />;
+            })()}
+            {statusBadge.label}
+          </span>
+        )}
+
+        {/* Right side: loading indicator / sources / stats */}
         <span className="ml-auto inline-flex shrink-0 items-center gap-4">
-          {status !== "started" && sources.length > 0 && (
+          {isLoading && (
+            <span className="inline-flex items-center gap-1.5 text-blue-500">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <TextDotsLoader
+                className="text-blue-500"
+                text={isContextGathering
+                  ? status === "idle" ? "等待中" : "检索中"
+                  : statusBadge?.label ?? "排查中"}
+                size="sm"
+              />
+            </span>
+          )}
+          {isContextGathering && !isLoading && sources.length > 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
               <FileText className="h-3 w-3 shrink-0 opacity-60" />
               {sources.map((s, i) => (
@@ -260,13 +478,23 @@ export function SubAgentCard({
               ))}
             </span>
           )}
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {statusText}
-          </span>
+          {statsText && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {statsText}
+            </span>
+          )}
         </span>
       </button>
 
-      {expanded && (hasEvents || status === "started") && (
+      {/* Collapsed summary preview (investigation only) */}
+      {!expanded && !isContextGathering && summary && (
+        <div className="border-t border-border/40 px-3 py-2 pl-11">
+          <p className="truncate text-xs text-muted-foreground">{summary}</p>
+        </div>
+      )}
+
+      {/* Expanded content: context gathering mode */}
+      {expanded && isContextGathering && (hasEvents || status === "started") && (
         <div
           className="flex-1 min-h-0 overflow-y-auto space-y-2 px-3 pb-3 pl-9 text-sm text-foreground/80"
           ref={scrollContainerRef}
@@ -300,7 +528,129 @@ export function SubAgentCard({
         </div>
       )}
 
-      {/* Preview dialogs */}
+      {/* Expanded content: investigation mode */}
+      {expanded && !isContextGathering && (
+        <div className="space-y-3 border-t border-border/40 px-3 pb-3 pt-2 pl-11">
+          {cardItems.map((item, i) => {
+            switch (item.type) {
+              case "thinking":
+                return (
+                  <div key={i}>
+                    <ThinkingBubble content={item.event.data.content as string} />
+                  </div>
+                );
+              case "paired_tool": {
+                const toolName = item.toolCall.data.name as string;
+                const toolArgs = item.toolCall.data.args as Record<string, unknown> | undefined;
+                let serverInfo: string | undefined;
+                let serviceInfo: string | undefined;
+                if (toolName === "ssh_bash") {
+                  const sid = toolArgs?.server_id as string | undefined;
+                  serverInfo = sid ? serverMap?.get(sid) : undefined;
+                } else if (toolName === "service_exec") {
+                  const sid = toolArgs?.service_id as string | undefined;
+                  serviceInfo = sid ? serviceMap?.get(sid) : undefined;
+                }
+                const relTime = baseTimestamp
+                  ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
+                  : undefined;
+                return (
+                  <div key={i}>
+                    <ToolCallCard
+                      name={toolName}
+                      args={toolArgs}
+                      output={item.toolResult?.data.output as string | undefined}
+                      isExecuting={!item.toolResult}
+                      status={item.toolResult?.data.status as "success" | "error" | undefined}
+                      relativeTime={relTime}
+                      serverInfo={serverInfo}
+                      serviceInfo={serviceInfo}
+                    />
+                  </div>
+                );
+              }
+              case "approval_tool": {
+                const ad = item.approvalEvent.data;
+                const atn = (ad.tool_name as string) || "";
+                const aa = ad.tool_args as Record<string, unknown> | undefined;
+                let asi: string | undefined;
+                let aSvcI: string | undefined;
+                if (atn === "ssh_bash") asi = aa?.server_id ? serverMap?.get(aa.server_id as string) : undefined;
+                else if (atn === "service_exec") aSvcI = aa?.service_id ? serviceMap?.get(aa.service_id as string) : undefined;
+                return (
+                  <div key={i}>
+                    <ToolCallCard
+                      name={atn}
+                      args={aa}
+                      output={item.toolResult?.data.output as string | undefined}
+                      isExecuting={!!item.toolCall && !item.toolResult}
+                      status={item.toolResult?.data.status as "success" | "error" | undefined}
+                      serverInfo={asi}
+                      serviceInfo={aSvcI}
+                      approvalId={ad.approval_id as string}
+                      riskLevel={aa?.risk_level as string | undefined}
+                      explanation={aa?.explanation as string | undefined}
+                      incidentStatus={incidentStatus}
+                    />
+                  </div>
+                );
+              }
+              case "ask_human":
+                return (
+                  <div key={i} className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+                    <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <div>
+                      <p className="text-xs font-medium text-amber-800">需要更多信息</p>
+                      <Markdown
+                        content={item.event.data.question as string}
+                        variant="compact"
+                        className="mt-1 card-markdown card-markdown--amber"
+                      />
+                    </div>
+                  </div>
+                );
+              case "error":
+                return (
+                  <div key={i} className="rounded-md border border-destructive bg-destructive/10 p-3">
+                    <Markdown
+                      content={item.event.data.message as string}
+                      variant="compact"
+                      className="card-markdown card-markdown--destructive"
+                    />
+                  </div>
+                );
+              case "skill_read": {
+                const sName = item.event.data.skill_name as string;
+                const sSlug = (item.event.data.skill_slug as string) || sName;
+                return <SkillReadCard key={i} skillName={sName} skillSlug={sSlug} />;
+              }
+              default:
+                return null;
+            }
+          })}
+
+          {/* Live thinking stream */}
+          {isActive && streamingContent && (
+            <div className="animate-in fade-in duration-150">
+              <ThinkingBubble content={streamingContent} isStreaming />
+            </div>
+          )}
+
+          {/* Waiting indicator */}
+          {isActive && !streamingContent && events.length > 0 && (
+            <div className="px-1 py-1">
+              <TextDotsLoader text="Agent 思考中" size="sm" />
+            </div>
+          )}
+
+          {/* Summary from report_findings */}
+          {summary && status !== "running" && (
+            <Markdown content={summary} variant="compact" />
+          )}
+        </div>
+      )}
+
+      {/* Preview dialogs (context gathering only) */}
       {previewSource?.type === "incident_history" && (
         <IncidentHistoryPreview
           id={previewSource.id}

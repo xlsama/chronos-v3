@@ -146,7 +146,7 @@ function ProjectCard({ project }: { project: Project }) {
             </DropdownMenu>
           </div>
           <CardHeader>
-            <CardTitle className="line-clamp-1">{project.name}</CardTitle>
+            <CardTitle className="line-clamp-1 font-normal">{project.name}</CardTitle>
             {project.description && (
               <CardDescription className="line-clamp-2">
                 {project.description}

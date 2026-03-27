@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { X } from "lucide-react";
@@ -34,6 +34,20 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
   const isWaitingForInput = !!askHumanQuestion || (resolutionConfirmRequired && !resolutionConfirmResolved);
   const isAgentWorking = incidentStatus === "investigating" && !isWaitingForInput && !pendingSupplement;
   const isInputDisabled = isTerminal;
+
+  const [isInterrupting, setIsInterrupting] = useState(false);
+  const interruptTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (isInterrupting && !isAgentWorking) {
+      setIsInterrupting(false);
+      clearTimeout(interruptTimeoutRef.current);
+    }
+  }, [isInterrupting, isAgentWorking]);
+
+  useEffect(() => {
+    return () => clearTimeout(interruptTimeoutRef.current);
+  }, []);
   const isSupplementMode = !!pendingSupplement;
 
   // Normal message mutation
@@ -119,7 +133,14 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
 
   const interruptMutation = useMutation({
     mutationFn: () => interruptIncident(incidentId),
+    onMutate: () => {
+      setIsInterrupting(true);
+      clearTimeout(interruptTimeoutRef.current);
+      interruptTimeoutRef.current = setTimeout(() => setIsInterrupting(false), 10_000);
+    },
     onError: () => {
+      setIsInterrupting(false);
+      clearTimeout(interruptTimeoutRef.current);
       toast.error("打断失败，请重试");
     },
   });
@@ -170,8 +191,8 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
         disabled={isInputDisabled || activeMutation.isPending}
         placeholder={placeholder}
         showInterrupt={isAgentWorking}
-        onInterrupt={() => interruptMutation.mutate()}
-        isInterrupting={interruptMutation.isPending}
+        onInterrupt={() => { if (!isInterrupting) interruptMutation.mutate(); }}
+        isInterrupting={isInterrupting}
         accentMode={isSupplementMode ? "flowing" : undefined}
       />
     </div>

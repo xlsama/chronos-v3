@@ -2,6 +2,7 @@
 
 import uuid
 
+import orjson
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from src.db.connection import get_session_factory
@@ -11,6 +12,9 @@ from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.investigation_graph import compile_investigation_graph
 from src.ops_agent.state import CoordinatorState, HypothesisResult
+from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
+from src.services.approval_service import ApprovalService
+from src.services.notification_service import notify_fire_and_forget
 
 
 def _format_prior_findings(results: list[HypothesisResult]) -> str:
@@ -21,7 +25,11 @@ def _format_prior_findings(results: list[HypothesisResult]) -> str:
     for r in results:
         status_map = {"confirmed": "已确认", "eliminated": "已排除", "inconclusive": "证据不足"}
         status_zh = status_map.get(r["status"], r["status"])
-        lines.append(f"- {r['hypothesis_id']} [{status_zh}] {r['hypothesis_desc']}: {r['summary']}")
+        line = f"- {r['hypothesis_id']} [{status_zh}] {r['hypothesis_desc']}: {r['summary']}"
+        action = r.get("action_taken", "")
+        if action:
+            line += f" [已修复: {action}]"
+        lines.append(line)
     return "\n".join(lines)
 
 
@@ -39,6 +47,87 @@ def _extract_launch_info(state: CoordinatorState) -> tuple[str, str, str]:
                     )
             break
     return "H1", "", ""
+
+
+async def _create_and_publish_approval(
+    publisher: EventPublisher,
+    channel: str,
+    pending_tool_call: dict | None,
+    incident_id: str,
+    description: str,
+    severity: str,
+    hypothesis_id: str,
+    log,
+) -> str:
+    """在子 Agent 上下文中创建 ApprovalRequest 并发布 approval_required 事件。
+
+    返回 approval_id 字符串。
+    """
+    if not pending_tool_call:
+        return ""
+
+    args = pending_tool_call.get("args", {})
+    tool_name = pending_tool_call["name"]
+    command = args.get("command", "")
+
+    # 风险分类
+    if tool_name in ("ssh_bash", "bash"):
+        cmd_type = ShellSafety.classify(command, local=(tool_name == "bash"))
+    elif tool_name == "service_exec":
+        from src.ops_agent.nodes.investigation_agent import _get_service_type
+
+        service_type = await _get_service_type(args.get("service_id", ""))
+        cmd_type = ServiceSafety.classify(service_type, command)
+    else:
+        cmd_type = CommandType.WRITE
+
+    risk_level = "HIGH" if cmd_type == CommandType.DANGEROUS else "MEDIUM"
+    log.info(
+        "Creating sub-agent approval",
+        tool=tool_name,
+        cmd_type=cmd_type.name,
+        risk=risk_level,
+        hypothesis=hypothesis_id,
+    )
+
+    # 创建 DB 记录
+    async with get_session_factory()() as session:
+        approval = await ApprovalService(session).create(
+            incident_id=uuid.UUID(incident_id),
+            tool_name=tool_name,
+            tool_args=orjson.dumps(args).decode(),
+            risk_level=risk_level,
+            explanation=args.get("explanation"),
+        )
+    approval_id = str(approval.id)
+    log.info("Approval created", approval_id=approval_id)
+
+    # 发布 approval_required 事件（带 sub_agent_id）
+    await publisher.publish(
+        channel,
+        "approval_required",
+        {
+            "approval_id": approval_id,
+            "tool_name": tool_name,
+            "tool_args": {**args, "risk_level": risk_level},
+            "tool_call_id": pending_tool_call.get("id", ""),
+            "sub_agent_id": hypothesis_id,
+            "phase": "investigation",
+        },
+    )
+
+    # 通知
+    notify_fire_and_forget(
+        "need_approval",
+        incident_id,
+        description[:80],
+        severity=severity,
+        command=command,
+        risk_level=risk_level,
+        explanation=args.get("explanation", ""),
+    )
+
+    return approval_id
 
 
 async def run_sub_agent_node(state: CoordinatorState) -> dict:
@@ -134,11 +223,17 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
             "recursion_limit": get_settings().agent_recursion_limit,
         }
 
+        # 传递 approval_id 用于标记 resume 后的 tool_use 事件
+        approval_id_for_resume = ""
+        if state.get("approval_decision") == "approved" and state.get("pending_approval_id"):
+            approval_id_for_resume = state["pending_approval_id"]
+
         result = await _resume_sub_agent(
-            sub_graph, config, state, channel, publisher, hypothesis_id, log
+            sub_graph, config, state, channel, publisher, hypothesis_id, log,
+            approval_id=approval_id_for_resume,
         )
 
-    # 子 Agent hit interrupt → 返回等待状态
+    # 子 Agent hit interrupt → 创建审批/通知，返回等待状态
     if result["needs_interrupt"]:
         log.info(
             "Sub-agent hit interrupt",
@@ -153,8 +248,24 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
             "sub_agent_status": "waiting_for_human",
         }
         if result["interrupt_type"] == "human_approval":
+            pending = result.get("pending_tool_call")
+            approval_id = await _create_and_publish_approval(
+                publisher, channel, pending,
+                incident_id, state["description"], state["severity"],
+                hypothesis["id"], log,
+            )
             return_state["needs_approval"] = True
-            return_state["pending_tool_call"] = result.get("pending_tool_call")
+            return_state["pending_tool_call"] = pending
+            return_state["pending_approval_id"] = approval_id
+        elif result["interrupt_type"] == "ask_human":
+            # ask_human 通知
+            notify_fire_and_forget(
+                "ask_human",
+                incident_id,
+                state.get("description", "")[:80],
+                severity=state.get("severity", ""),
+                question="（子 Agent 提问）",
+            )
         return return_state
 
     # 子 Agent 完成 → 提取结果，构造 ToolMessage 返回给 coordinator
@@ -178,12 +289,15 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
 
     # 构造 ToolMessage 返回给 coordinator_agent
     status_zh = {"confirmed": "已确认", "eliminated": "已排除", "inconclusive": "证据不足"}
+    action_taken = finding.get("action_taken", "")
     tool_message_content = (
         f"假设 {finding['hypothesis_id']} 调查完成。\n"
         f"状态: {status_zh.get(finding['status'], finding['status'])}\n"
         f"摘要: {finding['summary']}\n"
         f"证据: {finding['evidence']}"
     )
+    if action_taken:
+        tool_message_content += f"\n已执行修复: {action_taken}"
 
     results.append(finding)
     return {
@@ -196,6 +310,7 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
         "sub_agent_status": "completed",
         "needs_approval": False,
         "pending_tool_call": None,
+        "pending_approval_id": None,
     }
 
 
@@ -244,7 +359,8 @@ async def _stream_sub_agent(
 
 
 async def _resume_sub_agent(
-    sub_graph, config, coordinator_state, channel, publisher, hypothesis_id, log
+    sub_graph, config, coordinator_state, channel, publisher, hypothesis_id, log,
+    approval_id: str = "",
 ) -> dict:
     """恢复子 Agent（传递审批决定或用户输入）。"""
     from langgraph.types import Command
@@ -255,6 +371,8 @@ async def _resume_sub_agent(
     ask_human_active = False
     ask_human_streamed = False
 
+    # 确定 approval_tool_name 用于标记 resume 后的 tool_use 事件
+    approval_tool_name = ""
     if "human_approval" in next_nodes:
         decision = coordinator_state.get("approval_decision", "approved")
         supplement = coordinator_state.get("approval_supplement")
@@ -263,6 +381,11 @@ async def _resume_sub_agent(
             state_update["approval_supplement"] = supplement
         resume_input = Command(resume=None, update=state_update)
         log.info("Resuming sub-agent (approval)", decision=decision)
+        # 仅在 approved 时传递 approval_id 标记
+        if decision == "approved" and approval_id:
+            pending = _extract_sub_agent_pending_tool(graph_state.values)
+            if pending:
+                approval_tool_name = pending["name"]
     elif "ask_human" in next_nodes:
         last_msg = coordinator_state["messages"][-1]
         user_input = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
@@ -277,10 +400,14 @@ async def _resume_sub_agent(
             bridge_result = await _bridge_event(
                 event, channel, publisher, hypothesis_id,
                 thinking_buffer, ask_human_active, ask_human_streamed,
+                approval_id=approval_id, approval_tool_name=approval_tool_name,
             )
             thinking_buffer = bridge_result["thinking_buffer"]
             ask_human_active = bridge_result["ask_human_active"]
             ask_human_streamed = bridge_result["ask_human_streamed"]
+            # approval_id 标记仅用于第一个匹配的 tool_use/tool_result
+            approval_id = bridge_result.get("approval_id", approval_id)
+            approval_tool_name = bridge_result.get("approval_tool_name", approval_tool_name)
     except Exception as e:
         log.error("Sub-agent resume stream error", error=str(e))
         raise
@@ -310,6 +437,7 @@ async def _resume_sub_agent(
 async def _bridge_event(
     event, channel, publisher, hypothesis_id,
     thinking_buffer, ask_human_active, ask_human_streamed,
+    approval_id: str = "", approval_tool_name: str = "",
 ) -> dict:
     """桥接子 Agent 事件到 SSE channel，附加 sub_agent_id。"""
     kind = event.get("event")
@@ -321,6 +449,8 @@ async def _bridge_event(
             "thinking_buffer": thinking_buffer,
             "ask_human_active": ask_human_active,
             "ask_human_streamed": ask_human_streamed,
+            "approval_id": approval_id,
+            "approval_tool_name": approval_tool_name,
         }
 
     if kind == "on_chat_model_stream":
@@ -352,17 +482,17 @@ async def _bridge_event(
             pass
         else:
             run_id = event.get("run_id", "")
-            await publisher.publish(
-                channel,
-                "tool_use",
-                {
-                    "name": name,
-                    "args": event["data"].get("input", {}),
-                    "tool_call_id": run_id,
-                    "phase": "investigation",
-                    "sub_agent_id": hypothesis_id,
-                },
-            )
+            tool_use_data: dict = {
+                "name": name,
+                "args": event["data"].get("input", {}),
+                "tool_call_id": run_id,
+                "phase": "investigation",
+                "sub_agent_id": hypothesis_id,
+            }
+            # 标记已批准的 tool_use 事件
+            if approval_id and name == approval_tool_name:
+                tool_use_data["approval_id"] = approval_id
+            await publisher.publish(channel, "tool_use", tool_use_data)
 
     elif kind == "on_tool_end":
         name = event.get("name", "")
@@ -389,23 +519,35 @@ async def _bridge_event(
             )
         else:
             run_id = event.get("run_id", "")
-            output_str = str(event["data"].get("output", ""))
-            await publisher.publish(
-                channel,
-                "tool_result",
-                {
-                    "name": name,
-                    "output": output_str,
-                    "tool_call_id": run_id,
-                    "phase": "investigation",
-                    "sub_agent_id": hypothesis_id,
-                },
-            )
+            output_raw = event["data"].get("output", "")
+            output_str = str(output_raw)
+            status = "success"
+            if isinstance(output_raw, dict):
+                if output_raw.get("exit_code") not in (None, 0):
+                    status = "error"
+                elif output_raw.get("error"):
+                    status = "error"
+            tool_result_data: dict = {
+                "name": name,
+                "output": output_str,
+                "tool_call_id": run_id,
+                "status": status,
+                "phase": "investigation",
+                "sub_agent_id": hypothesis_id,
+            }
+            # 标记已批准的 tool_result 事件，并清除 approval 标记
+            if approval_id and name == approval_tool_name:
+                tool_result_data["approval_id"] = approval_id
+                approval_id = ""
+                approval_tool_name = ""
+            await publisher.publish(channel, "tool_result", tool_result_data)
 
     return {
         "thinking_buffer": thinking_buffer,
         "ask_human_active": ask_human_active,
         "ask_human_streamed": ask_human_streamed,
+        "approval_id": approval_id,
+        "approval_tool_name": approval_tool_name,
     }
 
 
@@ -438,6 +580,7 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
                         status=args.get("status", "inconclusive"),
                         summary=args.get("summary", ""),
                         evidence=args.get("evidence", ""),
+                        action_taken=args.get("action_taken", ""),
                     )
             break
 
@@ -447,4 +590,5 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
         status="inconclusive",
         summary="调查未能得出结论",
         evidence="",
+        action_taken="",
     )

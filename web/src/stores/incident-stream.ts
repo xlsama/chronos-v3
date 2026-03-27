@@ -347,6 +347,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     const loadedRoundSummaries: { round: number; summary: string }[] = [];
     const loadedInvestigations: InvestigationSubAgent[] = [];
     let loadedActiveInvestigationId: string | null = null;
+    let isStopped = false;
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -440,8 +441,14 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      if (event.event_type === "user_message" || event.event_type === "incident_stopped" || event.event_type === "skill_read" || event.event_type === "agent_interrupted") {
+      if (event.event_type === "user_message" || event.event_type === "agent_interrupted") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
+        mainEvents.push(event);
+        continue;
+      }
+
+      if (event.event_type === "incident_stopped") {
+        isStopped = true;
         mainEvents.push(event);
         continue;
       }
@@ -449,6 +456,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       // answer → directly add to mainEvents
       if (event.event_type === "answer") {
         mainEvents.push(event);
+        continue;
+      }
+
+      // Skip planner thinking — already represented by plannerPlanMd
+      if (event.event_type === "thinking" && phase === "planning") {
         continue;
       }
 
@@ -484,15 +496,29 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       askQuestion = (askEvent.data.question as string) || null;
     }
 
+    // Cancel running investigations if incident was stopped or interrupted
+    const hasInterrupted = mainEvents.some((e) => e.event_type === "agent_interrupted");
+    if (isStopped || hasInterrupted) {
+      for (const inv of loadedInvestigations) {
+        if (inv.status === "running") {
+          inv.status = "cancelled";
+        }
+      }
+      loadedActiveInvestigationId = null;
+    }
+
     // Derive phase state from loaded events
     const hasDone = mainEvents.some((e) => e.event_type === "done");
+    const isTerminal = hasDone || isStopped || hasInterrupted;
     const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
-    const hasMain = mainEvents.some((e) => e.event_type !== "done");
+    const hasMain = mainEvents.some((e) =>
+      e.event_type !== "done" && e.event_type !== "incident_stopped" && e.event_type !== "agent_interrupted",
+    );
     const hasPlan = !!loadedPlanMd;
     const derivedPhase: PhaseState = {
-      contextGathering: hasContext ? (hasPlan || hasMain || hasDone ? "completed" : "active") : "pending",
-      planning: hasPlan ? (hasMain || hasDone ? "completed" : "active") : "pending",
-      investigation: hasMain ? (hasDone ? "completed" : "active") : "pending",
+      contextGathering: hasContext ? (hasPlan || hasMain || isTerminal ? "completed" : "active") : "pending",
+      planning: hasPlan ? (hasMain || isTerminal ? "completed" : "active") : "pending",
+      investigation: hasMain ? (isTerminal ? "completed" : "active") : "pending",
     };
 
     set({

@@ -63,7 +63,7 @@ function SkillItem({ skill, onSelect }: SkillItemProps) {
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <p className="font-medium">{skill.name}</p>
+              <p>{skill.name}</p>
               {skill.draft && <Badge variant="secondary">草稿</Badge>}
             </div>
             <p className="text-sm text-muted-foreground truncate">
