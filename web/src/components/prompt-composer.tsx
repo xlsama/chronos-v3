@@ -283,20 +283,21 @@ export function PromptComposer({
                     </Button>
                   </PromptInputAction>
                   {showInterrupt ? (
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className="size-8 rounded-full hover:bg-destructive/10 hover:text-destructive hover:border-transparent"
-                      onClick={onInterrupt}
-                      disabled={isInterrupting}
-                      title="停止"
-                    >
-                      {isInterrupting ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Square className="size-3.5" />
-                      )}
-                    </Button>
+                    <PromptInputAction tooltip="中断">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="size-8 rounded-full bg-destructive/10 text-destructive border-transparent hover:bg-destructive/20 hover:text-destructive"
+                        onClick={onInterrupt}
+                        disabled={isInterrupting}
+                      >
+                        {isInterrupting ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Square className="size-3.5" />
+                        )}
+                      </Button>
+                    </PromptInputAction>
                   ) : (
                     <Button
                       size="icon"

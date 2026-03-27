@@ -762,28 +762,57 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
         >
           <div className="space-y-3">
             {hasInvestigations ? (
-              // New architecture: render investigation sub-agent cards
+              // New architecture: interleave coordinator thinking + InvestigationCards
               <>
-                {investigations.map((inv) => (
-                  <InvestigationCard
-                    key={inv.hypothesisId}
-                    investigation={inv}
-                    isActive={inv.hypothesisId === activeInvestigationId}
-                    serverMap={serverMap}
-                    serviceMap={serviceMap}
-                    incidentStatus={incidentStatus}
-                  />
-                ))}
+                {(() => {
+                  // Build a merged timeline of coordinator events and investigation cards
+                  type MergedItem =
+                    | { kind: "timeline"; item: TimelineItem; idx: number; ts: string }
+                    | { kind: "investigation"; inv: typeof investigations[0]; ts: string };
 
-                {/* Transitional indicator between sub-agents */}
-                {activeInvestigationId && !investigations.find(i => i.hypothesisId === activeInvestigationId)?.thinkingContent && investigations.find(i => i.hypothesisId === activeInvestigationId)?.events.length === 0 && (
-                  <div className="px-1 py-2">
-                    <TextDotsLoader text="Agent 思考中" size="sm" />
-                  </div>
-                )}
+                  const merged: MergedItem[] = [];
 
-                {/* Events not belonging to any sub-agent (e.g. answer from synthesize) */}
-                {timelineItems.map((item, i) => renderTimelineItem(item, i))}
+                  // Add coordinator timeline items (thinking, answer, etc. without sub_agent_id)
+                  for (let i = 0; i < timelineItems.length; i++) {
+                    const item = timelineItems[i];
+                    const evt = "event" in item ? (item as { event: SSEEvent }).event :
+                                "toolCall" in item ? (item as { toolCall: SSEEvent }).toolCall :
+                                "approvalEvent" in item ? (item as { approvalEvent: SSEEvent }).approvalEvent :
+                                "startEvent" in item ? (item as { startEvent: SSEEvent }).startEvent : null;
+                    const ts = evt?.timestamp || "";
+                    merged.push({ kind: "timeline", item, idx: i, ts });
+                  }
+
+                  // Add investigation cards at their start timestamp
+                  for (const inv of investigations) {
+                    const firstTs = inv.events.length > 0 ? inv.events[0].timestamp : "";
+                    merged.push({ kind: "investigation", inv, ts: firstTs });
+                  }
+
+                  // Sort by timestamp (stable: items without ts go to end)
+                  merged.sort((a, b) => {
+                    if (!a.ts && !b.ts) return 0;
+                    if (!a.ts) return 1;
+                    if (!b.ts) return -1;
+                    return a.ts.localeCompare(b.ts);
+                  });
+
+                  return merged.map((m, i) => {
+                    if (m.kind === "investigation") {
+                      return (
+                        <InvestigationCard
+                          key={`inv-${m.inv.hypothesisId}`}
+                          investigation={m.inv}
+                          isActive={m.inv.hypothesisId === activeInvestigationId}
+                          serverMap={serverMap}
+                          serviceMap={serviceMap}
+                          incidentStatus={incidentStatus}
+                        />
+                      );
+                    }
+                    return <div key={`tl-${m.idx}`}>{renderTimelineItem(m.item, m.idx)}</div>;
+                  });
+                })()}
               </>
             ) : totalRounds <= 1 ? (
               // Legacy: single round, render all items directly

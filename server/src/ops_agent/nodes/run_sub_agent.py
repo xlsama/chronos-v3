@@ -2,7 +2,7 @@
 
 import uuid
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 
 from src.db.connection import get_session_factory
 from src.env import get_settings
@@ -25,23 +25,31 @@ def _format_prior_findings(results: list[HypothesisResult]) -> str:
     return "\n".join(lines)
 
 
+def _extract_launch_info(state: CoordinatorState) -> tuple[str, str, str]:
+    """从最近的 launch_investigation tool_call 中提取假设信息和 tool_call_id。"""
+    for msg in reversed(state["messages"]):
+        if hasattr(msg, "tool_calls") and msg.tool_calls:
+            for tc in msg.tool_calls:
+                if tc["name"] == "launch_investigation":
+                    args = tc.get("args", {})
+                    return (
+                        args.get("hypothesis_id", "H1"),
+                        args.get("hypothesis_desc", ""),
+                        tc["id"],
+                    )
+            break
+    return "H1", "", ""
+
+
 async def run_sub_agent_node(state: CoordinatorState) -> dict:
     """创建或恢复子 Agent 来验证当前假设。
 
-    流程:
-    1. 如果有活跃的子 Agent (active_sub_agent_thread_id)，恢复它
-    2. 否则创建新的子 Agent
-    3. 执行子 Agent 图，流式桥接 SSE 事件
-    4. 如果子 Agent hit interrupt，返回等待状态
-    5. 如果子 Agent 完成，提取结果并返回
+    由 coordinator_agent 调用 launch_investigation 后触发。
+    完成后返回 ToolMessage 给 coordinator_agent。
     """
     sid = state["incident_id"][:8]
     log = get_logger(component="run_sub_agent", sid=sid)
     incident_id = state["incident_id"]
-
-    hypotheses = state["hypotheses"]
-    current_idx = state.get("current_hypothesis_index", 0)
-    hypothesis = hypotheses[current_idx]
     results = list(state.get("hypothesis_results") or [])
 
     # 获取共享 checkpointer
@@ -57,18 +65,17 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
     is_resume = bool(sub_thread_id)
 
     if not is_resume:
-        # 创建新的子 Agent
+        # 从 launch_investigation tool_call 中提取假设信息
+        hypothesis_id, hypothesis_desc, launch_tool_call_id = _extract_launch_info(state)
+        hypothesis = {"id": hypothesis_id, "desc": hypothesis_desc}
+
         sub_thread_id = str(uuid.uuid4())
-        log.info(
-            "Creating sub-agent",
-            hypothesis=hypothesis["id"],
-            thread_id=sub_thread_id,
-        )
+        log.info("Creating sub-agent", hypothesis=hypothesis_id, thread_id=sub_thread_id)
 
         prior_findings = _format_prior_findings(results)
         initial_prompt = (
             f"事件描述: {state['description']}\n\n"
-            f"请验证假设 {hypothesis['id']}: {hypothesis['desc']}"
+            f"请验证假设 {hypothesis_id}: {hypothesis_desc}"
         )
 
         initial_state = {
@@ -76,8 +83,8 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
             "incident_id": incident_id,
             "description": state["description"],
             "severity": state["severity"],
-            "hypothesis_id": hypothesis["id"],
-            "hypothesis_desc": hypothesis["desc"],
+            "hypothesis_id": hypothesis_id,
+            "hypothesis_desc": hypothesis_desc,
             "prior_findings": prior_findings,
             "kb_summary": state.get("kb_summary"),
             "is_complete": False,
@@ -100,8 +107,8 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
                 channel,
                 "sub_agent_started",
                 {
-                    "hypothesis_id": hypothesis["id"],
-                    "hypothesis_desc": hypothesis["desc"],
+                    "hypothesis_id": hypothesis_id,
+                    "hypothesis_desc": hypothesis_desc,
                     "sub_agent_thread_id": sub_thread_id,
                     "phase": "investigation",
                 },
@@ -111,23 +118,27 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
 
         # 执行子 Agent，桥接事件
         result = await _stream_sub_agent(
-            sub_graph, initial_state, config, channel, publisher, hypothesis["id"], log
+            sub_graph, initial_state, config, channel, publisher, hypothesis_id, log
         )
     else:
         # 恢复已有的子 Agent
-        log.info("Resuming sub-agent", hypothesis=hypothesis["id"], thread_id=sub_thread_id)
+        hypothesis_id = state.get("active_hypothesis_id", "H1")
+        hypothesis_desc = state.get("active_hypothesis_desc", "")
+        launch_tool_call_id = state.get("pending_launch_tool_call_id", "")
+        hypothesis = {"id": hypothesis_id, "desc": hypothesis_desc}
+
+        log.info("Resuming sub-agent", hypothesis=hypothesis_id, thread_id=sub_thread_id)
 
         config = {
             "configurable": {"thread_id": sub_thread_id},
             "recursion_limit": get_settings().agent_recursion_limit,
         }
 
-        # 恢复子 Agent（通过 Command 传递审批/用户输入）
         result = await _resume_sub_agent(
-            sub_graph, config, state, channel, publisher, hypothesis["id"], log
+            sub_graph, config, state, channel, publisher, hypothesis_id, log
         )
 
-    # 检查子 Agent 是否 hit interrupt
+    # 子 Agent hit interrupt → 返回等待状态
     if result["needs_interrupt"]:
         log.info(
             "Sub-agent hit interrupt",
@@ -136,6 +147,9 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
         )
         return_state: dict = {
             "active_sub_agent_thread_id": sub_thread_id,
+            "active_hypothesis_id": hypothesis["id"],
+            "active_hypothesis_desc": hypothesis["desc"],
+            "pending_launch_tool_call_id": launch_tool_call_id,
             "sub_agent_status": "waiting_for_human",
         }
         if result["interrupt_type"] == "human_approval":
@@ -143,15 +157,9 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
             return_state["pending_tool_call"] = result.get("pending_tool_call")
         return return_state
 
-    # 子 Agent 完成
-    log.info(
-        "Sub-agent completed",
-        hypothesis=hypothesis["id"],
-        status=result.get("status", "inconclusive"),
-    )
-
-    # 提取调查结果
+    # 子 Agent 完成 → 提取结果，构造 ToolMessage 返回给 coordinator
     finding = await _extract_findings(sub_graph, config, hypothesis)
+    log.info("Sub-agent completed", hypothesis=hypothesis["id"], status=finding["status"])
 
     # 发布 sub_agent_completed 事件
     try:
@@ -168,11 +176,23 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
     except Exception as e:
         log.warning("Failed to publish sub_agent_completed", error=str(e))
 
+    # 构造 ToolMessage 返回给 coordinator_agent
+    status_zh = {"confirmed": "已确认", "eliminated": "已排除", "inconclusive": "证据不足"}
+    tool_message_content = (
+        f"假设 {finding['hypothesis_id']} 调查完成。\n"
+        f"状态: {status_zh.get(finding['status'], finding['status'])}\n"
+        f"摘要: {finding['summary']}\n"
+        f"证据: {finding['evidence']}"
+    )
+
     results.append(finding)
     return {
+        "messages": [ToolMessage(content=tool_message_content, tool_call_id=launch_tool_call_id)],
         "hypothesis_results": results,
-        "current_hypothesis_index": current_idx + 1,
         "active_sub_agent_thread_id": None,
+        "active_hypothesis_id": None,
+        "active_hypothesis_desc": None,
+        "pending_launch_tool_call_id": None,
         "sub_agent_status": "completed",
         "needs_approval": False,
         "pending_tool_call": None,
@@ -223,7 +243,9 @@ async def _stream_sub_agent(
     return {"needs_interrupt": False}
 
 
-async def _resume_sub_agent(sub_graph, config, coordinator_state, channel, publisher, hypothesis_id, log) -> dict:
+async def _resume_sub_agent(
+    sub_graph, config, coordinator_state, channel, publisher, hypothesis_id, log
+) -> dict:
     """恢复子 Agent（传递审批决定或用户输入）。"""
     from langgraph.types import Command
 
@@ -234,7 +256,6 @@ async def _resume_sub_agent(sub_graph, config, coordinator_state, channel, publi
     ask_human_streamed = False
 
     if "human_approval" in next_nodes:
-        # 传递审批决定
         decision = coordinator_state.get("approval_decision", "approved")
         supplement = coordinator_state.get("approval_supplement")
         state_update: dict = {"approval_decision": decision}
@@ -243,7 +264,6 @@ async def _resume_sub_agent(sub_graph, config, coordinator_state, channel, publi
         resume_input = Command(resume=None, update=state_update)
         log.info("Resuming sub-agent (approval)", decision=decision)
     elif "ask_human" in next_nodes:
-        # 传递用户输入 —— 从 coordinator 最后一条消息获取
         last_msg = coordinator_state["messages"][-1]
         user_input = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
         resume_input = Command(resume=user_input)
@@ -267,7 +287,6 @@ async def _resume_sub_agent(sub_graph, config, coordinator_state, channel, publi
 
     await publisher.flush_remaining(channel)
 
-    # 检查是否又 hit interrupt
     graph_state = await sub_graph.aget_state(config)
     next_nodes = graph_state.next or ()
 
@@ -297,7 +316,6 @@ async def _bridge_event(
     metadata = event.get("metadata", {})
     node = metadata.get("langgraph_node", "")
 
-    # 跳过不需要桥接的节点
     if node in ("human_approval", "ask_human", "retry_tool_call"):
         return {
             "thinking_buffer": thinking_buffer,
@@ -331,7 +349,7 @@ async def _bridge_event(
     elif kind == "on_tool_start":
         name = event.get("name", "")
         if name in ("report_findings", "ask_human"):
-            pass  # 不桥接这些工具的 SSE
+            pass
         else:
             run_id = event.get("run_id", "")
             await publisher.publish(
@@ -409,7 +427,6 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
     vals = graph_state.values
     messages = vals.get("messages", [])
 
-    # 从最后的 report_findings tool_call 中提取
     for msg in reversed(messages):
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             for tc in msg.tool_calls:
@@ -424,7 +441,6 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
                     )
             break
 
-    # Fallback: 没有 report_findings（可能被强制结束）
     return HypothesisResult(
         hypothesis_id=hypothesis["id"],
         hypothesis_desc=hypothesis["desc"],

@@ -41,7 +41,6 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -49,18 +48,14 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 
-const mainItems = [
-  { to: "/incidents", label: "事件", icon: Activity },
-] as const;
+const mainItems = [{ to: "/incidents", label: "事件", icon: Activity }] as const;
 
 const contextItems = [
   { to: "/connections", label: "连接", icon: Cable },
   { to: "/projects", label: "知识库", icon: BookOpen },
 ] as const;
 
-const navItems = [
-  { to: "/skills", label: "技能", icon: Sparkles },
-] as const;
+const navItems = [{ to: "/skills", label: "技能", icon: Sparkles }] as const;
 
 export function AppSidebar() {
   const { location } = useRouterState();
@@ -102,9 +97,10 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="flex h-8 items-center px-2">
-          <h1 className="text-lg font-semibold">Chronos</h1>
-        </div>
+        <Link to="/incidents" className="flex h-8 items-center gap-2 px-2">
+          <img src="/favicon.png" alt="logo" className="size-5" />
+          <h1 className="text-base font-medium">Enmolar Chronos</h1>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -190,9 +186,7 @@ export function AppSidebar() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={handleLogout}>
-              确认退出
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleLogout}>确认退出</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -188,7 +188,7 @@ async def search_knowledge_base(query: str) -> tuple[str, list[dict]]:
                 section_parts.append(f"描述: {meta['project_description']}")
 
             chunks_text = "\n\n".join(
-                f"**[{_format_source(r['filename'], r.get('metadata', {}))}]** (相关度: {r['relevance_score']:.2f})\n{r['content']}"
+                f"[{_format_source(r['filename'], r.get('metadata', {}))}]\n{r['content']}"
                 for r in chunks
             )
             section_parts.append(f"\n{chunks_text}")

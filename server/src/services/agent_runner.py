@@ -123,13 +123,15 @@ class AgentRunner:
             "incident_history_summary": None,
             "kb_summary": None,
             "kb_project_ids": [],
-            # 假设管理
             "hypotheses": [],
             "current_hypothesis_index": 0,
             "hypothesis_results": [],
-            # 子 Agent 状态
             "active_sub_agent_thread_id": None,
+            "active_hypothesis_id": None,
+            "active_hypothesis_desc": None,
+            "pending_launch_tool_call_id": None,
             "sub_agent_status": None,
+            "tool_call_retry_count": 0,
         }
 
         log.info("===== Agent lifecycle started =====")
@@ -347,8 +349,8 @@ class AgentRunner:
         elif "sub_agent_approval" in next_nodes:
             as_node = "sub_agent_approval"
         else:
-            # Fallback: assume hypothesis_router since main_agent no longer exists
-            as_node = "hypothesis_router"
+            # Fallback: resume from coordinator_agent
+            as_node = "coordinator_agent"
 
         await self.graph.aupdate_state(
             config,
@@ -488,11 +490,11 @@ class AgentRunner:
                 question="（子 Agent 提问）",
             )
 
-        # confirm_resolution 中断 —— synthesize 已完成，等待用户确认
+        # confirm_resolution 中断 —— coordinator 调用了 complete，等待用户确认
         if "confirm_resolution" in next_nodes:
             log.info("confirm_resolution interrupt")
-            # 从 synthesize 的消息中提取排查结论
-            answer_md = self._extract_synthesize_answer(vals)
+            # 从 coordinator_agent 的 complete tool_call 中提取排查结论
+            answer_md = self._extract_complete_answer(vals)
             if answer_md:
                 await self.publisher.publish(
                     channel, "answer", {"content": answer_md, "phase": "investigation"}
@@ -542,18 +544,6 @@ class AgentRunner:
                 break
         return None
 
-    @staticmethod
-    def _extract_synthesize_answer(vals: dict) -> str | None:
-        """Extract the synthesize conclusion from messages.
-
-        The synthesize_node appends a HumanMessage with content starting with '[排查结论]'.
-        """
-        messages = vals.get("messages", [])
-        for msg in reversed(messages):
-            if hasattr(msg, "content") and isinstance(msg.content, str):
-                if msg.content.startswith("[排查结论]"):
-                    return msg.content.replace("[排查结论]\n\n", "", 1)
-        return None
 
     @staticmethod
     def _extract_ask_human_question(vals: dict) -> str | None:
@@ -611,13 +601,10 @@ class AgentRunner:
         sid = channel.split(":")[-1][:8] if ":" in channel else ""
         stream_log = get_logger(component="stream", sid=sid)
 
-        # 新架构中，所有节点的事件都由各自的发布机制处理：
-        # - gather_context: 子 Agent 直接发布
-        # - planner: planner_node 直接发布
-        # - investigation: run_sub_agent 的 _bridge_event 直接发布
-        # 父图的 astream_events() 会传播子图内部事件（investigation_agent, tools 等），
-        # 必须全部过滤，否则会产生重复事件。
-        if node:
+        # coordinator_agent: 推送 thinking 流到前端主时间线
+        # 其他所有节点: 各自通过 EventPublisher 直接发布，或无需 SSE
+        # 父图的 astream_events() 还会传播子图内部事件，也必须过滤
+        if node != "coordinator_agent":
             return
 
         phase, agent = self._get_phase_agent(event)

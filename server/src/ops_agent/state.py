@@ -31,11 +31,19 @@ class CoordinatorState(MessagesState):
     active_sub_agent_thread_id: str | None
     sub_agent_status: str | None  # "running" | "waiting_for_human" | "completed"
 
+    # 子 Agent 恢复信息（interrupt 恢复时需要）
+    active_hypothesis_id: str | None
+    active_hypothesis_desc: str | None
+    pending_launch_tool_call_id: str | None  # launch_investigation 的 tool_call_id
+
     # 审批透传（子 Agent interrupt 时传递到主图）
     needs_approval: bool
     pending_tool_call: dict | None
     approval_decision: str | None
     approval_supplement: str | None
+
+    # coordinator retry
+    tool_call_retry_count: int
 
 
 class InvestigationState(MessagesState):
