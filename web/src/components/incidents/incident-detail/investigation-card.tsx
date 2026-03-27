@@ -14,6 +14,7 @@ import type { SSEEvent } from "@/lib/types";
 import type { InvestigationSubAgent } from "@/stores/incident-stream";
 import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
+import { SkillReadCard } from "./skill-read-card";
 import { Markdown } from "@/components/ui/markdown";
 import { TextDotsLoader } from "@/components/ui/loader";
 
@@ -132,6 +133,13 @@ const STATUS_CONFIG = {
     iconClass: "h-3.5 w-3.5 text-red-500",
     label: "失败",
     labelClass: "text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-950/50",
+  },
+  cancelled: {
+    border: "border-l-gray-300",
+    icon: X,
+    iconClass: "h-3.5 w-3.5 text-gray-400",
+    label: "已取消",
+    labelClass: "text-gray-500 bg-gray-50 dark:text-gray-400 dark:bg-gray-800/50",
   },
 } as const;
 
@@ -303,8 +311,11 @@ export function InvestigationCard({
                     />
                   </div>
                 );
-              case "skill_read":
-                return null; // Skip skill_read in investigation cards for brevity
+              case "skill_read": {
+                const sName = item.event.data.skill_name as string;
+                const sSlug = (item.event.data.skill_slug as string) || sName;
+                return <SkillReadCard key={i} skillName={sName} skillSlug={sSlug} />;
+              }
               default:
                 return null;
             }

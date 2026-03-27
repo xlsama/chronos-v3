@@ -54,6 +54,7 @@ export function useIncidentStream(
     endRound,
     startInvestigation,
     completeInvestigation,
+    cancelAllRunningInvestigations,
     addInvestigationEvent,
     appendInvestigationThinking,
     clearInvestigationThinking,
@@ -337,11 +338,13 @@ export function useIncidentStream(
             }
             // Add interrupted event to timeline (renders "已中断" separator)
             addEvent(event);
+            cancelAllRunningInvestigations();
             setWaitingForAgent(false);
             // Don't close SSE — interrupted is not terminal. Refresh incident status.
             queryClient.invalidateQueries({ queryKey: ["incident", incidentId] });
           } else if (event.event_type === "incident_stopped") {
             addEvent(event);
+            cancelAllRunningInvestigations();
             // Close SSE and invalidate queries to refresh status
             es.close();
             eventSourceRef.current = null;

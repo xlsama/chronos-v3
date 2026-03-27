@@ -1,12 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
-import { MessageCircleQuestion, Sparkles, CheckCircle, RefreshCw, Check, Loader2, ChevronRight } from "lucide-react";
+import { useCallback, useMemo } from "react";
+import { MessageCircleQuestion, CheckCircle, RefreshCw, Check, Loader2, ChevronRight } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
 import { getServices } from "@/api/services";
-import { SkillViewer } from "@/components/skills/skill-viewer";
 import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
@@ -14,6 +13,7 @@ import { PhaseSection } from "./phase-section";
 import { TextDotsLoader } from "@/components/ui/loader";
 import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
+import { SkillReadCard } from "./skill-read-card";
 
 import { SubAgentCard } from "./sub-agent-card";
 import { TimelineDivider } from "./timeline-divider";
@@ -176,25 +176,6 @@ function formatErrorMessage(message: string): string {
   return trimmed;
 }
 
-function SkillReadCard({ skillName, skillSlug }: { skillName: string; skillSlug: string }) {
-  const [viewingSlug, setViewingSlug] = useState<string | null>(null);
-
-  return (
-    <>
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Sparkles className="h-3.5 w-3.5 text-blue-400" />
-        <span>读取技能：</span>
-        <button
-          className="cursor-pointer font-medium text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-900"
-          onClick={() => setViewingSlug(skillSlug)}
-        >
-          {skillName}
-        </button>
-      </div>
-      <SkillViewer skillSlug={viewingSlug} onClose={() => setViewingSlug(null)} readOnly />
-    </>
-  );
-}
 
 function WaitingIndicator() {
   const isWaiting = useIncidentStreamStore((s) => s.isWaitingForAgent);

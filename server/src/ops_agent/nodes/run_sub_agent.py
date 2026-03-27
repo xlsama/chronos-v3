@@ -348,7 +348,7 @@ async def _bridge_event(
 
     elif kind == "on_tool_start":
         name = event.get("name", "")
-        if name in ("report_findings", "ask_human"):
+        if name in ("report_findings", "ask_human", "read_skill"):
             pass
         else:
             run_id = event.get("run_id", "")

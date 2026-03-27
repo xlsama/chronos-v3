@@ -18,7 +18,7 @@ interface SubAgentState {
 export interface InvestigationSubAgent {
   hypothesisId: string;
   hypothesisDesc: string;
-  status: "running" | "completed" | "confirmed" | "eliminated" | "failed";
+  status: "running" | "completed" | "confirmed" | "eliminated" | "failed" | "cancelled";
   summary?: string;
   events: SSEEvent[];
   thinkingContent: string;
@@ -56,6 +56,7 @@ interface IncidentStreamState {
   endRound: (round: number, summary: string) => void;
   startInvestigation: (hypothesisId: string, hypothesisDesc: string) => void;
   completeInvestigation: (hypothesisId: string, status: string, summary: string) => void;
+  cancelAllRunningInvestigations: () => void;
   addInvestigationEvent: (hypothesisId: string, event: SSEEvent) => void;
   appendInvestigationThinking: (hypothesisId: string, content: string) => void;
   clearInvestigationThinking: (hypothesisId: string) => void;
@@ -249,6 +250,14 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       ),
       activeInvestigationId:
         state.activeInvestigationId === hypothesisId ? null : state.activeInvestigationId,
+    })),
+
+  cancelAllRunningInvestigations: () =>
+    set((state) => ({
+      investigations: state.investigations.map((inv) =>
+        inv.status === "running" ? { ...inv, status: "cancelled" as const } : inv,
+      ),
+      activeInvestigationId: null,
     })),
 
   addInvestigationEvent: (hypothesisId, event) =>
