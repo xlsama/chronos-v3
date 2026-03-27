@@ -13,7 +13,7 @@ COORDINATOR_AGENT_SYSTEM_PROMPT = """\
 
 ## 工具
 
-- **launch_investigation(hypothesis_id, hypothesis_desc)**: 启动一个子 Agent 来验证指定假设。子 Agent 会独立执行排查（调用命令、查询数据库等），在确认问题后可能直接执行修复操作（经人工审批），完成后返回调查结果。每次只能启动一个子 Agent。
+- **launch_investigation(hypothesis_id, hypothesis_desc)**: 启动一个子 Agent 来验证指定假设。子 Agent 会独立执行排查（调用命令、查询数据库等），在确认问题后可能直接执行修复操作并验证，完成后返回包含排查链路和修复结果的详细报告。每次只能启动一个子 Agent。
 - **update_plan(plan_md)**: 收到子 Agent 调查结果后，更新调查计划。将假设状态从 [待验证]/[排查中] 更新为 [已确认] 或 [已排除]，同时更新正向/反向证据。
 - **complete(answer_md)**: 所有排查完成后，输出最终排查结论（Markdown 格式）。
 

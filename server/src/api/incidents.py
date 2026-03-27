@@ -171,7 +171,7 @@ async def list_incidents(
     status: str | None = None,
     severity: str | None = None,
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = 10,
     session: AsyncSession = Depends(get_session),
 ):
     count_query = select(func.count()).select_from(Incident).where(Incident.is_archived.is_(False))

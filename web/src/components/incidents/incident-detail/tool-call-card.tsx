@@ -218,10 +218,6 @@ export function ToolCallCard({
           </span>
         )}
 
-        {/* Execution status text */}
-        {isExecuting && (
-          <TextDotsLoader text="执行中" size="sm" className="text-muted-foreground" />
-        )}
         {!isExecuting && status === "error" && (
           <span className="inline-block rounded px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300">
             失败
@@ -230,6 +226,9 @@ export function ToolCallCard({
 
         {/* Right side: decision badge + relative time */}
         <span className="ml-auto flex items-center gap-2">
+          {isExecuting && (
+            <TextDotsLoader text="执行中" size="sm" className="text-muted-foreground" />
+          )}
           {decisionBadge}
           {relativeTime && (
             <span className="text-xs text-muted-foreground">{relativeTime}</span>

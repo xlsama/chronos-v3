@@ -53,7 +53,7 @@ function IncidentsPage() {
         </div>
         <CreateIncidentDialog />
       </div>
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col min-h-0">
         <IncidentList statusFilter={statusFilter} severityFilter={severityFilter} />
       </div>
     </motion.div>

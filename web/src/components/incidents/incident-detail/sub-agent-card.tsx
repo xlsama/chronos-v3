@@ -33,6 +33,7 @@ import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
 import { SkillReadCard } from "./skill-read-card";
 import { TextDotsLoader } from "@/components/ui/loader";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 
 
 // ─── Types ───────────────────────────────────────────────
@@ -412,9 +413,15 @@ export function SubAgentCard({
           <ChevronRight className="h-4 w-4 shrink-0" />
         )}
         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="truncate font-medium">
-          {isContextGathering ? agentConfig?.label ?? agentName : title}
-        </span>
+        {isLoading ? (
+          <TextShimmer className="truncate font-medium" duration={2}>
+            {isContextGathering ? agentConfig?.label ?? agentName : title}
+          </TextShimmer>
+        ) : (
+          <span className="truncate font-medium">
+            {isContextGathering ? agentConfig?.label ?? agentName : title}
+          </span>
+        )}
 
         {/* Badge: subAgentName (context) or status badge (investigation, non-loading only) */}
         {isContextGathering && agentConfig?.subAgentName && (

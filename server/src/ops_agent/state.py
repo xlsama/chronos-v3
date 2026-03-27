@@ -7,9 +7,8 @@ class HypothesisResult(TypedDict):
     hypothesis_id: str  # "H1", "H2", "H3"
     hypothesis_desc: str
     status: str  # "confirmed" | "eliminated" | "inconclusive"
-    summary: str  # 子 Agent 的排查发现摘要
-    evidence: str  # 关键证据
-    action_taken: str  # 执行的修复操作及验证结果，未修复时为空字符串
+    summary: str  # 一句话结论（用于后续子 Agent 上下文）
+    report: str  # 结构化排查报告（含排查链路、关键证据、修复操作等）
 
 
 class CoordinatorState(MessagesState):

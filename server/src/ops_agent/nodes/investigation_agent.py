@@ -106,19 +106,13 @@ def build_investigation_tools():
             return f"未找到: {path}"
 
     @tool
-    def report_findings(
-        status: str, summary: str, evidence: str, action_taken: str = ""
-    ) -> str:
-        """调查完成后调用，报告本次调查结果。
+    def report_findings(status: str, summary: str, report: str) -> str:
+        """调查完成后调用，报告本次调查的完整结果。
         - status: "confirmed"（假设成立）/ "eliminated"（假设排除）/ "inconclusive"（证据不足）
-        - summary: 调查结论总结（2-3 句话）：第一句总结结论，第二句说明根因，第三句可选补充影响
-        - evidence: 关键证据（命令输出、日志片段等关键内容）
-        - action_taken: 可选，如果执行了修复操作，描述操作内容和验证结果
+        - summary: 一句话结论摘要
+        - report: 结构化排查报告（Markdown），包含排查链路、关键证据、修复操作等
         """
-        parts = [f"调查结果已记录: status={status}, summary={summary}"]
-        if action_taken:
-            parts.append(f", action_taken={action_taken}")
-        return "".join(parts)
+        return f"调查结果已记录: status={status}, summary={summary}"
 
     return [
         ssh_bash,

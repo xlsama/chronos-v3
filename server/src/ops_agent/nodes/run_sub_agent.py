@@ -25,11 +25,7 @@ def _format_prior_findings(results: list[HypothesisResult]) -> str:
     for r in results:
         status_map = {"confirmed": "已确认", "eliminated": "已排除", "inconclusive": "证据不足"}
         status_zh = status_map.get(r["status"], r["status"])
-        line = f"- {r['hypothesis_id']} [{status_zh}] {r['hypothesis_desc']}: {r['summary']}"
-        action = r.get("action_taken", "")
-        if action:
-            line += f" [已修复: {action}]"
-        lines.append(line)
+        lines.append(f"- {r['hypothesis_id']} [{status_zh}] {r['hypothesis_desc']}: {r['summary']}")
     return "\n".join(lines)
 
 
@@ -289,15 +285,12 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
 
     # 构造 ToolMessage 返回给 coordinator_agent
     status_zh = {"confirmed": "已确认", "eliminated": "已排除", "inconclusive": "证据不足"}
-    action_taken = finding.get("action_taken", "")
     tool_message_content = (
         f"假设 {finding['hypothesis_id']} 调查完成。\n"
         f"状态: {status_zh.get(finding['status'], finding['status'])}\n"
-        f"摘要: {finding['summary']}\n"
-        f"证据: {finding['evidence']}"
+        f"摘要: {finding['summary']}\n\n"
+        f"{finding['report']}"
     )
-    if action_taken:
-        tool_message_content += f"\n已执行修复: {action_taken}"
 
     results.append(finding)
     return {
@@ -579,8 +572,7 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
                         hypothesis_desc=hypothesis["desc"],
                         status=args.get("status", "inconclusive"),
                         summary=args.get("summary", ""),
-                        evidence=args.get("evidence", ""),
-                        action_taken=args.get("action_taken", ""),
+                        report=args.get("report", ""),
                     )
             break
 
@@ -589,6 +581,5 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
         hypothesis_desc=hypothesis["desc"],
         status="inconclusive",
         summary="调查未能得出结论",
-        evidence="",
-        action_taken="",
+        report="",
     )
