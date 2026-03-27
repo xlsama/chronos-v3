@@ -11,10 +11,10 @@ from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.prompts.planner import PLANNER_SYSTEM_PROMPT, PLANNER_USER_PROMPT
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 
 
-async def planner_node(state: OpsState) -> dict:
+async def planner_node(state: CoordinatorState) -> dict:
     """生成初始调查计划（Markdown 格式）。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="planner", sid=sid)
@@ -108,9 +108,7 @@ async def planner_node(state: OpsState) -> dict:
                     elapsed=f"{time.monotonic() - t0:.1f}s",
                 )
             try:
-                await publisher.publish(
-                    channel, "thinking", {"content": text, "phase": "planning"}
-                )
+                await publisher.publish(channel, "thinking", {"content": text, "phase": "planning"})
             except Exception as e:
                 publish_errors += 1
                 if publish_errors <= 3:

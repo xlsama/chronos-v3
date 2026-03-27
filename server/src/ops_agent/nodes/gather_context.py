@@ -5,7 +5,7 @@ from typing import Any
 
 from src.db.connection import get_session_factory
 from src.ops_agent.event_publisher import EventPublisher
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 from src.ops_agent.sub_agents.history_agent import run_history_agent
 from src.ops_agent.sub_agents.kb_agent import KBAgentOutput, run_kb_agent
 from src.lib.logger import get_logger
@@ -45,7 +45,7 @@ async def _safe_run(coro_func, *args) -> Any:
         return f"[ERROR] {coro_func.__name__} 执行失败: {e}"
 
 
-async def gather_context_node(state: OpsState) -> dict:
+async def gather_context_node(state: CoordinatorState) -> dict:
     """Run sub-agents to gather context before the main agent starts."""
     sid = state["incident_id"][:8]
     log = get_logger(component="gather_context", sid=sid)

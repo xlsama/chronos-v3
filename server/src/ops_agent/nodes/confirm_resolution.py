@@ -2,10 +2,10 @@ from langchain_core.messages import HumanMessage
 from langgraph.types import interrupt
 
 from src.lib.logger import get_logger
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 
 
-async def confirm_resolution_node(state: OpsState) -> dict:
+async def confirm_resolution_node(state: CoordinatorState) -> dict:
     sid = state["incident_id"][:8]
     log = get_logger(component="confirm_resolution", sid=sid)
     log.info("Entered confirm_resolution_node, waiting for user response")
@@ -26,7 +26,7 @@ async def confirm_resolution_node(state: OpsState) -> dict:
     }
 
 
-def route_after_resolution(state: OpsState) -> str:
+def route_after_resolution(state: CoordinatorState) -> str:
     sid = state["incident_id"][:8]
     log = get_logger(component="confirm_resolution", sid=sid)
     result = "end" if state.get("is_complete") else "main_agent"

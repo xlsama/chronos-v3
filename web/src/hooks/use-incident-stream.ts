@@ -52,6 +52,11 @@ export function useIncidentStream(
     appendPlannerThinking,
     setPlannerProgress,
     endRound,
+    startInvestigation,
+    completeInvestigation,
+    addInvestigationEvent,
+    appendInvestigationThinking,
+    clearInvestigationThinking,
     setConnected,
     reset,
     loadHistory,
@@ -376,6 +381,44 @@ export function useIncidentStream(
           } else if (event.event_type === "planner_progress") {
             setPlannerProgress(event.data.status as string);
             updatePhase("planning");
+          } else if (event.event_type === "thinking" && event.data.sub_agent_id) {
+            // Route thinking to investigation sub-agent
+            setWaitingForAgent(false);
+            updatePhase("investigation");
+            appendInvestigationThinking(event.data.sub_agent_id as string, event.data.content as string);
+          } else if (event.event_type === "thinking_done" && event.data.sub_agent_id) {
+            // Flush investigation thinking buffer
+            const subId = event.data.sub_agent_id as string;
+            const { investigations } = useIncidentStreamStore.getState();
+            const inv = investigations.find((i) => i.hypothesisId === subId);
+            if (inv && inv.thinkingContent) {
+              addInvestigationEvent(subId, {
+                event_type: "thinking",
+                data: { content: inv.thinkingContent },
+                timestamp: event.timestamp,
+              });
+              clearInvestigationThinking(subId);
+            }
+          } else if (event.data.sub_agent_id && (
+            event.event_type === "tool_use" || event.event_type === "tool_result" ||
+            event.event_type === "skill_read" || event.event_type === "approval_required"
+          )) {
+            // Route tool events to investigation sub-agent
+            const subId = event.data.sub_agent_id as string;
+            setWaitingForAgent(event.event_type === "tool_result");
+            updatePhase("investigation");
+            // Flush any pending thinking first
+            const { investigations } = useIncidentStreamStore.getState();
+            const inv = investigations.find((i) => i.hypothesisId === subId);
+            if (inv && inv.thinkingContent) {
+              addInvestigationEvent(subId, {
+                event_type: "thinking",
+                data: { content: inv.thinkingContent },
+                timestamp: event.timestamp,
+              });
+              clearInvestigationThinking(subId);
+            }
+            addInvestigationEvent(subId, event);
           } else if (event.event_type === "thinking") {
             setWaitingForAgent(false);
             if (phase === "planning") {
@@ -433,6 +476,18 @@ export function useIncidentStream(
               addEvent(event);
             }
             updatePhase(phase || "planning");
+          } else if (event.event_type === "sub_agent_started") {
+            updatePhase("investigation");
+            startInvestigation(
+              event.data.hypothesis_id as string,
+              event.data.hypothesis_desc as string,
+            );
+          } else if (event.event_type === "sub_agent_completed") {
+            completeInvestigation(
+              event.data.hypothesis_id as string,
+              event.data.status as string,
+              (event.data.summary as string) || "",
+            );
           } else if (event.event_type === "round_started") {
             addEvent(event);
           } else if (event.event_type === "round_ended") {

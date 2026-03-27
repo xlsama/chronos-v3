@@ -28,6 +28,16 @@ from src.services.agent_runner import AgentRunner
 
 log = get_logger()
 
+# 全局 checkpointer 引用，供子 Agent 使用
+_checkpointer = None
+
+
+def get_checkpointer():
+    """获取共享的 LangGraph checkpointer（子 Agent 需要独立 thread 但共享 checkpointer）。"""
+    if _checkpointer is None:
+        raise RuntimeError("Checkpointer not initialized. Is the app started?")
+    return _checkpointer
+
 
 def _run_migrations():
     import subprocess
@@ -66,6 +76,9 @@ async def lifespan(app: FastAPI):
     conn = await AsyncConnection.connect(settings.langgraph_checkpoint_dsn, autocommit=True)
     checkpointer = AsyncPostgresSaver(conn)
     await checkpointer.setup()
+
+    global _checkpointer
+    _checkpointer = checkpointer
 
     # Initialize EventPublisher + AgentRunner
     publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())

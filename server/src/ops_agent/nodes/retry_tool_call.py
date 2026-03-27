@@ -2,7 +2,7 @@ from langchain_core.messages import HumanMessage
 
 from src.env import get_settings
 from src.lib.logger import get_logger
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 
 RETRY_MARKER = "[RETRY_TOOL_CALL]"
 
@@ -17,7 +17,7 @@ RETRY_MESSAGE = (
 )
 
 
-async def retry_tool_call_node(state: OpsState) -> dict:
+async def retry_tool_call_node(state: CoordinatorState) -> dict:
     """LLM 未调用工具时，注入提示让其重试。"""
     sid = state["incident_id"][:8]
     current_count = state.get("tool_call_retry_count", 0)

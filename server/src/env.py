@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     planner_thinking: bool = True  # planner 是否启用 thinking 模式
     agent_recursion_limit: int = 200
     tool_call_max_retries: int = 2  # LLM 未调用工具时的最大重试次数
-    max_investigation_rounds: int = 5  # 排查最大轮次，达到后强制输出结论
+    max_hypotheses: int = 3  # 最多验证的假设数量
     command_timeout: int = 10  # 命令执行超时（秒），适用于 bash/SSH/服务查询
 
     # Data directories

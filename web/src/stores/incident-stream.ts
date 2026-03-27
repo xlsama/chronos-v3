@@ -15,6 +15,15 @@ interface SubAgentState {
   status: "idle" | "started" | "completed" | "failed";
 }
 
+export interface InvestigationSubAgent {
+  hypothesisId: string;
+  hypothesisDesc: string;
+  status: "running" | "completed" | "confirmed" | "eliminated" | "failed";
+  summary?: string;
+  events: SSEEvent[];
+  thinkingContent: string;
+}
+
 interface IncidentStreamState {
   events: SSEEvent[];
   historyAgentState: SubAgentState;
@@ -24,6 +33,9 @@ interface IncidentStreamState {
   plannerProgress: string;
   currentRound: number;
   roundSummaries: { round: number; summary: string }[];
+  // Investigation sub-agents (new architecture)
+  investigations: InvestigationSubAgent[];
+  activeInvestigationId: string | null;
   phaseState: PhaseState;
   isConnected: boolean;
   thinkingContent: string;
@@ -42,6 +54,11 @@ interface IncidentStreamState {
   clearPlannerThinking: () => void;
   setPlannerProgress: (status: string) => void;
   endRound: (round: number, summary: string) => void;
+  startInvestigation: (hypothesisId: string, hypothesisDesc: string) => void;
+  completeInvestigation: (hypothesisId: string, status: string, summary: string) => void;
+  addInvestigationEvent: (hypothesisId: string, event: SSEEvent) => void;
+  appendInvestigationThinking: (hypothesisId: string, content: string) => void;
+  clearInvestigationThinking: (hypothesisId: string) => void;
   appendThinking: (content: string) => void;
   clearThinking: () => void;
   appendAnswer: (content: string) => void;
@@ -86,6 +103,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   plannerProgress: "",
   currentRound: 1,
   roundSummaries: [],
+  investigations: [],
+  activeInvestigationId: null,
   phaseState: initialPhaseState(),
   isConnected: false,
   isWaitingForAgent: false,
@@ -206,6 +225,59 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       roundSummaries: [...state.roundSummaries, { round, summary }],
     })),
 
+  startInvestigation: (hypothesisId, hypothesisDesc) =>
+    set((state) => ({
+      investigations: [
+        ...state.investigations,
+        {
+          hypothesisId,
+          hypothesisDesc,
+          status: "running" as const,
+          events: [],
+          thinkingContent: "",
+        },
+      ],
+      activeInvestigationId: hypothesisId,
+    })),
+
+  completeInvestigation: (hypothesisId, status, summary) =>
+    set((state) => ({
+      investigations: state.investigations.map((inv) =>
+        inv.hypothesisId === hypothesisId
+          ? { ...inv, status: status as InvestigationSubAgent["status"], summary }
+          : inv,
+      ),
+      activeInvestigationId:
+        state.activeInvestigationId === hypothesisId ? null : state.activeInvestigationId,
+    })),
+
+  addInvestigationEvent: (hypothesisId, event) =>
+    set((state) => ({
+      investigations: state.investigations.map((inv) =>
+        inv.hypothesisId === hypothesisId
+          ? { ...inv, events: [...inv.events, event] }
+          : inv,
+      ),
+    })),
+
+  appendInvestigationThinking: (hypothesisId, content) =>
+    set((state) => ({
+      investigations: state.investigations.map((inv) =>
+        inv.hypothesisId === hypothesisId
+          ? { ...inv, thinkingContent: inv.thinkingContent + content }
+          : inv,
+      ),
+    })),
+
+  clearInvestigationThinking: (hypothesisId) =>
+    set((state) => ({
+      investigations: state.investigations.map((inv) =>
+        inv.hypothesisId === hypothesisId
+          ? { ...inv, thinkingContent: "" }
+          : inv,
+      ),
+    })),
+
   updatePhase: (phase) =>
     set((state) => {
       const ps = { ...state.phaseState };
@@ -264,6 +336,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     let loadedPlanMd = "";
     let loadedCurrentRound = 1;
     const loadedRoundSummaries: { round: number; summary: string }[] = [];
+    const loadedInvestigations: InvestigationSubAgent[] = [];
+    let loadedActiveInvestigationId: string | null = null;
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -313,6 +387,33 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
+      // sub_agent_started → create investigation entry
+      if (event.event_type === "sub_agent_started") {
+        const hId = event.data.hypothesis_id as string;
+        const hDesc = event.data.hypothesis_desc as string;
+        loadedInvestigations.push({
+          hypothesisId: hId,
+          hypothesisDesc: hDesc,
+          status: "running",
+          events: [],
+          thinkingContent: "",
+        });
+        loadedActiveInvestigationId = hId;
+        continue;
+      }
+
+      // sub_agent_completed → update investigation status
+      if (event.event_type === "sub_agent_completed") {
+        const hId = event.data.hypothesis_id as string;
+        const inv = loadedInvestigations.find((i) => i.hypothesisId === hId);
+        if (inv) {
+          inv.status = (event.data.status as string) as InvestigationSubAgent["status"];
+          inv.summary = event.data.summary as string;
+        }
+        if (loadedActiveInvestigationId === hId) loadedActiveInvestigationId = null;
+        continue;
+      }
+
       // planner_started / planner_progress → skip (no UI state needed)
       if (event.event_type === "planner_started" || event.event_type === "planner_progress") {
         continue;
@@ -351,6 +452,15 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
           mainEvents.push(event);
         }
       } else {
+        // Check if this event belongs to an investigation sub-agent
+        const subAgentId = event.data.sub_agent_id as string | undefined;
+        if (subAgentId) {
+          const inv = loadedInvestigations.find((i) => i.hypothesisId === subAgentId);
+          if (inv) {
+            inv.events.push(event);
+            continue;
+          }
+        }
         if (event.event_type === "ask_human") {
           lastAskHumanIndex = i;
           hasUserMessageAfterAsk = false;
@@ -383,6 +493,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       plannerPlanMd: loadedPlanMd,
       currentRound: loadedCurrentRound,
       roundSummaries: loadedRoundSummaries,
+      investigations: loadedInvestigations,
+      activeInvestigationId: loadedActiveInvestigationId,
       phaseState: derivedPhase,
       decidedApprovals: decided,
       askHumanQuestion: askQuestion,
@@ -402,6 +514,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       plannerProgress: "",
       currentRound: 1,
       roundSummaries: [],
+      investigations: [],
+      activeInvestigationId: null,
       phaseState: initialPhaseState(),
       isConnected: false,
       isWaitingForAgent: false,

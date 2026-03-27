@@ -37,6 +37,8 @@ _EVENT_ROLE = {
     "evaluation_completed": "system",
     "round_started": "system",
     "round_ended": "system",
+    "sub_agent_started": "system",
+    "sub_agent_completed": "system",
 }
 
 
@@ -210,6 +212,10 @@ class EventPublisher:
             return data.get("reason", "")
         if event_type == "round_ended":
             return data.get("summary", "")[:500]
+        if event_type == "sub_agent_started":
+            return data.get("hypothesis_id", "")
+        if event_type == "sub_agent_completed":
+            return data.get("hypothesis_id", "")
         return ""
 
     @staticmethod
@@ -220,6 +226,8 @@ class EventPublisher:
                 meta["phase"] = data["phase"]
             if data.get("agent"):
                 meta["agent"] = data["agent"]
+            if data.get("sub_agent_id"):
+                meta["sub_agent_id"] = data["sub_agent_id"]
             return meta or None
         if event_type == "thinking_done":
             meta = {}
@@ -227,6 +235,8 @@ class EventPublisher:
                 meta["phase"] = data["phase"]
             if data.get("agent"):
                 meta["agent"] = data["agent"]
+            if data.get("sub_agent_id"):
+                meta["sub_agent_id"] = data["sub_agent_id"]
             return meta or None
         if event_type in ("answer", "answer_done"):
             meta = {}
@@ -249,6 +259,8 @@ class EventPublisher:
             }
             if data.get("approval_id"):
                 meta["approval_id"] = data["approval_id"]
+            if data.get("sub_agent_id"):
+                meta["sub_agent_id"] = data["sub_agent_id"]
             return meta
         if event_type == "tool_result":
             meta = {
@@ -261,6 +273,8 @@ class EventPublisher:
                 meta["sources"] = data["sources"]
             if data.get("approval_id"):
                 meta["approval_id"] = data["approval_id"]
+            if data.get("sub_agent_id"):
+                meta["sub_agent_id"] = data["sub_agent_id"]
             return meta
         if event_type == "skill_read":
             return {
@@ -308,6 +322,20 @@ class EventPublisher:
             return {
                 "round": data.get("round"),
                 "reason": data.get("reason", ""),
+                "summary": data.get("summary", ""),
+                "phase": data.get("phase", ""),
+            }
+        if event_type == "sub_agent_started":
+            return {
+                "hypothesis_id": data.get("hypothesis_id", ""),
+                "hypothesis_desc": data.get("hypothesis_desc", ""),
+                "sub_agent_thread_id": data.get("sub_agent_thread_id", ""),
+                "phase": data.get("phase", ""),
+            }
+        if event_type == "sub_agent_completed":
+            return {
+                "hypothesis_id": data.get("hypothesis_id", ""),
+                "status": data.get("status", ""),
                 "summary": data.get("summary", ""),
                 "phase": data.get("phase", ""),
             }

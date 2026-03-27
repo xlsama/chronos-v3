@@ -20,6 +20,7 @@ import { TimelineDivider } from "./timeline-divider";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
 import { PlannerContent } from "./planner-phase-section";
+import { InvestigationCard } from "./investigation-card";
 
 interface EventTimelineProps {
   incidentId: string;
@@ -386,8 +387,13 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
 
   const shouldUseFixedContextLayout = contextActive && hasGatherContext && hasSubAgentContent;
 
+  // Investigation sub-agents (new architecture) — declared early for hasInvestigation check
+  const investigations = useIncidentStreamStore((s) => s.investigations);
+  const activeInvestigationId = useIncidentStreamStore((s) => s.activeInvestigationId);
+  const hasInvestigations = investigations.length > 0;
+
   const hasInvestigation =
-    events.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream;
+    events.length > 0 || hasThinking || hasAnswerStream || hasAskHumanStream || hasInvestigations;
 
   // Transitional state: both sub-agents done but investigation phase hasn't started yet
   // (2-5s gap while main LLM processes context before emitting first token)
@@ -422,7 +428,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
   // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(events), [events]);
 
-  // Store round state
+  // Store round state (legacy)
   const currentRound = useIncidentStreamStore((s) => s.currentRound);
   const roundSummaries = useIncidentStreamStore((s) => s.roundSummaries);
 
@@ -756,11 +762,35 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           isLast
         >
           <div className="space-y-3">
-            {totalRounds <= 1 ? (
-              // Single round: render all items directly (no round headers)
+            {hasInvestigations ? (
+              // New architecture: render investigation sub-agent cards
+              <>
+                {investigations.map((inv) => (
+                  <InvestigationCard
+                    key={inv.hypothesisId}
+                    investigation={inv}
+                    isActive={inv.hypothesisId === activeInvestigationId}
+                    serverMap={serverMap}
+                    serviceMap={serviceMap}
+                    incidentStatus={incidentStatus}
+                  />
+                ))}
+
+                {/* Transitional indicator between sub-agents */}
+                {activeInvestigationId && !investigations.find(i => i.hypothesisId === activeInvestigationId)?.thinkingContent && investigations.find(i => i.hypothesisId === activeInvestigationId)?.events.length === 0 && (
+                  <div className="px-1 py-2">
+                    <TextDotsLoader text="Agent 思考中" size="sm" />
+                  </div>
+                )}
+
+                {/* Events not belonging to any sub-agent (e.g. answer from synthesize) */}
+                {timelineItems.map((item, i) => renderTimelineItem(item, i))}
+              </>
+            ) : totalRounds <= 1 ? (
+              // Legacy: single round, render all items directly
               timelineItems.map((item, i) => renderTimelineItem(item, i))
             ) : (
-              // Multiple rounds: group by round with expand/collapse
+              // Legacy: multiple rounds, group by round with expand/collapse
               Array.from(roundGrouped.entries()).map(([round, items]) => {
                 const isCurrentRound = round === currentRound;
                 const isExpanded = isCurrentRound || expandedRounds.has(round);
@@ -808,17 +838,17 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
             )}
 
             {/* Transitional indicator — waiting for first investigation event after context gathering */}
-            {(isTransitioningToInvestigation || isTransitioningFromPlanning) && timelineItems.length === 0 && !hasThinking && (
+            {!hasInvestigations && (isTransitioningToInvestigation || isTransitioningFromPlanning) && timelineItems.length === 0 && !hasThinking && (
               <div className="px-1 py-2">
                 <TextDotsLoader text="Agent 思考中" size="sm" />
               </div>
             )}
 
             {/* Waiting indicator — shown between tool_result and next LLM output */}
-            <WaitingIndicator />
+            {!hasInvestigations && <WaitingIndicator />}
 
             {/* Live thinking stream — isolated component to avoid re-rendering timeline */}
-            <LiveThinkingSection />
+            {!hasInvestigations && <LiveThinkingSection />}
 
             {/* Live ask_human stream — shows question as it streams in */}
             <LiveAskHumanSection />

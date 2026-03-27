@@ -79,25 +79,33 @@ async def transcribe_audio(audio_data: bytes, filename: str) -> str:
         await _wait_for_msg_type(ws, "session.created")
 
         # 2. Configure session for manual-mode ASR
-        await ws.send(json.dumps({
-            "type": "session.update",
-            "session": {
-                "modalities": ["text"],
-                "input_audio_format": "pcm",
-                "sample_rate": 16000,
-                "input_audio_transcription": {"language": "zh"},
-                "turn_detection": None,
-            },
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "session.update",
+                    "session": {
+                        "modalities": ["text"],
+                        "input_audio_format": "pcm",
+                        "sample_rate": 16000,
+                        "input_audio_transcription": {"language": "zh"},
+                        "turn_detection": None,
+                    },
+                }
+            )
+        )
         await _wait_for_msg_type(ws, "session.updated")
 
         # 3. Stream PCM chunks
         for offset in range(0, len(pcm_data), CHUNK_BYTES):
             chunk = pcm_data[offset : offset + CHUNK_BYTES]
-            await ws.send(json.dumps({
-                "type": "input_audio_buffer.append",
-                "audio": base64.b64encode(chunk).decode("ascii"),
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "input_audio_buffer.append",
+                        "audio": base64.b64encode(chunk).decode("ascii"),
+                    }
+                )
+            )
 
         # 4. Commit audio buffer to trigger transcription
         await ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
@@ -132,6 +140,9 @@ async def transcribe_audio(audio_data: bytes, filename: str) -> str:
 
     result = "".join(texts)
     if not result:
-        log.warning("ASR returned empty text", session_done=session_done,
-                     transcription_done=transcription_done)
+        log.warning(
+            "ASR returned empty text",
+            session_done=session_done,
+            transcription_done=transcription_done,
+        )
     return result

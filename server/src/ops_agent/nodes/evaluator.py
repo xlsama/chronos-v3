@@ -12,7 +12,7 @@ from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.prompts.evaluator import EVALUATOR_SYSTEM_PROMPT, EVALUATOR_USER_PROMPT
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash, list_servers as _list_servers
 from src.ops_agent.tools.bash_tool import local_bash as _local_bash
 from src.ops_agent.tools.service_exec_tool import (
@@ -144,7 +144,7 @@ def _apply_hypothesis_updates_md(plan_md: str, updates: list[dict]) -> str | Non
     return updated if changed else None
 
 
-async def _run_evaluator(state: OpsState) -> dict:
+async def _run_evaluator(state: CoordinatorState) -> dict:
     """运行评估器的 LLM + tool 调用循环。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="evaluator", sid=sid)
@@ -247,7 +247,7 @@ async def _run_evaluator(state: OpsState) -> dict:
     }
 
 
-async def evaluator_node(state: OpsState) -> dict:
+async def evaluator_node(state: CoordinatorState) -> dict:
     """评估 Agent 的结论是否正确。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="evaluator", sid=sid)
@@ -374,7 +374,7 @@ async def evaluator_node(state: OpsState) -> dict:
     }
 
 
-def route_after_evaluation(state: OpsState) -> str:
+def route_after_evaluation(state: CoordinatorState) -> str:
     """评估后的路由：验证通过去生成总结，否则打回给 Agent。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="evaluator", sid=sid)

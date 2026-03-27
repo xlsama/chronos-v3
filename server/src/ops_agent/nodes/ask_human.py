@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import interrupt
 
 from src.lib.logger import get_logger
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 
 
 def _parse_resume(user_response) -> tuple[str, list[dict]]:
@@ -36,7 +36,7 @@ def _build_multimodal_content(text: str, images: list[dict]) -> list[dict]:
     return blocks
 
 
-async def ask_human_node(state: OpsState) -> dict:
+async def ask_human_node(state: CoordinatorState) -> dict:
     """Interrupt the graph to ask the human a question.
 
     Uses LangGraph's interrupt() to pause execution.

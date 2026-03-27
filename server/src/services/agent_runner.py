@@ -120,12 +120,16 @@ class AgentRunner:
             "pending_tool_call": None,
             "approval_decision": None,
             "approval_supplement": None,
-            "ask_human_count": 0,
-            "tool_call_retry_count": 0,
             "incident_history_summary": None,
             "kb_summary": None,
             "kb_project_ids": [],
-            "investigation_round": 1,
+            # 假设管理
+            "hypotheses": [],
+            "current_hypothesis_index": 0,
+            "hypothesis_results": [],
+            # 子 Agent 状态
+            "active_sub_agent_thread_id": None,
+            "sub_agent_status": None,
         }
 
         log.info("===== Agent lifecycle started =====")
@@ -182,7 +186,8 @@ class AgentRunner:
 
         state = await self.graph.aget_state(config)
         next_nodes = state.next or ()
-        if "ask_human" not in next_nodes and "confirm_resolution" not in next_nodes:
+        valid_resume_nodes = {"ask_human", "confirm_resolution", "sub_agent_ask_human"}
+        if not valid_resume_nodes.intersection(next_nodes):
             return
 
         from langgraph.types import Command
@@ -335,11 +340,20 @@ class AgentRunner:
         human_msg = self._build_human_message(human_input, image_attachments)
         update_messages.append(human_msg)
 
-        # Update checkpoint as if ask_human just ran → next node: main_agent
+        # Determine which node to resume from based on current interrupt state
+        next_nodes = state.next or ()
+        if "sub_agent_ask_human" in next_nodes:
+            as_node = "sub_agent_ask_human"
+        elif "sub_agent_approval" in next_nodes:
+            as_node = "sub_agent_approval"
+        else:
+            # Fallback: assume hypothesis_router since main_agent no longer exists
+            as_node = "hypothesis_router"
+
         await self.graph.aupdate_state(
             config,
             {"messages": update_messages},
-            as_node="ask_human",
+            as_node=as_node,
         )
 
         log.info("Checkpoint updated with human input, resuming stream")
@@ -388,17 +402,17 @@ class AgentRunner:
         log = get_logger(component="post_run", sid=sid)
         state = await self.graph.aget_state(config)
         vals = state.values
+        next_nodes = state.next or ()
 
         log.info(
             "Post-run",
-            next_nodes=state.next,
+            next_nodes=next_nodes,
             is_complete=vals.get("is_complete"),
-            tool_call_retry_count=vals.get("tool_call_retry_count", 0),
-            ask_human_count=vals.get("ask_human_count", 0),
         )
 
-        if "human_approval" in (state.next or ()):
-            pending = self._extract_pending_tool_call(vals)
+        # 子 Agent 审批中断 —— 从 CoordinatorState.pending_tool_call 获取待审批工具
+        if "sub_agent_approval" in next_nodes:
+            pending = vals.get("pending_tool_call")
             if pending:
                 args = pending.get("args", {})
                 tool_name = pending["name"]
@@ -407,7 +421,7 @@ class AgentRunner:
                 if tool_name in ("ssh_bash", "bash"):
                     cmd_type = ShellSafety.classify(command, local=(tool_name == "bash"))
                 elif tool_name == "service_exec":
-                    from src.ops_agent.nodes.main_agent import _get_service_type
+                    from src.ops_agent.nodes.investigation_agent import _get_service_type
 
                     service_type = await _get_service_type(args.get("service_id", ""))
                     cmd_type = ServiceSafety.classify(service_type, command)
@@ -416,12 +430,17 @@ class AgentRunner:
 
                 risk_level = "HIGH" if cmd_type == CommandType.DANGEROUS else "MEDIUM"
                 log.info(
-                    "human_approval interrupt",
+                    "sub_agent_approval interrupt",
                     tool=tool_name,
                     cmd_type=cmd_type.name,
                     risk=risk_level,
                 )
-                log.debug("approval command", command=command)
+
+                # 获取当前假设 ID
+                hypotheses = vals.get("hypotheses", [])
+                current_idx = vals.get("current_hypothesis_index", 0)
+                sub_agent_id = hypotheses[current_idx]["id"] if current_idx < len(hypotheses) else ""
+
                 async with get_session_factory()() as session:
                     approval = await ApprovalService(session).create(
                         incident_id=uuid.UUID(incident_id),
@@ -439,6 +458,7 @@ class AgentRunner:
                         "tool_name": pending["name"],
                         "tool_args": {**args, "risk_level": risk_level},
                         "tool_call_id": pending.get("id", ""),
+                        "sub_agent_id": sub_agent_id,
                     },
                 )
                 notify_fire_and_forget(
@@ -451,43 +471,33 @@ class AgentRunner:
                     explanation=args.get("explanation", ""),
                 )
 
-        if "ask_human" in (state.next or ()):
-            question = self._extract_ask_human_question(vals)
-            if question:
-                log.info(
-                    "ask_human interrupt",
-                    question_len=len(question),
-                    streamed=self._ask_human_streamed,
-                )
-                log.debug("ask_human interrupt", question=question)
-                if not self._ask_human_streamed:
-                    await self.publisher.publish(
-                        channel,
-                        "ask_human",
-                        {
-                            "question": question,
-                        },
-                    )
-                    await self.publisher.publish(channel, "ask_human_done", {})
-                notify_fire_and_forget(
-                    "ask_human",
-                    incident_id,
-                    vals.get("description", "")[:80],
-                    severity=vals.get("severity", ""),
-                    question=question,
-                )
+        # 子 Agent ask_human 中断
+        if "sub_agent_ask_human" in next_nodes:
+            # ask_human 的问题已由子 Agent 通过 SSE 流式发送
+            # 这里只需发布 ask_human_done 信号（如果尚未发送）
+            hypotheses = vals.get("hypotheses", [])
+            current_idx = vals.get("current_hypothesis_index", 0)
+            sub_agent_id = hypotheses[current_idx]["id"] if current_idx < len(hypotheses) else ""
+            log.info("sub_agent_ask_human interrupt", sub_agent_id=sub_agent_id)
+            # ask_human 事件已由 run_sub_agent 的事件桥接发送
+            notify_fire_and_forget(
+                "ask_human",
+                incident_id,
+                vals.get("description", "")[:80],
+                severity=vals.get("severity", ""),
+                question="（子 Agent 提问）",
+            )
 
-        if "confirm_resolution" in (state.next or ()):
+        # confirm_resolution 中断 —— synthesize 已完成，等待用户确认
+        if "confirm_resolution" in next_nodes:
             log.info("confirm_resolution interrupt")
-            # 从最后的 complete tool_call 中提取 answer_md，推送到前端
-            answer_md = self._extract_complete_answer(vals)
+            # 从 synthesize 的消息中提取排查结论
+            answer_md = self._extract_synthesize_answer(vals)
             if answer_md:
                 await self.publisher.publish(
                     channel, "answer", {"content": answer_md, "phase": "investigation"}
                 )
-                await self.publisher.publish(
-                    channel, "answer_done", {"phase": "investigation"}
-                )
+                await self.publisher.publish(channel, "answer_done", {"phase": "investigation"})
             await self.publisher.publish(channel, "confirm_resolution_required", {})
 
         if vals.get("is_complete"):
@@ -530,6 +540,19 @@ class AgentRunner:
                     if tc["name"] == "complete":
                         return tc["args"].get("answer_md", "")
                 break
+        return None
+
+    @staticmethod
+    def _extract_synthesize_answer(vals: dict) -> str | None:
+        """Extract the synthesize conclusion from messages.
+
+        The synthesize_node appends a HumanMessage with content starting with '[排查结论]'.
+        """
+        messages = vals.get("messages", [])
+        for msg in reversed(messages):
+            if hasattr(msg, "content") and isinstance(msg.content, str):
+                if msg.content.startswith("[排查结论]"):
+                    return msg.content.replace("[排查结论]\n\n", "", 1)
         return None
 
     @staticmethod
@@ -588,7 +611,11 @@ class AgentRunner:
         sid = channel.split(":")[-1][:8] if ":" in channel else ""
         stream_log = get_logger(component="stream", sid=sid)
 
-        if node in ("gather_context", "confirm_resolution", "planner", "compact_context"):
+        if node in (
+            "gather_context", "confirm_resolution", "planner",
+            "hypothesis_router", "run_sub_agent", "synthesize",
+            "sub_agent_approval", "sub_agent_ask_human",
+        ):
             return
 
         phase, agent = self._get_phase_agent(event)

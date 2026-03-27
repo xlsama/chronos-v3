@@ -1,119 +1,133 @@
+"""协调者图 —— 管理假设调度和子 Agent 执行。"""
+
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import ToolNode
 
 from src.lib.logger import get_logger
-from src.ops_agent.nodes.ask_human import ask_human_node
-from src.ops_agent.nodes.compact_context import compact_context_node, should_compact
-from src.ops_agent.nodes.confirm_resolution import confirm_resolution_node, route_after_resolution
 from src.ops_agent.nodes.gather_context import gather_context_node
-from src.ops_agent.nodes.human_approval import human_approval_node
-from src.ops_agent.nodes.main_agent import build_tools, main_agent_node, route_decision
+from src.ops_agent.nodes.hypothesis_router import hypothesis_router_node, route_after_hypothesis
 from src.ops_agent.nodes.planner import planner_node
-from src.ops_agent.nodes.retry_tool_call import retry_tool_call_node
-from src.ops_agent.state import OpsState
+from src.ops_agent.nodes.run_sub_agent import run_sub_agent_node
+from src.ops_agent.nodes.synthesize import synthesize_node
+from src.ops_agent.state import CoordinatorState
 
 
-def route_after_approval(state: OpsState) -> str:
-    """Route after human_approval: rejected/supplemented goes back to LLM, approved goes to tools."""
+async def confirm_resolution_node(state: CoordinatorState) -> dict:
+    """确认解决节点 —— 适配 CoordinatorState。"""
+    from langchain_core.messages import HumanMessage
+    from langgraph.types import interrupt
+
     sid = state["incident_id"][:8]
-    log = get_logger(component="approval", sid=sid)
-    decision = state.get("approval_decision", "approved")
-    route = "main_agent" if decision in ("rejected", "supplemented") else "tools"
-    log.info("route_after_approval", decision=decision, route=route)
-    return route
+    log = get_logger(component="confirm_resolution", sid=sid)
+    log.info("Waiting for user confirmation")
+    user_response = interrupt({"type": "confirm_resolution"})
+    log.info("User responded", response=str(user_response)[:100])
+
+    if user_response == "confirmed":
+        log.info("User confirmed resolution")
+        return {"is_complete": True}
+
+    log.info("User wants to continue investigation")
+    return {
+        "messages": [HumanMessage(content=f"用户表示问题未解决: {user_response}")],
+        "is_complete": False,
+    }
 
 
-def _has_hypothesis_transition(state: OpsState) -> bool:
-    """检测最近一轮 tool 执行中 update_plan 是否触发了假设状态变更。
+def route_after_resolution(state: CoordinatorState) -> str:
+    log = get_logger(component="confirm_resolution", sid=state["incident_id"][:8])
+    result = "end" if state.get("is_complete") else "hypothesis_router"
+    log.info("route_after_resolution", route=result)
+    return result
 
-    update_plan 工具在检测到假设从 待验证/排查中 变为 已确认/已排除 时，
-    会在返回值中包含"假设状态已变更"。检查 ToolMessage 的 content 来判断。
+
+async def sub_agent_approval_node(state: CoordinatorState) -> dict:
+    """透传节点 —— 仅用于触发 interrupt_before，让 AgentRunner 发布审批事件。
+
+    恢复后，审批决定通过 Command(update=...) 传入 CoordinatorState，
+    然后路由回 run_sub_agent 恢复子 Agent。
     """
-    for msg in reversed(state["messages"]):
-        if hasattr(msg, "tool_call_id") and "假设状态已变更" in (msg.content or ""):
-            return True
-        # 遇到 AIMessage（有 tool_calls）就停止，只检查最近一轮的 ToolMessage
-        if hasattr(msg, "tool_calls") and msg.tool_calls:
-            break
-    return False
+    from langgraph.types import interrupt
 
-
-def route_after_tools(state: OpsState) -> str:
-    """Route after tools: check hypothesis transition, then context compaction."""
     sid = state["incident_id"][:8]
-    log = get_logger(component="router", sid=sid)
+    log = get_logger(component="sub_agent_approval", sid=sid)
+    log.info("Sub-agent approval interrupt")
+    # interrupt 等待审批决定
+    interrupt({"type": "sub_agent_approval"})
+    log.info("Sub-agent approval resumed")
+    return {}
 
-    # 假设状态变更（已确认/已排除）→ 压缩上下文，开启新轮次
-    if _has_hypothesis_transition(state):
-        log.info("route_after_tools -> compact_context (hypothesis transition)")
-        return "compact_context"
 
-    if should_compact(state):
-        log.info("route_after_tools -> compact_context", message_count=len(state["messages"]))
-        return "compact_context"
+async def sub_agent_ask_human_node(state: CoordinatorState) -> dict:
+    """透传节点 —— 仅用于触发 interrupt_before，让 AgentRunner 发布 ask_human 事件。"""
+    from langchain_core.messages import HumanMessage
+    from langgraph.types import interrupt
 
-    return "main_agent"
+    sid = state["incident_id"][:8]
+    log = get_logger(component="sub_agent_ask_human", sid=sid)
+    log.info("Sub-agent ask_human interrupt")
+    user_response = interrupt({"type": "sub_agent_ask_human"})
+    log.info("Sub-agent ask_human resumed")
+    # 将用户回复添加到消息中，run_sub_agent 恢复时会从中获取
+    return {"messages": [HumanMessage(content=str(user_response))]}
+
+
+def route_after_sub_agent_approval(state: CoordinatorState) -> str:
+    """审批透传节点之后，路由回 run_sub_agent 恢复子 Agent。"""
+    return "run_sub_agent"
+
+
+def route_after_sub_agent_ask_human(state: CoordinatorState) -> str:
+    """ask_human 透传节点之后，路由回 run_sub_agent 恢复子 Agent。"""
+    return "run_sub_agent"
 
 
 def build_graph():
-    all_tools = build_tools()
-    tool_node = ToolNode(all_tools)
+    graph = StateGraph(CoordinatorState)
 
-    graph = StateGraph(OpsState)
-
-    # Add nodes
+    # 节点
     graph.add_node("gather_context", gather_context_node)
     graph.add_node("planner", planner_node)
-    graph.add_node("main_agent", main_agent_node)
-    graph.add_node("tools", tool_node)
-    graph.add_node("compact_context", compact_context_node)
-    graph.add_node("human_approval", human_approval_node)
-    graph.add_node("ask_human", ask_human_node)
+    graph.add_node("hypothesis_router", hypothesis_router_node)
+    graph.add_node("run_sub_agent", run_sub_agent_node)
+    graph.add_node("synthesize", synthesize_node)
     graph.add_node("confirm_resolution", confirm_resolution_node)
-    graph.add_node("retry_tool_call", retry_tool_call_node)
+    graph.add_node("sub_agent_approval", sub_agent_approval_node)
+    graph.add_node("sub_agent_ask_human", sub_agent_ask_human_node)
 
-    # Entry point
+    # 入口
     graph.set_entry_point("gather_context")
 
-    # Edges: gather_context → planner → main_agent
+    # 边
     graph.add_edge("gather_context", "planner")
-    graph.add_edge("planner", "main_agent")
+    graph.add_edge("planner", "hypothesis_router")
+
     graph.add_conditional_edges(
-        "main_agent",
-        route_decision,
+        "hypothesis_router",
+        route_after_hypothesis,
         {
-            "continue": "tools",
-            "need_approval": "human_approval",
-            "ask_human": "ask_human",
-            "retry_tool_call": "retry_tool_call",
-            "complete": "confirm_resolution",
+            "run_sub_agent": "run_sub_agent",
+            "synthesize": "synthesize",
+            "sub_agent_approval": "sub_agent_approval",
+            "sub_agent_ask_human": "sub_agent_ask_human",
         },
     )
-    graph.add_conditional_edges(
-        "tools",
-        route_after_tools,
-        {
-            "compact_context": "compact_context",
-            "main_agent": "main_agent",
-        },
-    )
-    graph.add_edge("compact_context", "main_agent")
-    graph.add_edge("retry_tool_call", "main_agent")
-    graph.add_conditional_edges(
-        "human_approval",
-        route_after_approval,
-        {
-            "tools": "tools",
-            "main_agent": "main_agent",
-        },
-    )
-    graph.add_edge("ask_human", "main_agent")
+
+    # run_sub_agent 完成后回到 hypothesis_router 决定下一步
+    graph.add_edge("run_sub_agent", "hypothesis_router")
+
+    # 审批/ask_human 透传节点恢复后回到 run_sub_agent
+    graph.add_edge("sub_agent_approval", "run_sub_agent")
+    graph.add_edge("sub_agent_ask_human", "run_sub_agent")
+
+    # synthesize → confirm_resolution
+    graph.add_edge("synthesize", "confirm_resolution")
+
     graph.add_conditional_edges(
         "confirm_resolution",
         route_after_resolution,
         {
             "end": END,
-            "main_agent": "main_agent",
+            "hypothesis_router": "hypothesis_router",
         },
     )
 
@@ -124,5 +138,5 @@ def compile_graph(checkpointer=None):
     graph = build_graph()
     return graph.compile(
         checkpointer=checkpointer,
-        interrupt_before=["human_approval", "ask_human", "confirm_resolution"],
+        interrupt_before=["sub_agent_approval", "sub_agent_ask_human", "confirm_resolution"],
     )

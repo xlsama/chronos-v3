@@ -11,7 +11,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from src.db.connection import get_session_factory
 from src.db.models import Incident
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 from src.env import get_settings
 from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash, list_servers as _list_servers
 from src.ops_agent.tools.bash_tool import local_bash as _local_bash
@@ -296,7 +296,7 @@ def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> A
     return AIMessage(content=response.content or "")
 
 
-def _build_runtime_hints(state: OpsState) -> str:
+def _build_runtime_hints(state: CoordinatorState) -> str:
     # Procedural guidance belongs in reusable skills instead of runtime hints.
     return ""
 
@@ -338,7 +338,7 @@ async def _build_plan_context(incident_id: str) -> str:
     return ""
 
 
-async def main_agent_node(state: OpsState) -> dict:
+async def main_agent_node(state: CoordinatorState) -> dict:
     sid = state["incident_id"][:8]
     log = get_logger(component="main", sid=sid)
     tools = build_tools()
@@ -459,7 +459,7 @@ async def _get_service_type(service_id: str) -> str:
         return ""
 
 
-async def route_decision(state: OpsState) -> str:
+async def route_decision(state: CoordinatorState) -> str:
     sid = state["incident_id"][:8]
     log = get_logger(component="main", sid=sid)
     last_message = state["messages"][-1]

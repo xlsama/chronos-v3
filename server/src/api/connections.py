@@ -26,14 +26,10 @@ async def test_all_connections(
     crypto = CryptoService(key=get_settings().encryption_key)
 
     services = list(
-        (await session.execute(select(Service).order_by(Service.created_at.desc())))
-        .scalars()
-        .all()
+        (await session.execute(select(Service).order_by(Service.created_at.desc()))).scalars().all()
     )
     servers = list(
-        (await session.execute(select(Server).order_by(Server.created_at.desc())))
-        .scalars()
-        .all()
+        (await session.execute(select(Server).order_by(Server.created_at.desc()))).scalars().all()
     )
 
     svc_service = ServiceService(session=session, crypto=crypto)

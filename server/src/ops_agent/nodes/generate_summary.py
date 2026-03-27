@@ -11,10 +11,10 @@ from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.prompts.generate_summary import SUMMARY_SYSTEM_PROMPT, SUMMARY_USER_PROMPT
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 
 
-async def generate_summary_node(state: OpsState) -> dict:
+async def generate_summary_node(state: CoordinatorState) -> dict:
     """评估通过后，流式生成排查总结报告。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="generate_summary", sid=sid)

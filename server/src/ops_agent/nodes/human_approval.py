@@ -1,12 +1,12 @@
 from langchain_core.messages import ToolMessage
 
 from src.lib.logger import get_logger
-from src.ops_agent.state import OpsState
+from src.ops_agent.state import CoordinatorState
 
 _APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
 
 
-async def human_approval_node(state: OpsState) -> dict:
+async def human_approval_node(state: CoordinatorState) -> dict:
     """This node is an interrupt point (interrupt_before).
 
     With interrupt_before, the graph pauses BEFORE this node runs.
