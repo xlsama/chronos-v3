@@ -60,6 +60,7 @@ INVESTIGATION_AGENT_SYSTEM_PROMPT = """\
 - 权限不足时加 sudo 重试
 - 不要用 2>/dev/null 吞掉错误
 - 排查运行状态时，建议优先检查 Docker 容器（`docker ps -a 2>&1`），确认容器存在后优先通过 `docker logs` 获取日志。Docker 命令失败时先判断是权限问题（加 sudo 重试）还是未安装（`command not found` 则跳过）
+- 进程存活不等于服务正常：如果进程/容器在运行但业务接口超时或阻塞，应通过 `list_services()` + `service_exec` 检查依赖服务（数据库锁状态、连接数、慢查询、缓存等），而不是仅凭进程存活就排除假设
 - 每轮回复必须包含至少一个工具调用
 - 思考过程用中文，命令和技术术语保持原文
 - 思考过程用陈述句，不要用疑问句
