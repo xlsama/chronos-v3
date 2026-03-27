@@ -519,7 +519,7 @@ class ShellSafety:
 # ═══════════════════════════════════════════
 
 # Pre-compiled SQL classification patterns
-_SQL_READ_RE = regex.compile(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC|USE)\b")
+_SQL_READ_RE = regex.compile(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC|USE|SET)\b")
 _SQL_CTE_READ_RE = regex.compile(r"^WITH\s+.*\bSELECT\b", regex.DOTALL)
 _SQL_DANGEROUS_RE = regex.compile(r"^(DROP|TRUNCATE)\b")
 _SQL_DELETE_RE = regex.compile(r"^DELETE\b")
@@ -532,6 +532,9 @@ def _classify_single_sql(stmt: str) -> CommandType:
     if not upper:
         return CommandType.READ
 
+    # SET GLOBAL / SET PERSIST affect server config → WRITE
+    if upper.startswith("SET") and ("GLOBAL" in upper or "PERSIST" in upper):
+        return CommandType.WRITE
     if _SQL_READ_RE.match(upper):
         return CommandType.READ
     if _SQL_CTE_READ_RE.match(upper):
@@ -575,9 +578,14 @@ _REDIS_READ = {
     "LRANGE",
     "LLEN",
     "LINDEX",
+    "LPOS",
     "SMEMBERS",
     "SCARD",
     "SISMEMBER",
+    "SRANDMEMBER",
+    "SINTER",
+    "SUNION",
+    "SDIFF",
     "ZRANGE",
     "ZREVRANGE",
     "ZCARD",
@@ -586,6 +594,9 @@ _REDIS_READ = {
     "ZCOUNT",
     "KEYS",
     "SCAN",
+    "HSCAN",
+    "SSCAN",
+    "ZSCAN",
     "TYPE",
     "TTL",
     "PTTL",
@@ -602,6 +613,30 @@ _REDIS_READ = {
     "SLOWLOG",
     "CLUSTER",
     "CONFIG",
+    "ACL",
+    "COMMAND",
+    "SELECT",
+    "ECHO",
+    "WAIT",
+    "DUMP",
+    "PUBSUB",
+    "SUBSCRIBE",
+    "PSUBSCRIBE",
+    "XLEN",
+    "XRANGE",
+    "XREVRANGE",
+    "XINFO",
+    "XREAD",
+    "GEORADIUS",
+    "GEOPOS",
+    "GEODIST",
+    "GEOSEARCH",
+    "GEOHASH",
+    "PFCOUNT",
+    "BITCOUNT",
+    "BITPOS",
+    "GETBIT",
+    "GETRANGE",
 }
 
 _REDIS_DANGEROUS = {"FLUSHDB", "FLUSHALL", "SHUTDOWN", "DEBUG"}
@@ -649,6 +684,13 @@ def _classify_redis(command: str) -> CommandType:
         if sub == "GET":
             return CommandType.READ
 
+    # Special: ACL SETUSER/DELUSER/SAVE/LOAD → WRITE, others (LIST/WHOAMI/GETUSER/CAT/LOG) → READ
+    if first == "ACL" and len(parts) >= 2:
+        sub = parts[1].upper()
+        if sub in ("SETUSER", "DELUSER", "SAVE", "LOAD"):
+            return CommandType.WRITE
+        return CommandType.READ
+
     if first in _REDIS_DANGEROUS:
         return CommandType.DANGEROUS
     if first in _REDIS_READ:
@@ -671,6 +713,7 @@ _MONGO_READ = {
     "countdocuments",
     "listcollections",
     "listdatabases",
+    "listindexes",
     "aggregate",
     "dbstats",
     "collstats",
@@ -682,6 +725,13 @@ _MONGO_READ = {
     "buildinfo",
     "connectionstatus",
     "hello",
+    "ismaster",
+    "currentop",
+    "validate",
+    "getlog",
+    "replsetgetstatus",
+    "hostinfo",
+    "getcmdlineopts",
 }
 
 _MONGO_DANGEROUS = {
