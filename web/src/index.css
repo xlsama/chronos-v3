@@ -389,16 +389,34 @@
   --card-code-bg: rgb(251 191 36 / 0.15);
 }
 
+.dark .card-markdown--amber {
+  --card-fg: theme(--color-amber-300);
+  --card-fg-emphasis: theme(--color-amber-200);
+  --card-code-bg: rgb(251 191 36 / 0.1);
+}
+
 .card-markdown--indigo {
   --card-fg: theme(--color-indigo-700);
   --card-fg-emphasis: theme(--color-indigo-800);
   --card-code-bg: rgb(99 102 241 / 0.1);
 }
 
+.dark .card-markdown--indigo {
+  --card-fg: theme(--color-indigo-300);
+  --card-fg-emphasis: theme(--color-indigo-200);
+  --card-code-bg: rgb(99 102 241 / 0.15);
+}
+
 .card-markdown--destructive {
   --card-fg: theme(--color-red-700);
   --card-fg-emphasis: theme(--color-red-800);
   --card-code-bg: rgb(239 68 68 / 0.1);
+}
+
+.dark .card-markdown--destructive {
+  --card-fg: theme(--color-red-300);
+  --card-fg-emphasis: theme(--color-red-200);
+  --card-code-bg: rgb(239 68 68 / 0.15);
 }
 
 /* mermaid 图表嵌入态：按 SVG 内容撑开高度，避免被 PanZoom 默认视口裁切 */
@@ -448,6 +466,11 @@
   font-size: 0.875em;
   font-weight: 500;
   color: oklch(0.4 0.008 250);
+}
+
+.dark :is(.prose-default, .prose-compact, .prose-tiny) :where(code):not(:where(pre *)) {
+  background-color: oklch(0.25 0.006 250);
+  color: oklch(0.8 0.006 250);
 }
 
 :is(.prose-default, .prose-compact, .prose-tiny) :where(code):not(:where(pre *))::before,

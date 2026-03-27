@@ -20,7 +20,7 @@ export function AnswerCard({ content, isStreaming }: AnswerCardProps) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-violet-200 bg-violet-50/50 p-4 text-sm",
+        "rounded-lg border border-violet-200 bg-violet-50/50 p-4 text-sm dark:border-blue-500/15 dark:bg-blue-500/[0.06]",
         isStreaming && "border-l-2 border-l-violet-400",
       )}
     >

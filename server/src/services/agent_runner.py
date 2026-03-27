@@ -611,11 +611,13 @@ class AgentRunner:
         sid = channel.split(":")[-1][:8] if ":" in channel else ""
         stream_log = get_logger(component="stream", sid=sid)
 
-        if node in (
-            "gather_context", "confirm_resolution", "planner",
-            "hypothesis_router", "run_sub_agent", "synthesize",
-            "sub_agent_approval", "sub_agent_ask_human",
-        ):
+        # 新架构中，所有节点的事件都由各自的发布机制处理：
+        # - gather_context: 子 Agent 直接发布
+        # - planner: planner_node 直接发布
+        # - investigation: run_sub_agent 的 _bridge_event 直接发布
+        # 父图的 astream_events() 会传播子图内部事件（investigation_agent, tools 等），
+        # 必须全部过滤，否则会产生重复事件。
+        if node:
             return
 
         phase, agent = self._get_phase_agent(event)

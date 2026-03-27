@@ -103,35 +103,35 @@ const STATUS_CONFIG = {
     icon: Loader2,
     iconClass: "h-3.5 w-3.5 animate-spin text-blue-500",
     label: "排查中",
-    labelClass: "text-blue-700 bg-blue-50",
+    labelClass: "text-blue-700 bg-blue-50 dark:text-blue-300 dark:bg-blue-950/50",
   },
   completed: {
     border: "border-l-gray-300",
     icon: Check,
     iconClass: "h-3.5 w-3.5 text-gray-500",
     label: "完成",
-    labelClass: "text-gray-700 bg-gray-50",
+    labelClass: "text-gray-700 bg-gray-50 dark:text-gray-300 dark:bg-gray-800/50",
   },
   confirmed: {
     border: "border-l-green-400",
     icon: Check,
     iconClass: "h-3.5 w-3.5 text-green-600",
     label: "已确认",
-    labelClass: "text-green-700 bg-green-50",
+    labelClass: "text-green-700 bg-green-50 dark:text-green-300 dark:bg-green-950/50",
   },
   eliminated: {
     border: "border-l-gray-300",
     icon: X,
     iconClass: "h-3.5 w-3.5 text-gray-400",
     label: "已排除",
-    labelClass: "text-gray-500 bg-gray-50",
+    labelClass: "text-gray-500 bg-gray-50 dark:text-gray-400 dark:bg-gray-800/50",
   },
   failed: {
     border: "border-l-red-300",
     icon: AlertTriangle,
     iconClass: "h-3.5 w-3.5 text-red-500",
     label: "失败",
-    labelClass: "text-red-700 bg-red-50",
+    labelClass: "text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-950/50",
   },
 } as const;
 
@@ -326,8 +326,8 @@ export function InvestigationCard({
 
           {/* Summary from report_findings */}
           {summary && status !== "running" && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50/30 p-3">
-              <p className="text-xs font-medium text-blue-800 mb-1">调查发现</p>
+            <div className="rounded-lg border border-blue-100 bg-blue-50/30 p-3 dark:border-blue-800 dark:bg-blue-950/30">
+              <p className="text-xs font-medium text-blue-800 mb-1 dark:text-blue-200">调查发现</p>
               <Markdown content={summary} variant="compact" />
             </div>
           )}

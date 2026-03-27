@@ -109,33 +109,33 @@ export function ToolCallCard({
   const colors = isApproval
     ? isHigh
       ? {
-          border: "border-red-300",
-          bg: "bg-red-50/50",
+          border: "border-red-300 dark:border-red-700",
+          bg: "bg-red-50/50 dark:bg-red-950/30",
           chevron: "text-red-400",
-          icon: "text-red-700",
-          name: "text-red-900",
+          icon: "text-red-700 dark:text-red-300",
+          name: "text-red-900 dark:text-red-100",
           spinner: "text-red-500",
-          divider: "border-red-100",
+          divider: "border-red-100 dark:border-red-800",
           borderWidth: "border-2",
         }
       : {
-          border: "border-yellow-300",
-          bg: "bg-yellow-50/50",
+          border: "border-yellow-300 dark:border-yellow-700",
+          bg: "bg-yellow-50/50 dark:bg-yellow-950/30",
           chevron: "text-yellow-400",
-          icon: "text-yellow-700",
-          name: "text-yellow-900",
+          icon: "text-yellow-700 dark:text-yellow-300",
+          name: "text-yellow-900 dark:text-yellow-100",
           spinner: "text-yellow-500",
-          divider: "border-yellow-100",
+          divider: "border-yellow-100 dark:border-yellow-800",
           borderWidth: "border-2",
         }
     : {
-        border: "border-blue-200",
-        bg: "bg-blue-50/50",
-        chevron: "text-blue-400",
-        icon: "text-blue-700",
-        name: "text-blue-900",
+        border: "border-blue-200 dark:border-blue-500/15",
+        bg: "bg-blue-50/50 dark:bg-blue-500/[0.06]",
+        chevron: "text-blue-400 dark:text-blue-400/60",
+        icon: "text-blue-700 dark:text-blue-400",
+        name: "text-blue-900 dark:text-blue-200",
         spinner: "text-blue-500",
-        divider: "border-blue-100",
+        divider: "border-blue-100 dark:border-blue-500/10",
         borderWidth: "border",
       };
 
@@ -145,10 +145,10 @@ export function ToolCallCard({
       className={cn(
         "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
         resolvedDecision === "approved"
-          ? "bg-green-100 text-green-800"
+          ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200"
           : resolvedDecision === "supplemented"
-            ? "bg-blue-100 text-blue-800"
-            : "bg-red-100 text-red-800",
+            ? "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200"
+            : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200",
       )}
       data-testid="approval-decision"
     >
@@ -205,7 +205,7 @@ export function ToolCallCard({
           <span
             className={cn(
               "inline-block rounded px-2 py-0.5 text-xs font-medium",
-              isHigh ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800",
+              isHigh ? "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200" : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200",
             )}
             data-testid="risk-level"
           >
@@ -229,7 +229,7 @@ export function ToolCallCard({
         <div className={cn("flex flex-col gap-3 border-t p-3 pt-2", colors.divider)}>
           {/* High-risk warning */}
           {isApproval && isHigh && (
-            <div className="rounded border border-red-200 bg-red-100/50 px-3 py-2 text-xs text-red-700">
+            <div className="rounded border border-red-200 bg-red-100/50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
               此命令被识别为高危操作，请仔细确认后再审批
             </div>
           )}
@@ -289,7 +289,7 @@ export function ToolCallCard({
             (isExpired ? (
               <div>
                 <span
-                  className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600"
+                  className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                   data-testid="approval-decision"
                 >
                   已过期

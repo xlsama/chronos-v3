@@ -23,7 +23,7 @@ export function PlannerContent() {
     return (
       <div
         className={cn(
-          "rounded-lg border border-blue-200 bg-blue-50/50 p-4 text-sm",
+          "rounded-lg border border-blue-200 bg-blue-50/50 p-4 text-sm dark:border-blue-800 dark:bg-blue-950/50",
           "border-l-2 border-l-blue-400",
         )}
       >
@@ -55,7 +55,7 @@ export function PlannerContent() {
 
   // 计划已生成：渲染蓝色卡片
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 text-sm">
+    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 text-sm dark:border-blue-800 dark:bg-blue-950/50">
       <div className="mb-1 flex items-center justify-between">
         <div className="text-xs font-medium text-muted-foreground">调查计划</div>
         <button

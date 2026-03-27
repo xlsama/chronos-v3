@@ -85,24 +85,24 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
   const isExecuting = !item.toolResult;
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50/50 text-xs">
+    <div className="rounded-lg border border-blue-200 bg-blue-50/50 text-xs dark:border-blue-500/15 dark:bg-blue-500/[0.06]">
       <button
         className="flex w-full items-center gap-1.5 p-2 text-left"
         onClick={() => setExpanded(!expanded)}
       >
         {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-blue-400" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-blue-400 dark:text-blue-400/60" />
         ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-blue-400" />
+          <ChevronRight className="h-3 w-3 shrink-0 text-blue-400 dark:text-blue-400/60" />
         )}
-        <Wrench className="h-3 w-3 shrink-0 text-blue-600" />
-        <span className="font-mono font-semibold text-blue-800">{name}</span>
+        <Wrench className="h-3 w-3 shrink-0 text-blue-600 dark:text-blue-400" />
+        <span className="font-mono font-semibold text-blue-800 dark:text-blue-200">{name}</span>
         {isExecuting && (
           <Loader2 className="ml-auto h-3 w-3 animate-spin text-blue-500" />
         )}
       </button>
       {expanded && (
-        <div className="space-y-2 border-t border-blue-100 p-2">
+        <div className="space-y-2 border-t border-blue-100 p-2 dark:border-blue-500/10">
           {hasArgs && (
             <div>
               <p className="mb-1 text-xs font-medium text-muted-foreground">Input</p>
@@ -209,7 +209,7 @@ export function SubAgentCard({
       className={cn(
         "flex min-h-0 flex-col rounded-lg border",
         status === "failed"
-          ? "border-red-200 bg-red-50/30"
+          ? "border-red-200 bg-red-50/30 dark:border-red-800 dark:bg-red-950/30"
           : "border-border/60 bg-card",
         fixedLayout && expanded && "flex-1 overflow-hidden",
         className,

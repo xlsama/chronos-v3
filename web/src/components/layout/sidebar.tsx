@@ -4,10 +4,14 @@ import {
   Activity,
   BookOpen,
   Cable,
+  Check,
   ChevronsUpDown,
   LogOut,
+  Monitor,
+  Moon,
   Settings,
   Sparkles,
+  Sun,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,8 +30,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useTheme } from "next-themes";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +64,7 @@ const navItems = [
 
 export function AppSidebar() {
   const { location } = useRouterState();
+  const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
 
@@ -139,6 +148,30 @@ export function AppSidebar() {
                   <Settings />
                   设置
                 </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Sun className="dark:hidden" />
+                    <Moon className="hidden dark:block" />
+                    主题
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => setTheme("light")}>
+                      <Sun />
+                      浅色
+                      {theme === "light" && <Check className="ml-auto" />}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("dark")}>
+                      <Moon />
+                      深色
+                      {theme === "dark" && <Check className="ml-auto" />}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("system")}>
+                      <Monitor />
+                      跟随系统
+                      {theme === "system" && <Check className="ml-auto" />}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setLogoutOpen(true)}>
                   <LogOut />

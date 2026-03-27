@@ -221,10 +221,10 @@ function LiveAskHumanSection() {
   if (!askHumanStreamContent) return null;
   return (
     <div className="animate-in fade-in duration-150">
-      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
         <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
         <div>
-          <p className="text-sm font-medium text-amber-800">Agent 需要更多信息</p>
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Agent 需要更多信息</p>
           <Markdown
             content={askHumanStreamContent}
             streaming
@@ -260,9 +260,6 @@ function ResolutionConfirmCard({
     (s) => s.setResolutionConfirmResolved,
   );
 
-  // 停止状态下不显示确认卡片（用户未确认解决）
-  if (incidentStatus === "stopped") return null;
-
   const isTerminal = incidentStatus === "resolved";
 
   const queryClient = useQueryClient();
@@ -280,6 +277,8 @@ function ResolutionConfirmCard({
     },
   });
 
+  // early return 必须放在所有 hooks 之后
+  if (incidentStatus === "stopped") return null;
   if (!resolutionConfirmRequired) return null;
 
   const resolved = resolutionConfirmResolved || isTerminal;
@@ -288,13 +287,13 @@ function ResolutionConfirmCard({
     <div
       className={cn(
         "rounded-lg border p-4 space-y-3",
-        resolved ? "border-green-200 bg-green-50/30" : "border-blue-200 bg-blue-50/30",
+        resolved ? "border-green-200 bg-green-50/30 dark:border-green-800 dark:bg-green-950/30" : "border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-950/30",
       )}
     >
       <div
         className={cn(
           "flex items-center gap-2 text-sm font-medium",
-          resolved ? "text-green-800" : "text-blue-800",
+          resolved ? "text-green-800 dark:text-green-200" : "text-blue-800 dark:text-blue-200",
         )}
       >
         <CheckCircle className="h-5 w-5" />
@@ -569,10 +568,10 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
       case "ask_human":
         return (
           <div key={i}>
-            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
               <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
               <div>
-                <p className="text-sm font-medium text-amber-800">Agent 需要更多信息</p>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Agent 需要更多信息</p>
                 <Markdown
                   content={item.event.data.question as string}
                   variant="compact"
