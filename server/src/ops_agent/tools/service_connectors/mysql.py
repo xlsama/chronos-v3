@@ -35,13 +35,22 @@ class MySQLConnector(ServiceConnector):
                 minsize=1,
                 maxsize=3,
                 charset="utf8mb4",
-                autocommit=False,
+                autocommit=True,
+                connect_timeout=5,
+                pool_recycle=300,
             )
         return self._pool
 
     async def execute(self, command: str) -> ServiceResult:
         try:
             pool = await self._get_pool()
+        except Exception as e:
+            log.error("Connection failed", error=str(e))
+            return ServiceResult(
+                success=False, output="", error=f"连接失败: {type(e).__name__}: {e}"
+            )
+
+        try:
             cmd = command.strip()
             upper = cmd.upper()
 

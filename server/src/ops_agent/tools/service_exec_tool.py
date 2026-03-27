@@ -311,9 +311,11 @@ async def service_exec(service_id: str, command: str) -> str:
         actual_elapsed = time.monotonic() - t0
         timeout_val = get_settings().command_timeout
         log.warning("Timeout", elapsed=f"{actual_elapsed:.2f}s", limit=f"{timeout_val}s")
-        return f"查询执行超时（{timeout_val}秒），请简化查询或增加限制条件"
+        await invalidate_service_connector(service_id)
+        return f"命令执行超时（{timeout_val}秒），可能原因: 查询耗时过长、表锁/死锁、连接阻塞等"
     except Exception as e:
         log.error("Error", error=str(e))
+        await invalidate_service_connector(service_id)
         return f"执行异常: {e}"
 
     if not result.success:
