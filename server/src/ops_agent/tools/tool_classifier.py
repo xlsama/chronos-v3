@@ -681,6 +681,7 @@ _MONGO_READ = {
     "serverstatus",
     "buildinfo",
     "connectionstatus",
+    "hello",
 }
 
 _MONGO_DANGEROUS = {

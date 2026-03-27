@@ -190,6 +190,7 @@ def create_connector(
             username=config.get("username"),
             password=password,
             database=config.get("database", "admin"),
+            auth_source=config.get("auth_source"),
         )
     elif service_type == "elasticsearch":
         return connector_cls(
