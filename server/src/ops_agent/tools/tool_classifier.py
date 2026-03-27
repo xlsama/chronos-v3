@@ -519,7 +519,7 @@ class ShellSafety:
 # ═══════════════════════════════════════════
 
 # Pre-compiled SQL classification patterns
-_SQL_READ_RE = regex.compile(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC)\b")
+_SQL_READ_RE = regex.compile(r"^(SELECT|SHOW|EXPLAIN|DESCRIBE|DESC|USE)\b")
 _SQL_CTE_READ_RE = regex.compile(r"^WITH\s+.*\bSELECT\b", regex.DOTALL)
 _SQL_DANGEROUS_RE = regex.compile(r"^(DROP|TRUNCATE)\b")
 _SQL_DELETE_RE = regex.compile(r"^DELETE\b")

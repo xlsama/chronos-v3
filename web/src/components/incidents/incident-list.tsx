@@ -108,6 +108,7 @@ export function IncidentList({ statusFilter, severityFilter }: IncidentListProps
         page_size: pageSize,
       }),
     placeholderData: keepPreviousData,
+    refetchInterval: 5000,
   });
 
   const incidents = data?.items;
