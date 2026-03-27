@@ -270,6 +270,9 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
             return_state["pending_tool_call"] = pending
             return_state["pending_approval_id"] = approval_id
         elif result["interrupt_type"] == "ask_human":
+            return_state["needs_approval"] = False
+            return_state["pending_tool_call"] = None
+            return_state["pending_approval_id"] = None
             # ask_human 通知
             notify_fire_and_forget(
                 "ask_human",

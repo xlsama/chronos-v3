@@ -59,7 +59,7 @@ INVESTIGATION_AGENT_SYSTEM_PROMPT = """\
 - 先只读收集信息，再决定是否写操作
 - 权限不足时加 sudo 重试
 - 不要用 2>/dev/null 吞掉错误
-- Docker 命令失败时先判断是权限问题还是未安装
+- 排查运行状态时，建议优先检查 Docker 容器（`docker ps -a 2>&1`），确认容器存在后优先通过 `docker logs` 获取日志。Docker 命令失败时先判断是权限问题（加 sudo 重试）还是未安装（`command not found` 则跳过）
 - 每轮回复必须包含至少一个工具调用
 - 思考过程用中文，命令和技术术语保持原文
 - 思考过程用陈述句，不要用疑问句
