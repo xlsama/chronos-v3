@@ -62,20 +62,17 @@ function NavItem({
   item,
   isActive,
 }: {
-  item: { readonly to: string; readonly label: string; readonly icon: React.ComponentType<{ className?: string }> };
+  item: {
+    readonly to: string;
+    readonly label: string;
+    readonly icon: React.ComponentType<{ className?: string }>;
+  };
   isActive: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <SidebarMenuItem
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <SidebarMenuButton
-        isActive={isActive}
-        tooltip={item.label}
-        render={<Link to={item.to} />}
-      >
+    <SidebarMenuItem onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <SidebarMenuButton isActive={isActive} tooltip={item.label} render={<Link to={item.to} />}>
         <motion.span
           className="inline-flex"
           animate={hovered ? { rotate: [0, -6, 6, -4, 4, -2, 0] } : { rotate: 0 }}
@@ -109,11 +106,7 @@ export function AppSidebar() {
   ) => (
     <SidebarMenu>
       {items.map((item) => (
-        <NavItem
-          key={item.to}
-          item={item}
-          isActive={location.pathname.startsWith(item.to)}
-        />
+        <NavItem key={item.to} item={item} isActive={location.pathname.startsWith(item.to)} />
       ))}
     </SidebarMenu>
   );
@@ -121,7 +114,7 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader>
-        <Link to="/incidents" className="flex h-8 items-center gap-2 px-2">
+        <Link to="/incidents" className="flex h-8 items-center gap-3 px-2">
           <img src="/favicon.png" alt="logo" className="size-5" />
           <h1 className="text-lg font-semibold">Enmolar Chronos</h1>
         </Link>
