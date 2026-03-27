@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { MessageCircleQuestion, CheckCircle, RefreshCw, Check, Loader2, ChevronRight } from "lucide-react";
+import { MessageCircleQuestion, CheckCircle, ListTodo, Check, Loader2, ChevronRight } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
@@ -639,7 +639,7 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
       case "plan_update":
         return (
           <div key={i} className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
-            <RefreshCw className="h-3 w-3 text-blue-400" />
+            <ListTodo className="h-3 w-3 text-blue-400" />
             <span>计划已更新</span>
           </div>
         );

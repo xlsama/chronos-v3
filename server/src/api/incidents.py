@@ -271,10 +271,6 @@ def _message_to_event(m: Message) -> dict:
         data = metadata or {}
     elif m.event_type in ("plan_generated", "plan_updated"):
         data = metadata or {}
-    elif m.event_type == "evaluation_completed":
-        data = metadata or {}
-    elif m.event_type == "evaluation_started":
-        data = metadata or {}
     elif m.event_type in ("round_started", "round_ended"):
         data = metadata or {}
     elif m.event_type in ("sub_agent_started", "sub_agent_completed"):

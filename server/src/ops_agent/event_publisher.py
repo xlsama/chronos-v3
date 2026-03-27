@@ -33,8 +33,6 @@ _EVENT_ROLE = {
     "plan_generated": "system",
     "plan_updated": "system",
     "planner_progress": "system",
-    "evaluation_started": "system",
-    "evaluation_completed": "system",
     "round_started": "system",
     "round_ended": "system",
     "sub_agent_started": "system",
@@ -322,10 +320,6 @@ class EventPublisher:
             return {"plan_md": data.get("plan_md", ""), "phase": data.get("phase", "")}
         if event_type == "plan_updated":
             return {"plan_md": data.get("plan_md", ""), "phase": data.get("phase", "")}
-        if event_type == "evaluation_started":
-            return {"attempt": data.get("attempt"), "phase": data.get("phase", "")}
-        if event_type == "evaluation_completed":
-            return {"result": data.get("result"), "phase": data.get("phase", "")}
         if event_type in ("round_started", "round_ended"):
             return {
                 "round": data.get("round"),
