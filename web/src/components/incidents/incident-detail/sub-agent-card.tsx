@@ -564,7 +564,7 @@ export function SubAgentCard({
             switch (item.type) {
               case "thinking":
                 return (
-                  <div key={i}>
+                  <div key={i} className="animate-in fade-in slide-in-from-bottom-1 duration-200">
                     <ThinkingBubble content={item.event.data.content as string} />
                   </div>
                 );
@@ -584,7 +584,7 @@ export function SubAgentCard({
                   ? formatRelativeTime(item.toolCall.timestamp, baseTimestamp)
                   : undefined;
                 return (
-                  <div key={i}>
+                  <div key={i} className="animate-in fade-in slide-in-from-bottom-1 duration-200">
                     <ToolCallCard
                       name={toolName}
                       args={toolArgs}
@@ -607,7 +607,7 @@ export function SubAgentCard({
                 if (atn === "ssh_bash") asi = aa?.server_id ? serverMap?.get(aa.server_id as string) : undefined;
                 else if (atn === "service_exec") aSvcI = aa?.service_id ? serviceMap?.get(aa.service_id as string) : undefined;
                 return (
-                  <div key={i}>
+                  <div key={i} className="animate-in fade-in slide-in-from-bottom-1 duration-200">
                     <ToolCallCard
                       name={atn}
                       args={aa}

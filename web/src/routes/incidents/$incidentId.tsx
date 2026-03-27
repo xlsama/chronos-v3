@@ -60,11 +60,12 @@ function IncidentDetailPage() {
     smooth: false,
   });
 
-  // 审批操作后强制滚动到底部，防止 shouldAutoScroll 被中间布局状态错误置 false
+  // 审批操作后强制滚动到底部，延迟 150ms 避免快速连续触发时闪烁
   const scrollToBottomTrigger = useIncidentStreamStore((s) => s.scrollToBottomTrigger);
   useEffect(() => {
     if (scrollToBottomTrigger > 0) {
-      requestAnimationFrame(() => scrollToBottom());
+      const timer = setTimeout(() => scrollToBottom(), 150);
+      return () => clearTimeout(timer);
     }
   }, [scrollToBottomTrigger, scrollToBottom]);
 

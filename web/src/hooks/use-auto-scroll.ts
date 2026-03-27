@@ -56,19 +56,14 @@ export function useAutoScroll(
 
   // MutationObserver：监听 DOM 子节点变化，自动滚动到底部
   // 只监听 childList（新增/删除节点），不监听 characterData（逐字更新会触发过于频繁）
-  // 使用 80ms throttle 代替 rAF（~16ms），减少流式渲染时的强制重排频率
+  // 使用 200ms throttle 批量合并快速连续的 DOM 变化，配合 smooth scroll 消除闪烁
   useEffect(() => {
     if (!scrollEl || !enabled) return;
 
     const doScroll = () => {
       if (shouldAutoScroll.current) {
-        scrollEl.scrollTop = scrollEl.scrollHeight;
+        scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
       }
-      const atBottom =
-        scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
-        threshold;
-      shouldAutoScroll.current = atBottom;
-      setIsAtBottom(atBottom);
     };
 
     const observer = new MutationObserver(() => {
@@ -76,7 +71,7 @@ export function useAutoScroll(
       mutationTimerId.current = setTimeout(() => {
         mutationTimerId.current = undefined;
         doScroll();
-      }, 80);
+      }, 200);
     });
 
     observer.observe(scrollEl, {
@@ -103,13 +98,8 @@ export function useAutoScroll(
       resizeRafId.current = requestAnimationFrame(() => {
         resizeRafId.current = 0;
         if (shouldAutoScroll.current) {
-          scrollEl.scrollTop = scrollEl.scrollHeight;
+          scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
         }
-        const atBottom =
-          scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
-          threshold;
-        shouldAutoScroll.current = atBottom;
-        setIsAtBottom(atBottom);
       });
     });
 
@@ -124,10 +114,11 @@ export function useAutoScroll(
   const scrollToBottom = useCallback(() => {
     shouldAutoScroll.current = true;
     setIsAtBottom(true);
-    if (smooth) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    } else if (scrollElRef.current) {
-      scrollElRef.current.scrollTop = scrollElRef.current.scrollHeight;
+    if (scrollElRef.current) {
+      scrollElRef.current.scrollTo({
+        top: scrollElRef.current.scrollHeight,
+        behavior: smooth ? "smooth" : "instant",
+      });
     }
   }, [smooth]);
 
