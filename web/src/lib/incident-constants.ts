@@ -9,7 +9,7 @@ export const statusColors: Record<string, string> = {
   open: "bg-red-50 text-red-700 border-transparent dark:bg-red-950/40 dark:text-red-400",
   investigating: "bg-amber-50 text-amber-700 border-transparent dark:bg-amber-950/40 dark:text-amber-400",
   resolved: "bg-emerald-50 text-emerald-700 border-transparent dark:bg-emerald-950/40 dark:text-emerald-400",
-  stopped: "bg-slate-50 text-slate-600 border-transparent dark:bg-slate-800/40 dark:text-slate-400",
+  stopped: "bg-slate-100 text-slate-600 border-transparent dark:bg-slate-800/40 dark:text-slate-400",
   interrupted: "bg-orange-50 text-orange-700 border-transparent dark:bg-orange-950/40 dark:text-orange-400",
   error: "bg-red-50 text-red-700 border-transparent dark:bg-red-950/40 dark:text-red-400",
 };
