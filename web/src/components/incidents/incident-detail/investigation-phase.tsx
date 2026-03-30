@@ -167,8 +167,17 @@ function formatErrorMessage(message: string): string {
 // --- Small isolated components ---
 
 function WaitingIndicator() {
-  const isWaiting = useIncidentStreamStore((s) => s.isWaitingForAgent);
-  if (!isWaiting) return null;
+  const showWaiting = useIncidentStreamStore((s) => {
+    if (!s.isWaitingForAgent) return false;
+    // 有待处理的审批时不显示（Agent 在等审批，不是在思考）
+    return !s.events.some(
+      (e) =>
+        e.event_type === "approval_required" &&
+        e.data.approval_id &&
+        !s.decidedApprovals[e.data.approval_id as string],
+    );
+  });
+  if (!showWaiting) return null;
   return (
     <div className="animate-in fade-in duration-150 px-1 py-2">
       <TextDotsLoader text="Agent 思考中" size="sm" />

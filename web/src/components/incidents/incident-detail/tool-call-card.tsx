@@ -280,7 +280,13 @@ export const ToolCallCard = memo(function ToolCallCard({
             <div data-testid="tool-output">
               <p className="mb-1 text-xs font-medium text-muted-foreground">Output</p>
               <div className="max-h-60 overflow-auto rounded-md border border-border/50 bg-background px-4 py-2 text-xs">
-                <Markdown content={formatToolOutput(name, output)} variant="tiny" />
+                {COMMAND_TOOLS.has(name) ? (
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+                    {formatToolOutput(name, output)}
+                  </pre>
+                ) : (
+                  <Markdown content={formatToolOutput(name, output)} variant="tiny" />
+                )}
               </div>
             </div>
           )}

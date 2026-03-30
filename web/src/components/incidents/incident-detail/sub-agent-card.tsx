@@ -37,7 +37,9 @@ import { ToolCallCard } from "./tool-call-card";
 import { SkillReadCard } from "./skill-read-card";
 import { TextDotsLoader } from "@/components/ui/loader";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { useIncidentStreamStore } from "@/stores/incident-stream";
 
+const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -194,7 +196,13 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
             <div>
               <p className="mb-1 text-xs font-medium text-muted-foreground">Output</p>
               <div className="max-h-40 overflow-auto rounded-md border border-border/50 bg-background px-3 py-1.5 text-xs">
-                <Markdown content={formatToolOutput(name, output)} variant="tiny" />
+                {COMMAND_TOOLS.has(name) ? (
+                  <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+                    {formatToolOutput(name, output)}
+                  </pre>
+                ) : (
+                  <Markdown content={formatToolOutput(name, output)} variant="tiny" />
+                )}
               </div>
             </div>
           )}
@@ -333,6 +341,19 @@ export const SubAgentCard = memo(function SubAgentCard({
   const [previewSource, setPreviewSource] = useState<Source | null>(null);
 
   const hasEvents = events.length > 0 || !!streamingContent;
+
+  // 有待处理的审批时不显示等待指示器
+  const decidedApprovals = useIncidentStreamStore((s) => s.decidedApprovals);
+  const hasPendingApproval = useMemo(
+    () =>
+      events.some(
+        (e) =>
+          e.event_type === "approval_required" &&
+          e.data.approval_id &&
+          !decidedApprovals[e.data.approval_id as string],
+      ),
+    [events, decidedApprovals],
+  );
 
   // Resolve config for context gathering
   const agentConfig = agentName ? AGENT_CONFIG[agentName] : undefined;
@@ -662,7 +683,7 @@ export const SubAgentCard = memo(function SubAgentCard({
           )}
 
           {/* Waiting indicator */}
-          {isActive && !streamingContent && events.length > 0 && (
+          {isActive && !streamingContent && events.length > 0 && !hasPendingApproval && (
             <div className="px-1 py-1">
               <TextDotsLoader text={isReporting ? "正在总结排查结论" : "Agent 思考中"} size="sm" />
             </div>
