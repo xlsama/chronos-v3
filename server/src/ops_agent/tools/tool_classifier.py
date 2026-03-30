@@ -9,16 +9,6 @@ class CommandType(str, Enum):
     BLOCKED = "blocked"  # Absolutely forbidden, reject immediately
 
 
-def compress_output(output: str, max_chars: int = 10000) -> str:
-    """Truncate overly long tool output. Shared by ssh_bash / bash / service_exec."""
-    if len(output) <= max_chars:
-        return output
-    truncated_count = len(output) - max_chars
-    marker = f"\n\n... [truncated {truncated_count} characters] ...\n\n"
-    remaining = max_chars - len(marker)
-    half = remaining // 2
-    return f"{output[:half]}{marker}{output[-half:]}"
-
 
 # ═══════════════════════════════════════════
 # Internal helpers: quote-aware command splitting

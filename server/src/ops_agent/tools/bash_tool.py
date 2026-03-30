@@ -4,7 +4,7 @@ import time
 
 from src.env import get_settings
 from src.lib.logger import get_logger
-from src.ops_agent.tools.tool_classifier import ShellSafety, CommandType, compress_output
+from src.ops_agent.tools.tool_classifier import ShellSafety, CommandType
 
 log = get_logger(component="bash")
 
@@ -72,7 +72,7 @@ async def local_bash(command: str) -> dict:
             "error": f"执行异常: {type(e).__name__}: {e}",
         }
 
-    stdout_str = compress_output(stdout.decode(errors="replace"))
+    stdout_str = stdout.decode(errors="replace")
     stderr_str = stderr.decode(errors="replace")
 
     log.info(

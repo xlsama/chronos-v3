@@ -1,5 +1,6 @@
 """子 Agent 生命周期管理节点 —— 创建/恢复子 Agent，桥接 SSE 事件。"""
 
+import json
 import uuid
 
 import orjson
@@ -564,12 +565,24 @@ async def _bridge_event(
         else:
             run_id = event.get("run_id", "")
             output_raw = event["data"].get("output", "")
-            output_str = str(output_raw)
+            if isinstance(output_raw, ToolMessage):
+                output_str = (
+                    output_raw.content
+                    if isinstance(output_raw.content, str)
+                    else str(output_raw.content)
+                )
+            else:
+                output_str = str(output_raw)
             status = "success"
-            if isinstance(output_raw, dict):
-                if output_raw.get("exit_code") not in (None, 0):
+            _parsed = None
+            try:
+                _parsed = json.loads(output_str)
+            except Exception:
+                pass
+            if isinstance(_parsed, dict):
+                if _parsed.get("exit_code") not in (None, 0):
                     status = "error"
-                elif output_raw.get("error"):
+                elif _parsed.get("error"):
                     status = "error"
             tool_result_data: dict = {
                 "name": name,

@@ -4,7 +4,7 @@ import uuid
 
 from src.env import get_settings
 from src.lib.logger import get_logger
-from src.ops_agent.tools.tool_classifier import ServiceSafety, CommandType, compress_output
+from src.ops_agent.tools.tool_classifier import ServiceSafety, CommandType
 from src.ops_agent.tools.service_connectors.base import ServiceConnector
 
 log = get_logger(component="service_exec")
@@ -320,4 +320,4 @@ async def service_exec(service_id: str, command: str) -> str:
 
     if not result.success:
         return f"执行失败: {result.error}"
-    return compress_output(result.output)
+    return result.output

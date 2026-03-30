@@ -38,13 +38,22 @@ interface ToolCallCardProps {
 const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
 
 function formatToolOutput(name: string, output: string): string {
-  if (name !== "ssh_bash" && name !== "bash") return output;
+  if (!COMMAND_TOOLS.has(name)) return output;
+
+  // Try to extract content from Python ToolMessage repr format:
+  // content='{"exit_code": 0, "stdout": "..."}' name='ssh_bash' tool_call_id='...'
+  let raw = output;
+  const reprMatch = raw.match(/^content='([\s\S]*?)'\s+name='/);
+  if (reprMatch) {
+    raw = reprMatch[1].replace(/\\n/g, "\n").replace(/\\'/g, "'");
+  }
+
   try {
-    const parsed = JSON.parse(output);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return output;
-    return parsed.stdout || parsed.stderr || parsed.error || output;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return raw;
+    return parsed.stdout || parsed.stderr || parsed.error || raw;
   } catch {
-    return output;
+    return raw;
   }
 }
 

@@ -5,7 +5,7 @@ import uuid
 
 from src.lib.logger import get_logger
 from src.ops_agent.ssh import SSHConnector
-from src.ops_agent.tools.tool_classifier import ShellSafety, CommandType, compress_output
+from src.ops_agent.tools.tool_classifier import ShellSafety, CommandType
 
 log = get_logger(component="ssh_bash")
 
@@ -175,7 +175,7 @@ async def ssh_bash(server_id: str, command: str) -> dict:
             "error": f"执行异常: {type(e).__name__}: {e}",
         }
 
-    stdout_compressed = compress_output(result.stdout)
+    stdout_compressed = result.stdout
     log.info(
         "Result",
         elapsed=f"{exec_elapsed:.2f}s",
