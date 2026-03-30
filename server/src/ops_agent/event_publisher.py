@@ -267,6 +267,7 @@ class EventPublisher:
             meta = {
                 "name": data.get("name", ""),
                 "tool_call_id": data.get("tool_call_id", ""),
+                "status": data.get("status", "success"),
                 "phase": data.get("phase", ""),
                 "agent": data.get("agent", ""),
             }

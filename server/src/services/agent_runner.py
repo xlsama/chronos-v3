@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import json
 import uuid
 
 import redis.asyncio as aioredis
@@ -8,6 +7,7 @@ from langchain_core.messages import HumanMessage, ToolMessage
 
 from src.env import get_settings
 from src.ops_agent.event_publisher import EventPublisher
+from src.ops_agent.tools.tool_output import normalize_tool_output
 from src.ops_agent.graph import compile_graph
 from src.db.connection import get_session_factory
 from src.db.models import Incident
@@ -784,12 +784,7 @@ class AgentRunner:
             main_log = get_logger(component="main", sid=sid)
             if name == "read_skill":
                 args = event["data"].get("input", {})
-                _raw = event["data"].get("output", "")
-                output = (
-                    _raw.content
-                    if isinstance(_raw, ToolMessage) and isinstance(_raw.content, str)
-                    else str(_raw)
-                )
+                output, _ = normalize_tool_output(event["data"].get("output", ""))
                 success = not output.startswith("未找到")
                 path = args.get("path", "")
                 skill_log.info(
@@ -818,25 +813,7 @@ class AgentRunner:
                 return
             run_id = event.get("run_id", "")
             output_raw = event["data"].get("output", "")
-            if isinstance(output_raw, ToolMessage):
-                output_str = (
-                    output_raw.content
-                    if isinstance(output_raw.content, str)
-                    else str(output_raw.content)
-                )
-            else:
-                output_str = str(output_raw)
-            status = "success"
-            _parsed = None
-            try:
-                _parsed = json.loads(output_str)
-            except Exception:
-                pass
-            if isinstance(_parsed, dict):
-                if _parsed.get("exit_code") not in (None, 0):
-                    status = "error"
-                elif _parsed.get("error"):
-                    status = "error"
+            output_str, status = normalize_tool_output(output_raw)
             main_log.info("Tool end", tool=name, status=status)
             main_log.debug("Tool output", output=output_str)
             tool_result_data: dict = {

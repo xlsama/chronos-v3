@@ -31,6 +31,7 @@ import { getIncidentHistory } from "@/api/incident-history";
 import { DocumentViewer } from "@/components/projects/document-viewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { QueryContent } from "@/components/query-content";
+import { formatToolOutput } from "@/lib/format-tool-output";
 import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
 import { SkillReadCard } from "./skill-read-card";
@@ -193,7 +194,7 @@ function SubAgentToolItem({ item }: { item: PairedTool }) {
             <div>
               <p className="mb-1 text-xs font-medium text-muted-foreground">Output</p>
               <div className="max-h-40 overflow-auto rounded-md border border-border/50 bg-background px-3 py-1.5 text-xs">
-                <Markdown content={output} variant="tiny" />
+                <Markdown content={formatToolOutput(name, output)} variant="tiny" />
               </div>
             </div>
           )}

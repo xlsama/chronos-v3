@@ -16,6 +16,7 @@ import { ShellCodeBlock } from "@/components/ui/shell-code-block";
 import { Markdown } from "@/components/ui/markdown";
 import { TextDotsLoader } from "@/components/ui/loader";
 import { cn } from "@/lib/utils";
+import { formatToolOutput } from "@/lib/format-tool-output";
 import { decideApproval } from "@/api/approvals";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 
@@ -36,26 +37,6 @@ interface ToolCallCardProps {
 }
 
 const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
-
-function formatToolOutput(name: string, output: string): string {
-  if (!COMMAND_TOOLS.has(name)) return output;
-
-  // Try to extract content from Python ToolMessage repr format:
-  // content='{"exit_code": 0, "stdout": "..."}' name='ssh_bash' tool_call_id='...'
-  let raw = output;
-  const reprMatch = raw.match(/^content='([\s\S]*?)'\s+name='/);
-  if (reprMatch) {
-    raw = reprMatch[1].replace(/\\n/g, "\n").replace(/\\'/g, "'");
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return raw;
-    return parsed.stdout || parsed.stderr || parsed.error || raw;
-  } catch {
-    return raw;
-  }
-}
 
 export const ToolCallCard = memo(function ToolCallCard({
   name,

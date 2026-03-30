@@ -1,6 +1,5 @@
 """子 Agent 生命周期管理节点 —— 创建/恢复子 Agent，桥接 SSE 事件。"""
 
-import json
 import uuid
 
 import orjson
@@ -14,6 +13,7 @@ from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.investigation_graph import compile_investigation_graph
 from src.ops_agent.state import CoordinatorState, HypothesisResult
 from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
+from src.ops_agent.tools.tool_output import normalize_tool_output
 from src.services.approval_service import ApprovalService
 from src.services.notification_service import notify_fire_and_forget
 
@@ -545,7 +545,7 @@ async def _bridge_event(
             pass
         elif name == "read_skill":
             args = event["data"].get("input", {})
-            output = str(event["data"].get("output", ""))
+            output, _ = normalize_tool_output(event["data"].get("output", ""))
             success = not output.startswith("未找到")
             parts = args.get("path", "").split("/", 1)
             slug = parts[0]
@@ -565,25 +565,7 @@ async def _bridge_event(
         else:
             run_id = event.get("run_id", "")
             output_raw = event["data"].get("output", "")
-            if isinstance(output_raw, ToolMessage):
-                output_str = (
-                    output_raw.content
-                    if isinstance(output_raw.content, str)
-                    else str(output_raw.content)
-                )
-            else:
-                output_str = str(output_raw)
-            status = "success"
-            _parsed = None
-            try:
-                _parsed = json.loads(output_str)
-            except Exception:
-                pass
-            if isinstance(_parsed, dict):
-                if _parsed.get("exit_code") not in (None, 0):
-                    status = "error"
-                elif _parsed.get("error"):
-                    status = "error"
+            output_str, status = normalize_tool_output(output_raw)
             tool_result_data: dict = {
                 "name": name,
                 "output": output_str,
