@@ -76,7 +76,7 @@ export function PhaseSection({
       <div
         className={cn(
           "absolute left-0 -translate-x-1/2",
-          "w-px bg-border/60",
+          "w-px bg-border/45",
           isLast ? "top-0 h-4" : "top-0 bottom-0",
         )}
         style={isLast ? { maskImage: "linear-gradient(to bottom, black, transparent)" } : undefined}
