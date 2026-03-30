@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
 import { createMermaidPlugin } from "@streamdown/mermaid";
@@ -26,7 +27,7 @@ interface MarkdownProps {
   variant?: "default" | "compact" | "tiny";
 }
 
-export function Markdown({
+export const Markdown = memo(function Markdown({
   content,
   streaming,
   className,
@@ -49,4 +50,4 @@ export function Markdown({
       {content}
     </Streamdown>
   );
-}
+});

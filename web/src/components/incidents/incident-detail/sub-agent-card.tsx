@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -300,7 +300,7 @@ interface SubAgentCardProps {
   incidentStatus?: string;
 }
 
-export function SubAgentCard({
+export const SubAgentCard = memo(function SubAgentCard({
   events,
   status,
   className,
@@ -690,7 +690,7 @@ export function SubAgentCard({
       )}
     </div>
   );
-}
+});
 
 function IncidentHistoryPreview({
   id,

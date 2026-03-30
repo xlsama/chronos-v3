@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -37,7 +37,7 @@ interface ToolCallCardProps {
 
 const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
 
-export function ToolCallCard({
+export const ToolCallCard = memo(function ToolCallCard({
   name,
   args,
   output,
@@ -360,4 +360,4 @@ export function ToolCallCard({
       )}
     </div>
   );
-}
+});

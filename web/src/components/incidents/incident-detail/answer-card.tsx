@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/ui/markdown";
@@ -8,7 +8,7 @@ interface AnswerCardProps {
   isStreaming?: boolean;
 }
 
-export function AnswerCard({ content, isStreaming }: AnswerCardProps) {
+export const AnswerCard = memo(function AnswerCard({ content, isStreaming }: AnswerCardProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -40,4 +40,4 @@ export function AnswerCard({ content, isStreaming }: AnswerCardProps) {
       <Markdown content={content} streaming={isStreaming} variant="compact" />
     </div>
   );
-}
+});

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Paperclip } from "lucide-react";
 import { getAttachmentUrl } from "@/api/attachments";
 
@@ -28,7 +29,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function UserMessageBubble({
+export const UserMessageBubble = memo(function UserMessageBubble({
   content,
   attachments,
   attachment_ids,
@@ -124,4 +125,4 @@ export function UserMessageBubble({
       </div>
     </div>
   );
-}
+});

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { CircleCheck, CirclePause, CircleStop } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +36,7 @@ interface TimelineDividerProps {
   type: keyof typeof dividerConfig;
 }
 
-export function TimelineDivider({ type }: TimelineDividerProps) {
+export const TimelineDivider = memo(function TimelineDivider({ type }: TimelineDividerProps) {
   const config = dividerConfig[type];
   const Icon = config.icon;
 
@@ -56,4 +57,4 @@ export function TimelineDivider({ type }: TimelineDividerProps) {
       <div className={cn("h-px flex-1", config.lineColor)} />
     </div>
   );
-}
+});

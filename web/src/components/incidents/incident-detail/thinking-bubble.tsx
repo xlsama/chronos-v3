@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Markdown } from "@/components/ui/markdown";
 
 interface ThinkingBubbleProps {
@@ -5,7 +6,7 @@ interface ThinkingBubbleProps {
   isStreaming?: boolean;
 }
 
-export function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
+export const ThinkingBubble = memo(function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
   return (
     <div
       className="text-sm py-3 text-foreground/80"
@@ -14,4 +15,4 @@ export function ThinkingBubble({ content, isStreaming }: ThinkingBubbleProps) {
       <Markdown content={content} streaming={isStreaming} variant="compact" />
     </div>
   );
-}
+});

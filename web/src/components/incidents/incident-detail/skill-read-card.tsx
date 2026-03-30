@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Sparkles } from "lucide-react";
 import { SkillViewer } from "@/components/skills/skill-viewer";
 
-export function SkillReadCard({ skillName, skillSlug }: { skillName: string; skillSlug: string }) {
+export const SkillReadCard = memo(function SkillReadCard({ skillName, skillSlug }: { skillName: string; skillSlug: string }) {
   const [viewingSlug, setViewingSlug] = useState<string | null>(null);
 
   return (
@@ -20,4 +20,4 @@ export function SkillReadCard({ skillName, skillSlug }: { skillName: string; ski
       <SkillViewer skillSlug={viewingSlug} onClose={() => setViewingSlug(null)} readOnly />
     </>
   );
-}
+});
