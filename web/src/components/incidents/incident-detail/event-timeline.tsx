@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { MessageCircleQuestion, CheckCircle, ListTodo, Check, Loader2, ChevronRight } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Virtuoso } from "react-virtuoso";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
+import type { InvestigationSubAgent } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
@@ -24,6 +26,7 @@ import { PlannerContent } from "./planner-phase-section";
 interface EventTimelineProps {
   incidentId: string;
   incidentStatus?: string;
+  scrollParent?: HTMLDivElement | null;
 }
 
 type TimelineItem =
@@ -40,6 +43,10 @@ type TimelineItem =
   | { type: "answer"; event: SSEEvent; round: number }
   | { type: "agent_interrupted"; event: SSEEvent; round: number }
   | { type: "done"; event: SSEEvent; round: number };
+
+type MergedItem =
+  | { kind: "timeline"; item: TimelineItem; idx: number; ts: string }
+  | { kind: "investigation"; inv: InvestigationSubAgent; ts: string };
 
 function buildTimelineItems(events: SSEEvent[]): TimelineItem[] {
   const items: TimelineItem[] = [];
@@ -295,7 +302,7 @@ function ResolutionConfirmCard({
   );
 }
 
-export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps) {
+export function EventTimeline({ incidentId, incidentStatus, scrollParent }: EventTimelineProps) {
   const events = useIncidentStreamStore((s) => s.events);
   const historyAgentState = useIncidentStreamStore((s) => s.historyAgentState);
   const kbAgentState = useIncidentStreamStore((s) => s.kbAgentState);
@@ -464,6 +471,37 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
     const dur = formatDuration(sorted[0].timestamp, sorted[sorted.length - 1].timestamp);
     return dur !== "0s" ? dur : "";
   }, [historyAgentState.events, kbAgentState.events]);
+
+  // Build merged timeline for investigation phase (coordinator events + investigation cards)
+  const mergedItems = useMemo((): MergedItem[] => {
+    if (!hasInvestigations) return [];
+
+    const merged: MergedItem[] = [];
+
+    for (let i = 0; i < timelineItems.length; i++) {
+      const item = timelineItems[i];
+      const evt =
+        "event" in item ? (item as { event: SSEEvent }).event :
+        "toolCall" in item ? (item as { toolCall: SSEEvent }).toolCall :
+        "approvalEvent" in item ? (item as { approvalEvent: SSEEvent }).approvalEvent :
+        "startEvent" in item ? (item as { startEvent: SSEEvent }).startEvent : null;
+      merged.push({ kind: "timeline", item, idx: i, ts: evt?.timestamp || "" });
+    }
+
+    for (const inv of investigations) {
+      const firstTs = inv.events.length > 0 ? inv.events[0].timestamp : "";
+      merged.push({ kind: "investigation", inv, ts: firstTs });
+    }
+
+    merged.sort((a, b) => {
+      if (!a.ts && !b.ts) return 0;
+      if (!a.ts) return 1;
+      if (!b.ts) return -1;
+      return a.ts.localeCompare(b.ts);
+    });
+
+    return merged;
+  }, [timelineItems, investigations, hasInvestigations]);
 
   // Helper: render a single timeline item
   const renderTimelineItem = (item: TimelineItem, i: number) => {
@@ -745,65 +783,76 @@ export function EventTimeline({ incidentId, incidentStatus }: EventTimelineProps
           <div className="space-y-3">
             {hasInvestigations ? (
               // New architecture: interleave coordinator thinking + InvestigationCards
-              <>
-                {(() => {
-                  // Build a merged timeline of coordinator events and investigation cards
-                  type MergedItem =
-                    | { kind: "timeline"; item: TimelineItem; idx: number; ts: string }
-                    | { kind: "investigation"; inv: typeof investigations[0]; ts: string };
-
-                  const merged: MergedItem[] = [];
-
-                  // Add coordinator timeline items (thinking, answer, etc. without sub_agent_id)
-                  for (let i = 0; i < timelineItems.length; i++) {
-                    const item = timelineItems[i];
-                    const evt = "event" in item ? (item as { event: SSEEvent }).event :
-                                "toolCall" in item ? (item as { toolCall: SSEEvent }).toolCall :
-                                "approvalEvent" in item ? (item as { approvalEvent: SSEEvent }).approvalEvent :
-                                "startEvent" in item ? (item as { startEvent: SSEEvent }).startEvent : null;
-                    const ts = evt?.timestamp || "";
-                    merged.push({ kind: "timeline", item, idx: i, ts });
+              scrollParent && mergedItems.length > 0 ? (
+                <Virtuoso
+                  customScrollParent={scrollParent}
+                  data={mergedItems}
+                  computeItemKey={(index, item) =>
+                    item.kind === "investigation"
+                      ? `inv-${item.inv.hypothesisId}`
+                      : `tl-${item.idx}`
                   }
-
-                  // Add investigation cards at their start timestamp
-                  for (const inv of investigations) {
-                    const firstTs = inv.events.length > 0 ? inv.events[0].timestamp : "";
-                    merged.push({ kind: "investigation", inv, ts: firstTs });
-                  }
-
-                  // Sort by timestamp (stable: items without ts go to end)
-                  merged.sort((a, b) => {
-                    if (!a.ts && !b.ts) return 0;
-                    if (!a.ts) return 1;
-                    if (!b.ts) return -1;
-                    return a.ts.localeCompare(b.ts);
-                  });
-
-                  return merged.map((m, i) => {
-                    if (m.kind === "investigation") {
-                      return (
+                  increaseViewportBy={{ top: 400, bottom: 400 }}
+                  itemContent={(index, item) => (
+                    <div className={index < mergedItems.length - 1 ? "pb-3" : ""}>
+                      {item.kind === "investigation" ? (
                         <SubAgentCard
-                          key={`inv-${m.inv.hypothesisId}`}
-                          title={m.inv.hypothesisTitle}
-                          events={m.inv.events}
-                          status={m.inv.status}
-                          isActive={m.inv.hypothesisId === activeInvestigationId}
-                          streamingContent={m.inv.thinkingContent}
-                          summary={m.inv.summary}
+                          title={item.inv.hypothesisTitle}
+                          events={item.inv.events}
+                          status={item.inv.status}
+                          isActive={item.inv.hypothesisId === activeInvestigationId}
+                          streamingContent={item.inv.thinkingContent}
+                          summary={item.inv.summary}
                           serverMap={serverMap}
                           serviceMap={serviceMap}
                           incidentStatus={incidentStatus}
-                          forceExpanded={m.inv.hypothesisId === activeInvestigationId}
+                          forceExpanded={item.inv.hypothesisId === activeInvestigationId}
                         />
-                      );
-                    }
-                    return <div key={`tl-${m.idx}`}>{renderTimelineItem(m.item, m.idx)}</div>;
-                  });
-                })()}
-              </>
+                      ) : (
+                        renderTimelineItem(item.item, item.idx)
+                      )}
+                    </div>
+                  )}
+                />
+              ) : (
+                // Fallback: render without virtualization (scrollParent not ready or empty list)
+                mergedItems.map((m, i) =>
+                  m.kind === "investigation" ? (
+                    <SubAgentCard
+                      key={`inv-${m.inv.hypothesisId}`}
+                      title={m.inv.hypothesisTitle}
+                      events={m.inv.events}
+                      status={m.inv.status}
+                      isActive={m.inv.hypothesisId === activeInvestigationId}
+                      streamingContent={m.inv.thinkingContent}
+                      summary={m.inv.summary}
+                      serverMap={serverMap}
+                      serviceMap={serviceMap}
+                      incidentStatus={incidentStatus}
+                      forceExpanded={m.inv.hypothesisId === activeInvestigationId}
+                    />
+                  ) : (
+                    <div key={`tl-${m.idx}`}>{renderTimelineItem(m.item, m.idx)}</div>
+                  ),
+                )
+              )
             ) : totalRounds <= 1 ? (
-              // Legacy: single round, render all items directly
-              timelineItems.map((item, i) => renderTimelineItem(item, i))
+              // Legacy: single round — virtualize flat list
+              scrollParent && timelineItems.length > 0 ? (
+                <Virtuoso
+                  customScrollParent={scrollParent}
+                  data={timelineItems}
+                  computeItemKey={(index) => `tl-${index}`}
+                  increaseViewportBy={{ top: 400, bottom: 400 }}
+                  itemContent={(index, item) => (
+                    <div className={index < timelineItems.length - 1 ? "pb-3" : ""}>
+                      {renderTimelineItem(item, index)}
+                    </div>
+                  )}
+                />
+              ) : (
+                timelineItems.map((item, i) => renderTimelineItem(item, i))
+              )
             ) : (
               // Legacy: multiple rounds, group by round with expand/collapse
               Array.from(roundGrouped.entries()).map(([round, items]) => {

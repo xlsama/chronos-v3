@@ -54,7 +54,7 @@ function IncidentDetailPage() {
 
   const isActive = incident?.status === "open" || incident?.status === "investigating" || incident?.status === "interrupted";
 
-  const { scrollRef, bottomRef, isAtBottom, scrollToBottom } = useAutoScroll({
+  const { scrollRef, bottomRef, isAtBottom, scrollToBottom, scrollElement } = useAutoScroll({
     enabled: isActive,
     threshold: 100,
     smooth: false,
@@ -232,7 +232,7 @@ function IncidentDetailPage() {
         ref={scrollRef}
         className="relative flex-1 min-h-0 overflow-auto"
       >
-        <EventTimeline incidentId={incidentId} incidentStatus={incident.status} />
+        <EventTimeline incidentId={incidentId} incidentStatus={incident.status} scrollParent={scrollElement} />
         <div ref={bottomRef} />
 
         {!isAtBottom && (

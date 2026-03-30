@@ -11,6 +11,7 @@ interface UseAutoScrollReturn {
   bottomRef: React.RefObject<HTMLDivElement | null>;
   isAtBottom: boolean;
   scrollToBottom: () => void;
+  scrollElement: HTMLDivElement | null;
 }
 
 export function useAutoScroll(
@@ -122,5 +123,5 @@ export function useAutoScroll(
     }
   }, [smooth]);
 
-  return { scrollRef, bottomRef, isAtBottom, scrollToBottom };
+  return { scrollRef, bottomRef, isAtBottom, scrollToBottom, scrollElement: scrollEl };
 }

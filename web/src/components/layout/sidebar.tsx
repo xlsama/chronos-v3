@@ -116,7 +116,7 @@ export function AppSidebar() {
       <SidebarHeader>
         <Link to="/incidents" className="flex h-8 items-center gap-3 px-2">
           <img src="/favicon.png" alt="logo" className="size-5" />
-          <h1 className="text-lg font-semibold">Enmolar Chronos</h1>
+          <h1 className="text-[17px] font-semibold">Enmolar Chronos</h1>
         </Link>
       </SidebarHeader>
       <SidebarContent>
