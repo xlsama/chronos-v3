@@ -63,16 +63,17 @@ export function useAutoScroll(
 
     const doScroll = () => {
       if (shouldAutoScroll.current) {
-        scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
+        scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: smooth ? "smooth" : "instant" });
       }
     };
 
     const observer = new MutationObserver(() => {
-      if (mutationTimerId.current) return;
+      // trailing-edge debounce：每次 mutation 重置计时器，等 DOM 变化停歇后再滚动
+      if (mutationTimerId.current) clearTimeout(mutationTimerId.current);
       mutationTimerId.current = setTimeout(() => {
         mutationTimerId.current = undefined;
         doScroll();
-      }, 200);
+      }, 150);
     });
 
     observer.observe(scrollEl, {
@@ -80,14 +81,19 @@ export function useAutoScroll(
       subtree: true,
     });
 
-    // 初始滚动到底部
-    if (scrollElRef.current) scrollElRef.current.scrollTop = scrollElRef.current.scrollHeight;
+    // 初始滚动：rAF 延迟到当前渲染完成后，instant 跳转避免动画期间 scrollHeight 变化
+    const rafId = requestAnimationFrame(() => {
+      if (scrollElRef.current) {
+        scrollElRef.current.scrollTo({ top: scrollElRef.current.scrollHeight, behavior: "instant" });
+      }
+    });
 
     return () => {
       observer.disconnect();
+      cancelAnimationFrame(rafId);
       if (mutationTimerId.current) clearTimeout(mutationTimerId.current);
     };
-  }, [scrollEl, enabled, threshold]);
+  }, [scrollEl, enabled, smooth, threshold]);
 
   // ResizeObserver：当容器自身高度变化时，也保持底部对齐。
   // 这能覆盖 header/sources 行插入后，可视区缩小但子树内容本身未变的情况。
@@ -99,7 +105,7 @@ export function useAutoScroll(
       resizeRafId.current = requestAnimationFrame(() => {
         resizeRafId.current = 0;
         if (shouldAutoScroll.current) {
-          scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
+          scrollEl.scrollTo({ top: scrollEl.scrollHeight, behavior: smooth ? "smooth" : "instant" });
         }
       });
     });
@@ -110,7 +116,7 @@ export function useAutoScroll(
       observer.disconnect();
       if (resizeRafId.current) cancelAnimationFrame(resizeRafId.current);
     };
-  }, [scrollEl, enabled, threshold]);
+  }, [scrollEl, enabled, smooth, threshold]);
 
   const scrollToBottom = useCallback(() => {
     shouldAutoScroll.current = true;

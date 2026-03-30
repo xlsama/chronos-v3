@@ -1,9 +1,43 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { Markdown } from "@/components/ui/markdown";
 import { TextDotsLoader } from "@/components/ui/loader";
+
+const STATUS_BADGE_MAP: Record<string, string> = {
+  "待验证": "badge-pending",
+  "排查中": "badge-investigating",
+  "已确认": "badge-confirmed",
+  "已排除": "badge-eliminated",
+};
+
+const STATUS_RE = /^(H\d+)\s+\[(待验证|排查中|已确认|已排除)\]\s*(.*)/s;
+
+function extractText(children: ReactNode): string {
+  if (typeof children === "string") return children;
+  if (typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(extractText).join("");
+  return "";
+}
+
+const PLAN_COMPONENTS = {
+  h3: ({ children, node: _, ...props }: React.ComponentProps<"h3"> & { node?: unknown }) => {
+    const text = extractText(children);
+    const match = text.match(STATUS_RE);
+    if (match) {
+      const [, id, status, desc] = match;
+      return (
+        <h3 {...props}>
+          {id}{" "}
+          <span className={`hypothesis-badge ${STATUS_BADGE_MAP[status]}`}>{status}</span>{" "}
+          {desc}
+        </h3>
+      );
+    }
+    return <h3 {...props}>{children}</h3>;
+  },
+};
 
 export function PlannerContent() {
   const planMd = useIncidentStreamStore((s) => s.plannerPlanMd);
@@ -30,7 +64,7 @@ export function PlannerContent() {
         <div className="mb-1 text-xs font-medium text-muted-foreground">
           调查计划...
         </div>
-        <Markdown content={thinkingContent} streaming variant="compact" />
+        <Markdown content={thinkingContent} streaming variant="compact" components={PLAN_COMPONENTS} />
       </div>
     );
   }
@@ -65,7 +99,7 @@ export function PlannerContent() {
           {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </button>
       </div>
-      <Markdown content={planMd} variant="compact" />
+      <Markdown content={planMd} variant="compact" components={PLAN_COMPONENTS} />
     </div>
   );
 }

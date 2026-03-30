@@ -75,6 +75,7 @@ async def _start_agent_background(
                         image_attachments.append(
                             {
                                 "filename": a.filename,
+                                "stored_filename": a.stored_filename,
                                 "bytes": file_path.read_bytes(),
                                 "content_type": a.content_type,
                             }
@@ -388,6 +389,7 @@ async def send_user_message(
                     msg_image_attachments.append(
                         {
                             "filename": attachment.filename,
+                            "stored_filename": attachment.stored_filename,
                             "bytes": file_path.read_bytes(),
                             "content_type": attachment.content_type,
                         }

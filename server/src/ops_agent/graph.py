@@ -67,6 +67,22 @@ async def sub_agent_ask_human_node(state: CoordinatorState) -> dict:
     log.info("Sub-agent ask_human interrupt")
     user_response = interrupt({"type": "sub_agent_ask_human"})
     log.info("Sub-agent ask_human resumed")
+
+    # 从 resume 中提取文本和图片文件引用（不传 bytes，避免序列化风险）
+    if isinstance(user_response, dict) and "text" in user_response:
+        text = user_response["text"]
+        images_meta = []
+        for img in user_response.get("images") or []:
+            images_meta.append({
+                "filename": img.get("filename", ""),
+                "stored_filename": img.get("stored_filename", ""),
+                "content_type": img.get("content_type", "image/png"),
+            })
+        return {
+            "messages": [HumanMessage(content=text)],
+            "pending_human_images": images_meta if images_meta else None,
+        }
+
     return {"messages": [HumanMessage(content=str(user_response))]}
 
 

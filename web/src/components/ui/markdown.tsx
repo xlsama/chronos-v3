@@ -25,6 +25,9 @@ interface MarkdownProps {
   streaming?: boolean;
   className?: string;
   variant?: "default" | "compact" | "tiny";
+  allowedTags?: Record<string, string[]>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  components?: Record<string, React.ComponentType<any>>;
 }
 
 export const Markdown = memo(function Markdown({
@@ -32,6 +35,8 @@ export const Markdown = memo(function Markdown({
   streaming,
   className,
   variant = "default",
+  allowedTags,
+  components,
 }: MarkdownProps) {
   return (
     <Streamdown
@@ -46,6 +51,8 @@ export const Markdown = memo(function Markdown({
       plugins={{ code, mermaid }}
       shikiTheme={["github-light", "github-dark"]}
       controls={{ code: { copy: true, download: false } }}
+      allowedTags={allowedTags}
+      components={components}
     >
       {content}
     </Streamdown>

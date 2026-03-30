@@ -414,8 +414,33 @@ async def _resume_sub_agent(
     elif "ask_human" in next_nodes:
         last_msg = coordinator_state["messages"][-1]
         user_input = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
-        resume_input = Command(resume=user_input)
-        log.info("Resuming sub-agent (human input)")
+
+        # 从 coordinator state 读取图片文件引用，从磁盘重新读取 bytes
+        images_meta = coordinator_state.get("pending_human_images") or []
+        image_attachments: list[dict] = []
+        if images_meta:
+            from src.lib.paths import uploads_dir
+
+            upload_path = uploads_dir()
+            for meta in images_meta:
+                stored = meta.get("stored_filename", "")
+                if stored:
+                    fp = upload_path / stored
+                    if fp.exists():
+                        image_attachments.append(
+                            {
+                                "filename": meta.get("filename", ""),
+                                "bytes": fp.read_bytes(),
+                                "content_type": meta.get("content_type", "image/png"),
+                            }
+                        )
+
+        if image_attachments:
+            resume_value: dict | str = {"text": user_input, "images": image_attachments}
+        else:
+            resume_value = user_input
+        resume_input = Command(resume=resume_value)
+        log.info("Resuming sub-agent (human input)", has_images=bool(image_attachments))
     else:
         log.warning("Sub-agent not at interrupt point", next_nodes=next_nodes)
         return {"needs_interrupt": False}

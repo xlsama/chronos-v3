@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import type { Attachment } from "@/lib/types";
+// PreviewableAttachment is exported from this module; full Attachment type not needed
 import { getAttachmentUrl } from "@/api/attachments";
 import { getFileTypeFromContentType } from "@/lib/file-utils";
 import { FilePreview } from "@/components/ui/file-preview";
@@ -12,13 +12,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+export interface PreviewableAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+}
+
 interface AttachmentPreviewDialogProps {
-  attachment: Attachment | null;
+  attachment: PreviewableAttachment | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-function ImageLightbox({
+export function ImageLightbox({
   src,
   filename,
   onClose,

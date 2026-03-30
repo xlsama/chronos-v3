@@ -722,6 +722,8 @@ _MONGO_READ = {
     "replsetgetstatus",
     "hostinfo",
     "getcmdlineopts",
+    "usersinfo",
+    "rolesinfo",
 }
 
 _MONGO_DANGEROUS = {
@@ -742,11 +744,16 @@ _MONGO_WRITE = {
 
 
 def _classify_mongodb(command: str) -> CommandType:
-    """Classify a MongoDB command document (JSON)."""
+    """Classify a MongoDB command document (JSON) or shell command."""
     import json
 
+    from src.ops_agent.tools.service_connectors.mongodb import _translate_shell_command
+
+    translated = _translate_shell_command(command)
+    raw = translated if translated is not None else command.strip()
+
     try:
-        cmd_doc = json.loads(command.strip())
+        cmd_doc = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return CommandType.WRITE
 

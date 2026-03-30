@@ -37,6 +37,9 @@ class CoordinatorState(MessagesState):
     active_hypothesis_desc: str | None
     pending_launch_tool_call_id: str | None  # launch_investigation 的 tool_call_id
 
+    # 子 Agent ask_human 图片文件引用（避免通过 checkpoint 传 bytes）
+    pending_human_images: list[dict] | None  # [{"filename","stored_filename","content_type"}]
+
     # 审批透传（子 Agent interrupt 时传递到主图）
     needs_approval: bool
     pending_tool_call: dict | None

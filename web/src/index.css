@@ -282,6 +282,60 @@
   strong { font-weight: 600; }
 }
 
+/* Hypothesis status badges in plan markdown */
+.hypothesis-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 500;
+  line-height: 1;
+  vertical-align: baseline;
+  white-space: nowrap;
+  translate: 0 -0.5px;
+}
+
+.badge-pending {
+  color: var(--color-amber-700);
+  background-color: var(--color-amber-50);
+}
+
+.badge-investigating {
+  color: var(--color-blue-700);
+  background-color: var(--color-blue-50);
+}
+
+.badge-confirmed {
+  color: var(--color-green-700);
+  background-color: var(--color-green-50);
+}
+
+.badge-eliminated {
+  color: var(--color-gray-500);
+  background-color: var(--color-gray-50);
+}
+
+.dark .badge-pending {
+  color: var(--color-amber-300);
+  background-color: color-mix(in srgb, var(--color-amber-950) 50%, transparent);
+}
+
+.dark .badge-investigating {
+  color: var(--color-blue-300);
+  background-color: color-mix(in srgb, var(--color-blue-950) 50%, transparent);
+}
+
+.dark .badge-confirmed {
+  color: var(--color-green-300);
+  background-color: color-mix(in srgb, var(--color-green-950) 50%, transparent);
+}
+
+.dark .badge-eliminated {
+  color: var(--color-gray-400);
+  background-color: color-mix(in srgb, var(--color-gray-800) 50%, transparent);
+}
+
 .prose-tiny {
   font-size: 0.625rem;
   line-height: 1.625;
