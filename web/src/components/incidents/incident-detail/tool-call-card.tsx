@@ -37,6 +37,17 @@ interface ToolCallCardProps {
 
 const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
 
+function formatToolOutput(name: string, output: string): string {
+  if (name !== "ssh_bash" && name !== "bash") return output;
+  try {
+    const parsed = JSON.parse(output);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return output;
+    return parsed.stdout || parsed.stderr || parsed.error || output;
+  } catch {
+    return output;
+  }
+}
+
 export const ToolCallCard = memo(function ToolCallCard({
   name,
   args,
@@ -279,7 +290,7 @@ export const ToolCallCard = memo(function ToolCallCard({
             <div data-testid="tool-output">
               <p className="mb-1 text-xs font-medium text-muted-foreground">Output</p>
               <div className="max-h-60 overflow-auto rounded-md border border-border/50 bg-background px-4 py-2 text-xs">
-                <Markdown content={output} variant="tiny" />
+                <Markdown content={formatToolOutput(name, output)} variant="tiny" />
               </div>
             </div>
           )}
