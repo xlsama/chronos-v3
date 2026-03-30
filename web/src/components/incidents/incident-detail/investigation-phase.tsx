@@ -8,7 +8,7 @@ import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
 import { getServices } from "@/api/services";
-import { cn, formatRelativeTime, formatDuration } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
 import { TextDotsLoader } from "@/components/ui/loader";
@@ -220,7 +220,6 @@ function LiveAnswerSection() {
 
   useEffect(() => {
     if (!isActive) {
-      // Content cleared — reset
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = undefined;
@@ -230,7 +229,6 @@ function LiveAnswerSection() {
       return;
     }
 
-    // Start RAF loop to smoothly drip content
     const tick = () => {
       const src = sourceRef.current;
       if (!src) {
@@ -240,7 +238,6 @@ function LiveAnswerSection() {
 
       if (displayedLenRef.current < src.length) {
         const remaining = src.length - displayedLenRef.current;
-        // At least 8 chars/frame, catch up in ~3 frames
         const step = Math.max(8, Math.ceil(remaining / 3));
         displayedLenRef.current = Math.min(src.length, displayedLenRef.current + step);
         setDisplayed(src.slice(0, displayedLenRef.current));
@@ -354,14 +351,12 @@ export function InvestigationPhase({
   const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
   const hasInvestigations = investigations.length > 0;
 
-  // Servers for resolving server_id → name
   const { data: serversData } = useQuery({
     queryKey: ["servers", "all"],
     queryFn: () => getServers({ page_size: 200 }),
     staleTime: 5 * 60 * 1000,
   });
 
-  // Services for resolving service_id → name
   const { data: servicesData } = useQuery({
     queryKey: ["services", "all"],
     queryFn: () => getServices({ page_size: 200 }),
@@ -388,14 +383,11 @@ export function InvestigationPhase({
     return map;
   }, [servicesData]);
 
-  // Build paired timeline items
   const timelineItems = useMemo(() => buildTimelineItems(events), [events]);
 
-  // Store round state (legacy)
   const currentRound = useIncidentStreamStore((s) => s.currentRound);
   const roundSummaries = useIncidentStreamStore((s) => s.roundSummaries);
 
-  // Group timeline items by round
   const roundGrouped = useMemo(() => {
     const map = new Map<number, TimelineItem[]>();
     for (const item of timelineItems) {
@@ -425,22 +417,9 @@ export function InvestigationPhase({
     });
   }, []);
 
-  // Compute base timestamp and stats
-  const { baseTimestamp, phaseSubtitle } = useMemo(() => {
-    if (events.length === 0) return { baseTimestamp: "", phaseSubtitle: "" };
+  const baseTimestamp = events.length > 0 ? events[0].timestamp : "";
 
-    const base = events[0].timestamp;
-    const last = events[events.length - 1].timestamp;
-    const dur = formatDuration(base, last);
-    const toolCount = events.filter((e) => e.event_type === "tool_use").length;
 
-    const parts: string[] = [];
-    if (dur && dur !== "0s") parts.push(dur);
-    if (toolCount > 0) parts.push(`${toolCount} 次工具调用`);
-    return { baseTimestamp: base, phaseSubtitle: parts.join(" · ") };
-  }, [events]);
-
-  // Build merged timeline for investigation phase
   const mergedItems = useMemo((): MergedItem[] => {
     if (!hasInvestigations) return [];
 
@@ -471,7 +450,22 @@ export function InvestigationPhase({
     return merged;
   }, [timelineItems, investigations, hasInvestigations]);
 
-  // Helper: render a single timeline item
+  const renderInvestigationCard = (inv: InvestigationSubAgent) => (
+    <SubAgentCard
+      title={inv.hypothesisTitle}
+      events={inv.events}
+      status={inv.status}
+      isActive={inv.hypothesisId === activeInvestigationId}
+      isReporting={inv.isReporting}
+      streamingContent={inv.thinkingContent}
+      summary={inv.summary}
+      serverMap={serverMap}
+      serviceMap={serviceMap}
+      incidentStatus={incidentStatus}
+      forceExpanded={inv.hypothesisId === activeInvestigationId}
+    />
+  );
+
   const renderTimelineItem = (item: TimelineItem, i: number) => {
     switch (item.type) {
       case "thinking":
@@ -690,43 +684,18 @@ export function InvestigationPhase({
             increaseViewportBy={{ top: 400, bottom: 400 }}
             itemContent={(index, item) => (
               <div className={index < mergedItems.length - 1 ? "pb-3" : ""}>
-                {item.kind === "investigation" ? (
-                  <SubAgentCard
-                    title={item.inv.hypothesisTitle}
-                    events={item.inv.events}
-                    status={item.inv.status}
-                    isActive={item.inv.hypothesisId === activeInvestigationId}
-                    isReporting={item.inv.isReporting}
-                    streamingContent={item.inv.thinkingContent}
-                    summary={item.inv.summary}
-                    serverMap={serverMap}
-                    serviceMap={serviceMap}
-                    incidentStatus={incidentStatus}
-                    forceExpanded={item.inv.hypothesisId === activeInvestigationId}
-                  />
-                ) : (
-                  renderTimelineItem(item.item, item.idx)
-                )}
+                {item.kind === "investigation"
+                  ? renderInvestigationCard(item.inv)
+                  : renderTimelineItem(item.item, item.idx)}
               </div>
             )}
           />
         ) : (
-          mergedItems.map((m, i) =>
+          mergedItems.map((m) =>
             m.kind === "investigation" ? (
-              <SubAgentCard
-                key={`inv-${m.inv.hypothesisId}`}
-                title={m.inv.hypothesisTitle}
-                events={m.inv.events}
-                status={m.inv.status}
-                isActive={m.inv.hypothesisId === activeInvestigationId}
-                isReporting={m.inv.isReporting}
-                streamingContent={m.inv.thinkingContent}
-                summary={m.inv.summary}
-                serverMap={serverMap}
-                serviceMap={serviceMap}
-                incidentStatus={incidentStatus}
-                forceExpanded={m.inv.hypothesisId === activeInvestigationId}
-              />
+              <div key={`inv-${m.inv.hypothesisId}`}>
+                {renderInvestigationCard(m.inv)}
+              </div>
             ) : (
               <div key={`tl-${m.idx}`}>{renderTimelineItem(m.item, m.idx)}</div>
             ),
@@ -793,7 +762,6 @@ export function InvestigationPhase({
         })
       )}
 
-      {/* Transitional indicator */}
       {!hasInvestigations && isTransitioning && timelineItems.length === 0 && !hasThinking && (
         <div className="px-1 py-2">
           <TextDotsLoader text="Agent 思考中" size="sm" />
