@@ -179,6 +179,9 @@ class AgentRunner:
         self._thinking_done_sent = False
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
+        self._complete_streamed = False
+        self._reset_complete_stream_state()
+        self._thinking_content_log_buffer = ""
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {
             "configurable": {"thread_id": thread_id},
@@ -241,6 +244,9 @@ class AgentRunner:
         self._thinking_done_sent = False
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
+        self._complete_streamed = False
+        self._reset_complete_stream_state()
+        self._thinking_content_log_buffer = ""
         sid = incident_id[:8]
         log = get_logger(component="main", sid=sid)
         channel = EventPublisher.channel_for_incident(incident_id)
@@ -316,6 +322,9 @@ class AgentRunner:
         self._thinking_done_sent = False
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
+        self._complete_streamed = False
+        self._reset_complete_stream_state()
+        self._thinking_content_log_buffer = ""
         channel = EventPublisher.channel_for_incident(incident_id)
         config = {
             "configurable": {"thread_id": thread_id},

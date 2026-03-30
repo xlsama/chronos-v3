@@ -245,11 +245,28 @@ export function useIncidentStream(
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
                 setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
               }
+            } else if (event.event_type === "sub_agent_started") {
+              startInvestigation(
+                event.data.hypothesis_id as string,
+                event.data.hypothesis_title as string,
+                event.data.hypothesis_desc as string,
+              );
+            } else if (event.event_type === "sub_agent_completed") {
+              completeInvestigation(
+                event.data.hypothesis_id as string,
+                event.data.status as string,
+                (event.data.summary as string) || "",
+              );
+            } else if (event.event_type === "sub_agent_reporting") {
+              const { setInvestigationReporting } = useIncidentStreamStore.getState();
+              setInvestigationReporting(event.data.hypothesis_id as string);
             } else if (
               phase === "gather_context" &&
               (agent === "history" || agent === "kb")
             ) {
               addSubAgentEvent(agent, event);
+            } else if (event.data.sub_agent_id) {
+              addInvestigationEvent(event.data.sub_agent_id as string, event);
             } else {
               addEvent(event);
             }

@@ -292,6 +292,11 @@ export const sseEventSchema = z.discriminatedUnion("event_type", [
       .passthrough(),
     ...baseSSEFields,
   }),
+  z.object({
+    event_type: z.literal("sub_agent_reporting"),
+    data: z.object({ hypothesis_id: z.string() }).passthrough(),
+    ...baseSSEFields,
+  }),
 ]);
 
 export type SSEEventParsed = z.infer<typeof sseEventSchema>;

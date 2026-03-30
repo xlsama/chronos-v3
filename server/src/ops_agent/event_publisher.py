@@ -37,6 +37,7 @@ _EVENT_ROLE = {
     "round_ended": "system",
     "sub_agent_started": "system",
     "sub_agent_completed": "system",
+    "sub_agent_reporting": "system",
 }
 
 
@@ -217,6 +218,8 @@ class EventPublisher:
             return data.get("hypothesis_id", "")
         if event_type == "sub_agent_completed":
             return data.get("hypothesis_id", "")
+        if event_type == "sub_agent_reporting":
+            return data.get("hypothesis_id", "")
         return ""
 
     @staticmethod
@@ -341,6 +344,11 @@ class EventPublisher:
                 "hypothesis_id": data.get("hypothesis_id", ""),
                 "status": data.get("status", ""),
                 "summary": data.get("summary", ""),
+                "phase": data.get("phase", ""),
+            }
+        if event_type == "sub_agent_reporting":
+            return {
+                "hypothesis_id": data.get("hypothesis_id", ""),
                 "phase": data.get("phase", ""),
             }
         return None

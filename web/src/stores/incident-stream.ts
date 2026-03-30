@@ -437,6 +437,16 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
+      // sub_agent_reporting → mark investigation as reporting
+      if (event.event_type === "sub_agent_reporting") {
+        const hId = event.data.hypothesis_id as string;
+        const inv = loadedInvestigations.find((i) => i.hypothesisId === hId);
+        if (inv) {
+          inv.isReporting = true;
+        }
+        continue;
+      }
+
       // planner_started / planner_progress → skip (no UI state needed)
       if (event.event_type === "planner_started" || event.event_type === "planner_progress") {
         continue;

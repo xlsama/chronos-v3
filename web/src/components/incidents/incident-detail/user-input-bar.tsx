@@ -28,6 +28,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
     setApprovalDecided,
     triggerScrollToBottom,
     addEvent,
+    setWaitingForAgent,
   } = useIncidentStreamStore();
 
   const isTerminal = !!incidentStatus && TERMINAL_STATUSES.includes(incidentStatus);
@@ -89,6 +90,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
       });
       setAskHumanQuestion(null);
       if (resolutionConfirmRequired) setResolutionConfirmRequired(false);
+      setWaitingForAgent(true);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["incidents", incidentId] });

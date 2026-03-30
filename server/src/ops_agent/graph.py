@@ -31,7 +31,17 @@ async def confirm_resolution_node(state: CoordinatorState) -> dict:
         return {"is_complete": True}
 
     return {
-        "messages": [HumanMessage(content=f"用户表示问题未解决: {user_response}")],
+        "messages": [
+            HumanMessage(
+                content=(
+                    f"[用户反馈 - 问题未解决]\n"
+                    f"用户消息: {user_response}\n\n"
+                    f"用户明确表示上一轮排查结论未能解决问题。"
+                    f"你必须根据用户反馈重新分析，通过 launch_investigation() 启动新的子 Agent 进行排查，"
+                    f"不要直接调用 complete()。"
+                )
+            )
+        ],
         "is_complete": False,
     }
 
