@@ -515,17 +515,12 @@ class AgentRunner:
         self._ask_human_published_len = 0
 
     def _extract_ask_human_delta(self) -> str | None:
-        """Same as _extract_answer_delta but extracts the question field."""
-        for suffix in ['"}', '" }']:
-            try:
-                parsed = json.loads(self._ask_human_args_buffer + suffix)
-                content = parsed.get("question", "")
-                delta = content[self._ask_human_published_len :]
-                self._ask_human_published_len = len(content)
-                return delta if delta else None
-            except (json.JSONDecodeError, ValueError):
-                continue
-        return None
+        """Extract incremental question content from streaming ask_human() tool call."""
+        delta, new_len = self._extract_json_string_delta(
+            self._ask_human_args_buffer, "question", self._ask_human_published_len
+        )
+        self._ask_human_published_len = new_len
+        return delta
 
     def _reset_complete_stream_state(self) -> None:
         self._complete_stream_active = False
@@ -534,16 +529,89 @@ class AgentRunner:
 
     def _extract_complete_delta(self) -> str | None:
         """Extract incremental answer_md content from streaming complete() tool call."""
-        for suffix in ['"}', '" }']:
-            try:
-                parsed = json.loads(self._complete_args_buffer + suffix)
-                content = parsed.get("answer_md", "")
-                delta = content[self._complete_published_len :]
-                self._complete_published_len = len(content)
-                return delta if delta else None
-            except (json.JSONDecodeError, ValueError):
-                continue
-        return None
+        delta, new_len = self._extract_json_string_delta(
+            self._complete_args_buffer, "answer_md", self._complete_published_len
+        )
+        self._complete_published_len = new_len
+        return delta
+
+    @staticmethod
+    def _extract_json_string_delta(
+        buffer: str, key: str, published_len: int
+    ) -> tuple[str | None, int]:
+        """Extract incremental string value from a streaming JSON buffer.
+
+        Instead of json.loads (which fails when the buffer ends mid-escape like '\\'),
+        manually decode the JSON string, correctly handling all escape sequences and
+        stopping at incomplete ones. This eliminates per-token parsing failures.
+        """
+        # Find the start of the value (after opening quote)
+        start = -1
+        for prefix in [f'"{key}": "', f'"{key}":"']:
+            idx = buffer.find(prefix)
+            if idx >= 0:
+                start = idx + len(prefix)
+                break
+        if start < 0:
+            return None, published_len
+
+        decoded = AgentRunner._decode_partial_json_string(buffer, start)
+        if len(decoded) > published_len:
+            return decoded[published_len:], len(decoded)
+        return None, published_len
+
+    @staticmethod
+    def _decode_partial_json_string(s: str, start: int) -> str:
+        """Decode a JSON string value starting after the opening quote.
+
+        Handles all standard JSON escapes (\\n, \\t, \\", \\\\, \\uXXXX, etc.).
+        Stops at an incomplete escape sequence or closing quote, returning only
+        fully-decoded content.
+        """
+        result: list[str] = []
+        i = start
+        n = len(s)
+        while i < n:
+            ch = s[i]
+            if ch == '"':
+                break  # End of JSON string
+            if ch == "\\":
+                if i + 1 >= n:
+                    break  # Incomplete escape — wait for next token
+                esc = s[i + 1]
+                if esc == "n":
+                    result.append("\n")
+                elif esc == "t":
+                    result.append("\t")
+                elif esc == "r":
+                    result.append("\r")
+                elif esc == '"':
+                    result.append('"')
+                elif esc == "\\":
+                    result.append("\\")
+                elif esc == "/":
+                    result.append("/")
+                elif esc == "b":
+                    result.append("\b")
+                elif esc == "f":
+                    result.append("\f")
+                elif esc == "u":
+                    if i + 5 < n:
+                        try:
+                            result.append(chr(int(s[i + 2 : i + 6], 16)))
+                            i += 6
+                            continue
+                        except ValueError:
+                            break
+                    else:
+                        break  # Incomplete \\uXXXX
+                else:
+                    break  # Unknown escape
+                i += 2
+            else:
+                result.append(ch)
+                i += 1
+        return "".join(result)
 
     def _get_phase_agent(self, event: dict) -> tuple[str, str]:
         """Extract phase and agent from event metadata."""

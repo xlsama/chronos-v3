@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircleQuestion, CheckCircle, ListTodo, Check, Loader2, ChevronRight } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Virtuoso } from "react-virtuoso";
@@ -209,10 +209,59 @@ function LiveAskHumanSection() {
 
 function LiveAnswerSection() {
   const answerContent = useIncidentStreamStore((s) => s.answerContent);
-  if (!answerContent) return null;
+  const [displayed, setDisplayed] = useState("");
+  const displayedLenRef = useRef(0);
+  const sourceRef = useRef("");
+  const rafRef = useRef<number>();
+
+  sourceRef.current = answerContent;
+
+  const isActive = answerContent.length > 0;
+
+  useEffect(() => {
+    if (!isActive) {
+      // Content cleared — reset
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = undefined;
+      }
+      displayedLenRef.current = 0;
+      setDisplayed("");
+      return;
+    }
+
+    // Start RAF loop to smoothly drip content
+    const tick = () => {
+      const src = sourceRef.current;
+      if (!src) {
+        rafRef.current = undefined;
+        return;
+      }
+
+      if (displayedLenRef.current < src.length) {
+        const remaining = src.length - displayedLenRef.current;
+        // At least 8 chars/frame, catch up in ~3 frames
+        const step = Math.max(8, Math.ceil(remaining / 3));
+        displayedLenRef.current = Math.min(src.length, displayedLenRef.current + step);
+        setDisplayed(src.slice(0, displayedLenRef.current));
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = undefined;
+      }
+    };
+  }, [isActive]);
+
+  if (!displayed) return null;
   return (
     <div className="animate-in fade-in duration-150">
-      <AnswerCard content={answerContent} isStreaming />
+      <AnswerCard content={displayed} isStreaming />
     </div>
   );
 }
