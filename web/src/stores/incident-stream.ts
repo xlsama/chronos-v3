@@ -20,6 +20,7 @@ export interface InvestigationSubAgent {
   hypothesisTitle: string;
   hypothesisDesc: string;
   status: "running" | "completed" | "confirmed" | "eliminated" | "failed" | "cancelled";
+  isReporting?: boolean;
   summary?: string;
   events: SSEEvent[];
   thinkingContent: string;
@@ -57,6 +58,7 @@ interface IncidentStreamState {
   endRound: (round: number, summary: string) => void;
   startInvestigation: (hypothesisId: string, hypothesisTitle: string, hypothesisDesc: string) => void;
   completeInvestigation: (hypothesisId: string, status: string, summary: string) => void;
+  setInvestigationReporting: (hypothesisId: string) => void;
   cancelAllRunningInvestigations: () => void;
   addInvestigationEvent: (hypothesisId: string, event: SSEEvent) => void;
   appendInvestigationThinking: (hypothesisId: string, content: string) => void;
@@ -247,11 +249,18 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     set((state) => ({
       investigations: state.investigations.map((inv) =>
         inv.hypothesisId === hypothesisId
-          ? { ...inv, status: status as InvestigationSubAgent["status"], summary }
+          ? { ...inv, status: status as InvestigationSubAgent["status"], isReporting: false, summary }
           : inv,
       ),
       activeInvestigationId:
         state.activeInvestigationId === hypothesisId ? null : state.activeInvestigationId,
+    })),
+
+  setInvestigationReporting: (hypothesisId) =>
+    set((state) => ({
+      investigations: state.investigations.map((inv) =>
+        inv.hypothesisId === hypothesisId ? { ...inv, isReporting: true } : inv,
+      ),
     })),
 
   cancelAllRunningInvestigations: () =>

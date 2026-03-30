@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     max_hypotheses: int = 3  # 最多验证的假设数量
     command_timeout: int = 10  # 命令执行超时（秒），适用于 bash/SSH/服务查询
 
+    # Cron
+    skill_evolution_interval: int = 8  # skill 自进化间隔（小时）
+
     # Data directories
     data_dir: str = "data"
     seeds_dir: str = "seeds"

@@ -10,7 +10,6 @@ from src.lib.logger import get_logger
 from src.services.post_incident.base import format_db_messages, get_mini_llm
 from src.services.post_incident.agents_md_task import auto_update_agents_md
 from src.services.post_incident.history_task import auto_save_history
-from src.services.post_incident.skill_evolution_task import auto_evolve_skills
 
 SUMMARIZE_SYSTEM_PROMPT = """你是一个运维报告生成器。根据完整的对话历史，生成结构化的排查报告。
 
@@ -205,7 +204,7 @@ async def run_post_incident_tasks(
         step4_elapsed = time.monotonic() - t_step
         log.info("Step 4: notification sent", elapsed=f"{step4_elapsed:.2f}s")
 
-        # ⑤ 三个子任务并行: history / agents_md / skill_evolution
+        # ⑤ 两个子任务并行: history / agents_md
         t_step = time.monotonic()
         log.info("Step 5: starting parallel sub-tasks")
         await asyncio.gather(
@@ -218,15 +217,6 @@ async def run_post_incident_tasks(
                     kb_project_ids=kb_project_ids,
                 ),
                 "agents_md",
-                sid,
-            ),
-            _safe_run(
-                auto_evolve_skills(
-                    incident_id=incident_id,
-                    summary_md=summary_md,
-                    conversation_text=conversation_text,
-                ),
-                "skill_evolution",
                 sid,
             ),
         )

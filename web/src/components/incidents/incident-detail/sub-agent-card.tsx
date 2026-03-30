@@ -294,6 +294,7 @@ interface SubAgentCardProps {
   title?: string;
   summary?: string;
   isActive?: boolean;
+  isReporting?: boolean;
   serverMap?: Map<string, string>;
   serviceMap?: Map<string, string>;
   incidentStatus?: string;
@@ -310,6 +311,7 @@ export function SubAgentCard({
   title,
   summary,
   isActive,
+  isReporting,
   serverMap,
   serviceMap,
   incidentStatus,
@@ -661,7 +663,7 @@ export function SubAgentCard({
           {/* Waiting indicator */}
           {isActive && !streamingContent && events.length > 0 && (
             <div className="px-1 py-1">
-              <TextDotsLoader text="Agent 思考中" size="sm" />
+              <TextDotsLoader text={isReporting ? "正在总结排查结论" : "Agent 思考中"} size="sm" />
             </div>
           )}
 

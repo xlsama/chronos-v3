@@ -801,6 +801,7 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
                           events={item.inv.events}
                           status={item.inv.status}
                           isActive={item.inv.hypothesisId === activeInvestigationId}
+                          isReporting={item.inv.isReporting}
                           streamingContent={item.inv.thinkingContent}
                           summary={item.inv.summary}
                           serverMap={serverMap}
@@ -824,6 +825,7 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
                       events={m.inv.events}
                       status={m.inv.status}
                       isActive={m.inv.hypothesisId === activeInvestigationId}
+                      isReporting={m.inv.isReporting}
                       streamingContent={m.inv.thinkingContent}
                       summary={m.inv.summary}
                       serverMap={serverMap}

@@ -88,7 +88,17 @@ async def lifespan(app: FastAPI):
 
     log.info("Agent runner initialized")
 
+    # Start cron scheduler
+    from src.services.cron import start_scheduler
+
+    start_scheduler()
+
     yield
+
+    # Stop cron scheduler
+    from src.services.cron import stop_scheduler
+
+    stop_scheduler()
 
     await conn.close()
     log.info("Shutting down Chronos Ops Agent")

@@ -491,6 +491,14 @@ async def _bridge_event(
 
     if kind == "on_chat_model_stream":
         chunk = event["data"].get("chunk")
+        if chunk and hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
+            for tcc in chunk.tool_call_chunks:
+                if tcc.get("name") == "report":
+                    await publisher.publish(
+                        channel,
+                        "sub_agent_reporting",
+                        {"hypothesis_id": hypothesis_id, "phase": "investigation"},
+                    )
         if chunk and chunk.content and not ask_human_active:
             thinking_buffer += chunk.content
             await publisher.publish(

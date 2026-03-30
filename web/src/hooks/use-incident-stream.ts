@@ -486,6 +486,9 @@ export function useIncidentStream(
               event.data.hypothesis_title as string,
               event.data.hypothesis_desc as string,
             );
+          } else if (event.event_type === "sub_agent_reporting") {
+            const { setInvestigationReporting } = useIncidentStreamStore.getState();
+            setInvestigationReporting(event.data.hypothesis_id as string);
           } else if (event.event_type === "sub_agent_completed") {
             completeInvestigation(
               event.data.hypothesis_id as string,
