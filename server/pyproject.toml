@@ -52,10 +52,29 @@ format = "ruff format src/"
 migrate = "alembic upgrade head"
 "migrate:new" = "alembic revision --autogenerate"
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "agent: agent integration tests (require LLM + docker services)",
+]
+
+[tool.poe.tasks.test]
+cmd = "pytest tests/ -x -v --ignore=tests/agent"
+[tool.poe.tasks."test:api"]
+cmd = "pytest tests/api/ -x -v"
+[tool.poe.tasks."test:unit"]
+cmd = "pytest tests/unit/ -x -v"
+[tool.poe.tasks."test:agent"]
+cmd = "pytest tests/agent/ -x -v -m agent"
+
 [dependency-groups]
 dev = [
     "ruff>=0.9.0",
     "pytest>=9.0.2",
     "pytest-playwright>=0.7.2",
     "pytest-asyncio>=1.3.0",
+    "pytest-timeout>=2.3.0",
+    "asgi-lifespan>=2.0.0",
+    "pytest-cov>=6.0.0",
 ]
