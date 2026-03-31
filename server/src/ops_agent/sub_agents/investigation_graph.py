@@ -3,7 +3,7 @@
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from src.ops_agent.nodes.investigation_agent import (
+from src.ops_agent.sub_agents.investigation_agent import (
     build_investigation_tools,
     investigation_agent_node,
     route_investigation_decision,
@@ -25,7 +25,7 @@ def build_investigation_graph():
     graph = StateGraph(InvestigationState)
 
     # 复用主图的 human_approval 和 ask_human 节点逻辑，但适配 InvestigationState
-    from src.ops_agent.nodes.investigation_nodes import (
+    from src.ops_agent.sub_agents.investigation_nodes import (
         investigation_ask_human_node,
         investigation_human_approval_node,
         investigation_retry_tool_call_node,

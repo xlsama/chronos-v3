@@ -11,10 +11,10 @@ from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.prompts.planner import PLANNER_SYSTEM_PROMPT, PLANNER_USER_PROMPT
-from src.ops_agent.state import CoordinatorState
+from src.ops_agent.state import MainState
 
 
-async def planner_node(state: CoordinatorState) -> dict:
+async def planner_node(state: MainState) -> dict:
     """生成初始调查计划（Markdown 格式）。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="planner", sid=sid)

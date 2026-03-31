@@ -48,7 +48,7 @@ docker compose up -d   # PostgreSQL 17 (pgvector) + Redis 7
 
 ## Architecture Notes
 
-- LangGraph 图在 `server/src/ops_agent/graph.py`，中断点：human_approval、ask_human、confirm_resolution
+- LangGraph 图在 `server/src/ops_agent/graph.py`，中断点：sub_agent_approval、sub_agent_ask_human、confirm_resolution；主 Agent 的 ask_human 通过节点内 `interrupt()` 实现
 - 服务连接器在 `server/src/ops_agent/tools/service_connectors/`，支持 PG、MySQL、MongoDB、ES、K8s、Jenkins 等
 - 数据库迁移用 Alembic autogenerate，修改 model 后跑 `poe migrate:new`
 - 环境变量配置见 `server/.env.example`

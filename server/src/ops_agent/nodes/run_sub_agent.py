@@ -10,8 +10,8 @@ from src.env import get_settings
 from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
-from src.ops_agent.investigation_graph import compile_investigation_graph
-from src.ops_agent.state import CoordinatorState, HypothesisResult
+from src.ops_agent.sub_agents.investigation_graph import compile_investigation_graph
+from src.ops_agent.state import MainState, HypothesisResult
 from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
 from src.ops_agent.tools.tool_output import normalize_tool_output
 from src.services.approval_service import ApprovalService
@@ -30,7 +30,7 @@ def _format_prior_findings(results: list[HypothesisResult]) -> str:
     return "\n".join(lines)
 
 
-def _extract_launch_info(state: CoordinatorState) -> tuple[str, str, str, str]:
+def _extract_launch_info(state: MainState) -> tuple[str, str, str, str]:
     """从最近的 launch_investigation tool_call 中提取假设信息和 tool_call_id。"""
     for msg in reversed(state["messages"]):
         if hasattr(msg, "tool_calls") and msg.tool_calls:
@@ -72,7 +72,7 @@ async def _create_and_publish_approval(
     if tool_name in ("ssh_bash", "bash"):
         cmd_type = ShellSafety.classify(command, local=(tool_name == "bash"))
     elif tool_name == "service_exec":
-        from src.ops_agent.nodes.investigation_agent import _get_service_type
+        from src.ops_agent.sub_agents.investigation_agent import _get_service_type
 
         service_type = await _get_service_type(args.get("service_id", ""))
         cmd_type = ServiceSafety.classify(service_type, command)
@@ -128,11 +128,11 @@ async def _create_and_publish_approval(
     return approval_id
 
 
-async def run_sub_agent_node(state: CoordinatorState) -> dict:
+async def run_sub_agent_node(state: MainState) -> dict:
     """创建或恢复子 Agent 来验证当前假设。
 
-    由 coordinator_agent 调用 launch_investigation 后触发。
-    完成后返回 ToolMessage 给 coordinator_agent。
+    由 main_agent 调用 launch_investigation 后触发。
+    完成后返回 ToolMessage 给 main_agent。
     """
     sid = state["incident_id"][:8]
     log = get_logger(component="run_sub_agent", sid=sid)
@@ -303,7 +303,7 @@ async def run_sub_agent_node(state: CoordinatorState) -> dict:
     except Exception as e:
         log.warning("Failed to publish sub_agent_completed", error=str(e))
 
-    # 构造 ToolMessage 返回给 coordinator_agent
+    # 构造 ToolMessage 返回给 main_agent
     status_zh = {"confirmed": "已确认", "eliminated": "已排除", "inconclusive": "证据不足"}
     tool_message_content = (
         f"假设 {finding['hypothesis_id']} 调查完成。\n"

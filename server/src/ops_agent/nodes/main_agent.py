@@ -1,89 +1,79 @@
-import re
+"""主 Agent LLM 节点 —— 调度子 Agent、评估结果、更新计划、向用户提问、输出结论。"""
+
 import time
 import uuid
 from typing import Annotated
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import InjectedState
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from src.db.connection import get_session_factory
 from src.db.models import Incident
-from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
-from src.ops_agent.state import CoordinatorState
 from src.env import get_settings
-from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash, list_servers as _list_servers
-from src.ops_agent.tools.bash_tool import local_bash as _local_bash
-from src.ops_agent.tools.service_exec_tool import (
-    service_exec as _service_exec,
-    list_services as _list_services,
-)
-from src.ops_agent.tools.tool_classifier import ShellSafety, ServiceSafety, CommandType
-from src.ops_agent.event_publisher import EventPublisher
-from src.lib.redis import get_redis
-from src.services.skill_service import SkillService
 from src.lib.logger import get_logger
+from src.lib.redis import get_redis
+from src.ops_agent.event_publisher import EventPublisher
+from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
+from src.ops_agent.shared_tools import build_skills_context, build_shared_tools
+from src.ops_agent.state import MainState
+from src.services.skill_service import SkillService
 
 
-def build_tools():
+def build_main_tools():
+    """构建主 Agent 的工具集。"""
     from langchain_core.tools import tool
 
     @tool
-    async def ssh_bash(server_id: str, command: str, explanation: str = "") -> dict:
-        """在目标服务器执行 Shell 命令（通过 SSH）。
-        命令在 server_id 对应的远程主机上运行，不是在 agent 自身容器中运行。
-        `localhost`、`127.0.0.1`、文件路径、监听端口都必须按目标服务器视角解释。
-        系统自动判断命令权限：只读命令直接执行，写操作需人工审批。
-        网络请求用 curl。查看日志/配置文件用 cat/tail/grep，但禁止通过 cat 源码或构建产物来获取数据库表结构、连接串等运行时信息——应使用 psql/mysql/redis-cli 等 CLI 直接查询。
-        - server_id: 必须是 list_servers() 返回的有效 UUID
-        - command: 要执行的 Shell 命令
-        - explanation: 可选，写操作时提供操作说明（展示在审批卡片上）
+    def launch_investigation(
+        hypothesis_id: str, hypothesis_title: str, hypothesis_desc: str
+    ) -> str:
+        """启动一个子 Agent 来验证指定假设。
+        子 Agent 会独立执行排查（SSH 命令、数据库查询等），完成后返回调查结果。
+        - hypothesis_id: 假设编号，如 "H1"
+        - hypothesis_title: 假设短标题（15字以内，如"数据库连接池耗尽"、"查询条件过滤异常"）
+        - hypothesis_desc: 假设详细描述（含具体排查方向和步骤）
         """
-        return await _ssh_bash(server_id=server_id, command=command)
+        return f"子 Agent 已启动，正在验证假设 {hypothesis_id}: {hypothesis_title}"
 
     @tool
-    async def bash(command: str, explanation: str = "") -> dict:
-        """在本地执行命令。可以执行 docker/kubectl/systemctl 等服务管理命令（写操作需审批）。
-        用于不需要 SSH 到远程服务器的场景：运行本地脚本、curl 调用 API、docker/kubectl 管理容器和集群等。
-        sudo/su 提权不影响审批判定，系统会自动识别实际操作内容。
-        - command: 要执行的命令
-        - explanation: 可选，写操作时提供操作说明
+    async def update_plan(
+        plan_md: str,
+        state: Annotated[dict, InjectedState],
+    ) -> str:
+        """更新调查计划。收到子 Agent 结果后，更新假设状态和证据。
+        输入完整的更新后调查计划（Markdown 格式），会替换当前计划。
+        将假设状态从 [待验证]/[排查中] 更新为 [已确认] 或 [已排除]。
+        - plan_md: 更新后的完整调查计划 Markdown
         """
-        return await _local_bash(command=command)
+        incident_id = state["incident_id"]
+        log = get_logger(component="update_plan")
+        try:
+            async with get_session_factory()() as session:
+                incident = await session.get(Incident, uuid.UUID(incident_id))
+                if incident:
+                    incident.plan_md = plan_md
+                    await session.commit()
+        except Exception as e:
+            log.warning("Failed to save plan to DB", error=str(e))
+        try:
+            channel = EventPublisher.channel_for_incident(incident_id)
+            publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
+            await publisher.publish(
+                channel, "plan_updated", {"plan_md": plan_md, "phase": "investigation"}
+            )
+        except Exception as e:
+            log.warning("Failed to publish plan_updated event", error=str(e))
+        return "调查计划已更新"
 
     @tool
-    async def service_exec(service_id: str, command: str, explanation: str = "") -> str:
-        """直连服务执行命令。
-        - PostgreSQL: 纯 SQL 语句（SELECT/INSERT/UPDATE 等，不支持 psql 元命令，需要表信息用 information_schema）
-        - Redis: Redis 命令（GET/SET/INFO 等）
-        - Prometheus: PromQL 表达式
-        - service_id: 必须是 list_services() 返回的有效 UUID
-        - command: 要执行的命令/查询
-        - explanation: 可选，写操作时提供操作说明
+    def complete(answer_md: str) -> str:
+        """排查完成，输出最终结论。answer_md 是完整的排查报告（Markdown），包含根因、证据链、建议。
+        只在所有排查完成、问题已解决或已充分诊断后调用。
+        - answer_md: 排查结论的 Markdown 内容
         """
-        return await _service_exec(service_id=service_id, command=command)
-
-    @tool
-    async def list_servers() -> list[dict] | str:
-        """列出所有可用服务器。返回 id, name, host, status。
-        用于发现目标服务器（SSH 远程执行）。
-        如果返回空数组 `[]`，或明确提示“当前没有注册任何服务器”，表示当前没有已登记的 SSH 服务器资产，不是工具异常。
-        """
-        result = await _list_servers()
-        if not result:
-            return "当前没有注册任何服务器（servers 表为空）。无法使用 ssh_bash 工具。如需 SSH 远程排查，请通过 ask_human 请用户在「连接」页面添加服务器。"
-        return result
-
-    @tool
-    async def list_services() -> list[dict] | str:
-        """列出所有可用服务。返回 id, name, service_type, host, port, status。
-        用于发现可直连的数据库/缓存/监控服务。
-        """
-        result = await _list_services()
-        if not result:
-            return "当前没有注册任何服务（services 表为空）。无法使用 service_exec 工具。如需数据库/缓存排查，请通过 ask_human 请用户在「连接」页面添加服务。"
-        return result
+        return answer_md
 
     @tool
     def ask_human(question: str) -> str:
@@ -93,156 +83,16 @@ def build_tools():
         """
         return question
 
-    @tool
-    def read_skill(path: str) -> str:
-        """读取技能文件。查看 <available_skills> 后，用此工具读取匹配技能。
-        - "?" → 列出所有可用技能
-        - "mysql-oom" → SKILL.md 内容 + 文件目录
-        - "mysql-oom/scripts/check.sh" → 脚本内容
-        """
-        skill_log = get_logger(component="skill")
-        service = SkillService()
-        if path.strip() == "?":
-            available = service.get_available_skills()
-            if not available:
-                skill_log.info("read_skill: no skills available", path=path)
-                return "当前没有可用技能。"
-            skill_log.info("read_skill: listing skills", path=path, count=len(available))
-            lines = ["所有可用技能:"]
-            for s in available:
-                lines.append(f"- {s['slug']}: {s['description']}")
-            return "\n".join(lines)
-        parts = path.split("/", 1)
-        slug = parts[0]
-        rel_path = parts[1] if len(parts) > 1 else None
-        try:
-            content = service.read_file(slug, rel_path)
-            skill_log.info("read_skill", slug=slug, rel_path=rel_path, content_len=len(content))
-            skill_log.debug("read_skill content", content=content)
-            return content
-        except FileNotFoundError:
-            skill_log.warning("read_skill: not found", path=path)
-            return f"未找到: {path}"
-
-    @tool
-    async def update_plan(
-        plan_md: str,
-        state: Annotated[dict, InjectedState],
-    ) -> str:
-        """更新调查计划。当你获得新证据、确认或排除某个假设时，调用此工具更新计划。
-        输入完整的更新后调查计划（Markdown 格式），会替换当前计划。
-        更新假设状态时，修改对应标题中的状态标记：[待验证] → [排查中] → [已确认] 或 [已排除]。
-        同时更新正向/反向证据列表和下一步行动。
-        - plan_md: 更新后的完整调查计划 Markdown
-        """
-        incident_id = state["incident_id"]
-        plan_log = get_logger(component="update_plan")
-        # 读取旧 plan，对比检测假设状态变更（confirmed 或 eliminated）
-        old_plan = await _read_plan_from_db(incident_id)
-        old_statuses = _extract_hypothesis_statuses(old_plan)
-        new_statuses = _extract_hypothesis_statuses(plan_md)
-        terminal = ("已确认", "已排除")
-        changed_hypotheses = [
-            h
-            for h in new_statuses
-            if new_statuses[h] in terminal and old_statuses.get(h) not in terminal
-        ]
-        if changed_hypotheses:
-            plan_log.info("Hypothesis status changed", changed=changed_hypotheses)
-        # 写入 DB
-        try:
-            async with get_session_factory()() as session:
-                incident = await session.get(Incident, uuid.UUID(incident_id))
-                if incident:
-                    incident.plan_md = plan_md
-                    await session.commit()
-        except Exception as e:
-            plan_log.warning("Failed to save plan to DB", error=str(e))
-        # 发布 SSE
-        try:
-            channel = EventPublisher.channel_for_incident(incident_id)
-            publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
-            await publisher.publish(
-                channel, "plan_updated", {"plan_md": plan_md, "phase": "investigation"}
-            )
-        except Exception as e:
-            plan_log.warning("Failed to publish plan_updated event", error=str(e))
-        if changed_hypotheses:
-            return "调查计划已更新，假设状态已变更"
-        return "调查计划已更新"
-
-    @tool
-    def complete(answer_md: str) -> str:
-        """排查完成，输出最终结论。answer_md 是完整的排查报告（Markdown），包含根因、证据链、建议。
-        只在你已经验证问题已解决或已充分诊断后调用。
-        - answer_md: 排查结论的 Markdown 内容，直面问题，给出根因和建议
-        """
-        return answer_md
-
     return [
-        ssh_bash,
-        bash,
-        service_exec,
-        list_servers,
-        list_services,
-        read_skill,
-        ask_human,
+        launch_investigation,
         update_plan,
+        *build_shared_tools(),
         complete,
+        ask_human,
     ]
 
 
-_COMPACT_THRESHOLD = 10
-
-
-def _build_skills_context(
-    skill_service: SkillService,
-    kb_summary: str | None = None,
-    history_summary: str | None = None,
-    incident_description: str | None = None,
-) -> str:
-    """构建 skills 上下文，包含结构化使用规则和全量 XML 目录。
-
-    两层格式策略:
-    - Full format (≤10): <skill><name>...</name><description>...</description></skill>
-    - Compact format (>10): <skill name="slug">description</skill> 单行
-    """
-    skill_log = get_logger(component="skill")
-    available = skill_service.get_available_skills()
-
-    if not available:
-        skill_log.info("No available skills")
-        return ""
-
-    slugs = [s["slug"] for s in available]
-    fmt = "compact" if len(available) > _COMPACT_THRESHOLD else "full"
-    skill_log.info("_build_skills_context", count=len(available), format=fmt, slugs=slugs)
-
-    xml_lines = [
-        "\n<available_skills>",
-        "使用规则:",
-        '1. 通用技能优先: 若存在 `incident-triage`，默认先 `read_skill("incident-triage")` 获取分诊骨架，再切到专项技能。',
-        '2. 渐进加载: 先读 SKILL.md 主体获取流程概要；scripts/references 等子文件只在执行到相关步骤时再按需加载（read_skill("slug/scripts/xxx")）。',
-        "3. 上下文控制: 技能内容较长时，在推理中总结关键步骤和命令，不要大段复制粘贴原文。",
-        "4. 多技能协调: 多个技能同时匹配时，选最小必要集合，声明使用顺序和原因。",
-        "5. 缺失回退: 若匹配的技能无法读取或不适用当前场景，简要说明原因，用通用排查方法继续。",
-    ]
-
-    if len(available) > _COMPACT_THRESHOLD:
-        for s in available:
-            xml_lines.append(f'  <skill name="{s["slug"]}">{s["description"]}</skill>')
-    else:
-        for s in available:
-            xml_lines.append(
-                f"  <skill><name>{s['slug']}</name>"
-                f"<description>{s['description']}</description></skill>"
-            )
-
-    xml_lines.append("</available_skills>")
-    return "\n".join(xml_lines)
-
-
-def get_llm():
+def _get_llm():
     s = get_settings()
     return ChatOpenAI(
         model=s.main_model,
@@ -267,159 +117,81 @@ def _log_retry(retry_state):
     before_sleep=_log_retry,
 )
 async def _invoke_llm_with_retry(llm, messages):
-    """Invoke LLM with retry."""
     return await llm.ainvoke(messages)
 
 
 def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> AIMessage:
-    """Strip invalid tool_calls when the model hallucinates an unknown tool.
-
-    Keeps original content so the retry mechanism can handle it uniformly.
-    """
+    """Strip invalid tool_calls."""
     tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
-    unknown_tools = sorted(
-        {
-            str(tc.get("name", "")).strip()
-            for tc in tool_calls
-            if str(tc.get("name", "")).strip() not in valid_tool_names
-        }
-    )
-    if not unknown_tools:
+    unknown = [tc for tc in tool_calls if str(tc.get("name", "")).strip() not in valid_tool_names]
+    if not unknown:
         return response
-
     get_logger(component="main").warning(
-        "LLM returned unknown tool(s), stripping invalid calls",
-        tools=unknown_tools,
-        stripped_count=len(unknown_tools),
-        kept_count=len(tool_calls) - len(unknown_tools),
+        "Stripping unknown tool calls", tools=[tc.get("name") for tc in unknown]
     )
     return AIMessage(content=response.content or "")
 
 
-def _build_runtime_hints(state: CoordinatorState) -> str:
-    # Procedural guidance belongs in reusable skills instead of runtime hints.
-    return ""
-
-
-def _extract_hypothesis_statuses(plan_md: str) -> dict[str, str]:
-    """从 plan markdown 中提取所有假设的状态。返回 {"H1": "待验证", "H2": "排查中", ...}"""
-    if not plan_md:
-        return {}
-    matches = re.findall(
-        r"### (H\d+) \[(待验证|排查中|已确认|已排除|pending|investigating|confirmed|eliminated)\]",
-        plan_md,
-    )
-    en_to_zh = {
-        "pending": "待验证",
-        "investigating": "排查中",
-        "confirmed": "已确认",
-        "eliminated": "已排除",
-    }
-    return {h: en_to_zh.get(s, s) for h, s in matches}
-
-
-async def _read_plan_from_db(incident_id: str) -> str:
-    """从数据库读取调查计划 Markdown。"""
+async def _build_plan_context(incident_id: str) -> str:
+    """从 DB 读取调查计划。"""
     try:
         async with get_session_factory()() as session:
             incident = await session.get(Incident, uuid.UUID(incident_id))
             if incident and incident.plan_md:
-                return incident.plan_md
+                return f"## 当前调查计划\n\n{incident.plan_md}"
     except Exception:
         pass
     return ""
 
 
-async def _build_plan_context(incident_id: str) -> str:
-    """从数据库读取调查计划并包装为 system prompt 上下文。"""
-    plan_md = await _read_plan_from_db(incident_id)
-    if plan_md:
-        return f"## 当前调查计划\n\n{plan_md}"
-    return ""
-
-
-async def main_agent_node(state: CoordinatorState) -> dict:
+async def main_agent_node(state: MainState) -> dict:
+    """主 Agent LLM 节点。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="main", sid=sid)
-    tools = build_tools()
-    llm = get_llm().bind_tools(tools)
 
+    tools = build_main_tools()
+    llm = _get_llm().bind_tools(tools)
+
+    # 构建上下文
     history_summary = state.get("incident_history_summary")
+    history_context = ""
     if history_summary:
         history_context = (
             "## 历史事件参考\n"
-            "以下是与当前事件**描述相似**的历史事件。注意：描述相似不代表根因相同，"
-            "你必须对当前事件独立排查验证，不要直接套用历史事件的诊断结论或修复方案。\n\n"
+            "以下是与当前事件描述相似的历史事件（仅供参考，不代表当前根因相同）：\n\n"
             f"{history_summary}"
         )
-    else:
-        history_context = ""
 
     kb_summary = state.get("kb_summary")
-    if kb_summary:
-        clean_summary = kb_summary.replace("\n\n[需要补充]", "").replace("[需要补充]", "")
-        kb_context = f"## 项目知识库上下文\n{clean_summary}"
-        if "[需要补充]" in kb_summary:
-            kb_context += (
-                "\n\n注意: 知识库信息不完整，排查时注意验证，必要时用 ask_human 获取具体信息"
-            )
-    else:
-        kb_context = ""
+    kb_context = f"## 项目知识库上下文\n{kb_summary}" if kb_summary else ""
+
+    plan_context = await _build_plan_context(state["incident_id"])
 
     skill_service = SkillService()
-    skills_context = _build_skills_context(
-        skill_service,
-        kb_summary,
-        history_summary,
-        state["description"],
-    )
-    plan_context = await _build_plan_context(state["incident_id"])
+    skills_context = build_skills_context(skill_service)
+
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         description=state["description"],
         severity=state["severity"],
         incident_history_context=history_context,
         kb_context=kb_context,
+        plan_context=plan_context,
         skills_context=skills_context,
-        runtime_hints_context=plan_context,
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
 
-    # 轮次超限：强制 Agent 输出结论
-    s = get_settings()
-    current_round = state.get("investigation_round", 1)
-    if current_round > s.max_investigation_rounds:
-        log.warning(
-            "Investigation round exceeded limit, forcing complete",
-            round=current_round,
-            max=s.max_investigation_rounds,
-        )
-        messages.append(
-            HumanMessage(
-                content=(
-                    f"[系统提示] 排查已达到最大轮次（{s.max_investigation_rounds}轮）。"
-                    "请根据目前已有的证据，立即调用 complete(answer_md=...) 输出排查结论。"
-                )
-            )
-        )
-
     tool_names = [t.name for t in tools]
-    retry_count = state.get("tool_call_retry_count", 0)
     log.info(
         "main_agent_node invoked",
-        is_retry=retry_count > 0,
-        retry_count=retry_count,
-        history="yes" if history_summary else "no",
-        kb="yes" if kb_summary else "no",
         messages=len(messages),
         tools=tool_names,
     )
-    log.debug("System prompt", chars=len(system_prompt), system_prompt=system_prompt)
 
     t0 = time.monotonic()
     response = await _invoke_llm_with_retry(llm, messages)
-    llm_elapsed = time.monotonic() - t0
-    log.info("LLM responded", elapsed=f"{llm_elapsed:.2f}s")
+    elapsed = time.monotonic() - t0
+    log.info("LLM responded", elapsed=f"{elapsed:.2f}s")
 
     content_text = response.content if hasattr(response, "content") else ""
     tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
@@ -430,97 +202,56 @@ async def main_agent_node(state: CoordinatorState) -> dict:
         log.info("LLM tool_call", name=tc["name"], args=tc.get("args", {}))
 
     safe_response = _sanitize_llm_response(response, set(tool_names))
-    if safe_response is not response:
-        log.info(
-            "Sanitized LLM response: stripped invalid tool_calls",
-            original_tool_calls=len(tool_calls),
-            content_len=len(safe_response.content or ""),
-        )
 
-    return {
-        "messages": [safe_response],
-    }
+    # 如果 LLM 调用了 launch_investigation，保存 tool_call_id 用于 ToolMessage 回复
+    result: dict = {"messages": [safe_response]}
+    if hasattr(safe_response, "tool_calls") and safe_response.tool_calls:
+        for tc in safe_response.tool_calls:
+            if tc["name"] == "launch_investigation":
+                result["pending_launch_tool_call_id"] = tc["id"]
+                break
 
-
-async def _get_service_type(service_id: str) -> str:
-    """Lookup service_type for a given service_id. Returns empty string on error."""
-    if not service_id:
-        return ""
-    try:
-        from src.db.connection import get_session_factory
-        from src.db.models import Service
-        import uuid as _uuid
-
-        factory = get_session_factory()
-        async with factory() as session:
-            svc = await session.get(Service, _uuid.UUID(service_id))
-            return svc.service_type if svc else ""
-    except Exception:
-        return ""
+    return result
 
 
-async def route_decision(state: CoordinatorState) -> str:
+async def route_main_decision(state: MainState) -> str:
+    """路由主 Agent 的下一步。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="main", sid=sid)
     last_message = state["messages"][-1]
-    valid_tool_names = {tool.name for tool in build_tools()}
+    tools = build_main_tools()
+    valid_tool_names = {t.name for t in tools}
 
     if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-        content_preview = ""
-        if hasattr(last_message, "content") and last_message.content:
-            content_preview = last_message.content[:200]
-
-        if state.get("ask_human_count", 0) >= 5:
-            log.warning("ask_human count exceeded limit, forcing complete")
-            return "complete"
-
         max_retries = get_settings().tool_call_max_retries
         retry_count = state.get("tool_call_retry_count", 0)
         if retry_count >= max_retries:
-            log.info(
-                "route_decision: no tool_calls after retries -> ask_human (fallback)",
-                retries=retry_count,
-                content_preview=content_preview,
-            )
+            if state.get("ask_human_count", 0) >= 5:
+                log.info("no tool_calls after retries, ask_human exhausted -> force complete")
+                return "complete"
+            log.info("no tool_calls after retries -> ask_human (fallback)")
             return "ask_human"
-
-        log.info(
-            "route_decision: no tool_calls -> retry_tool_call",
-            attempt=f"{retry_count + 1}/{max_retries}",
-            content_preview=content_preview,
-        )
+        log.info("no tool_calls -> retry_tool_call")
         return "retry_tool_call"
 
-    for tool_call in last_message.tool_calls:
-        name = tool_call["name"]
+    for tc in last_message.tool_calls:
+        name = tc["name"]
         if name not in valid_tool_names:
-            log.warning("route_decision: unknown tool -> ask_human", tool=name)
-            return "ask_human"
+            log.warning("unknown tool -> retry", tool=name)
+            return "retry_tool_call"
         if name == "complete":
-            log.info("route_decision: tool=complete -> complete")
+            log.info("-> confirm_resolution")
             return "complete"
         if name == "ask_human":
             if state.get("ask_human_count", 0) >= 5:
                 log.warning("ask_human count exceeded limit, forcing complete")
                 return "complete"
-            log.info("route_decision: tool=ask_human -> ask_human")
+            log.info("-> ask_human")
             return "ask_human"
-        if name in ("ssh_bash", "bash"):
-            cmd_type = ShellSafety.classify(
-                tool_call["args"].get("command", ""),
-                local=(name == "bash"),
-            )
-            if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
-                log.info("route_decision: need_approval", tool=name, cmd_type=cmd_type.name)
-                return "need_approval"
-        if name == "service_exec":
-            service_type = await _get_service_type(tool_call["args"].get("service_id", ""))
-            cmd_type = ServiceSafety.classify(service_type, tool_call["args"].get("command", ""))
-            if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
-                log.info(
-                    "route_decision: need_approval", tool="service_exec", cmd_type=cmd_type.name
-                )
-                return "need_approval"
+        if name == "launch_investigation":
+            log.info("-> run_sub_agent", hypothesis=tc["args"].get("hypothesis_id"))
+            return "launch_investigation"
 
-    log.info("route_decision: -> continue")
+    # update_plan 等其他工具 → tools (ToolNode)
+    log.info("-> tools (continue)")
     return "continue"

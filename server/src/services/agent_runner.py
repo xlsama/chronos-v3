@@ -124,8 +124,6 @@ class AgentRunner:
             "incident_history_summary": None,
             "kb_summary": None,
             "kb_project_ids": [],
-            "hypotheses": [],
-            "current_hypothesis_index": 0,
             "hypothesis_results": [],
             "active_sub_agent_thread_id": None,
             "active_hypothesis_id": None,
@@ -133,6 +131,7 @@ class AgentRunner:
             "pending_launch_tool_call_id": None,
             "pending_approval_id": None,
             "sub_agent_status": None,
+            "ask_human_count": 0,
             "tool_call_retry_count": 0,
         }
 
@@ -370,8 +369,8 @@ class AgentRunner:
         elif "sub_agent_approval" in next_nodes:
             as_node = "sub_agent_approval"
         else:
-            # Fallback: resume from coordinator_agent
-            as_node = "coordinator_agent"
+            # Fallback: resume from main_agent
+            as_node = "main_agent"
 
         await self.graph.aupdate_state(
             config,
@@ -440,7 +439,20 @@ class AgentRunner:
         if "sub_agent_ask_human" in next_nodes:
             log.info("sub_agent_ask_human interrupt (already notified by run_sub_agent)")
 
-        # confirm_resolution 中断 —— coordinator 调用了 complete，等待用户确认
+        # ask_human 中断 —— main_agent 调用了 ask_human，等待用户回复
+        if "ask_human" in next_nodes:
+            log.info("ask_human interrupt")
+            if not self._ask_human_streamed:
+                # Fallback: 没有流式推送过，一次性发送
+                question = self._extract_ask_human_question(vals)
+                if question:
+                    await self.publisher.publish(
+                        channel, "ask_human", {"question": question}
+                    )
+                    await self.publisher.publish(channel, "ask_human_done", {})
+            self._ask_human_streamed = False
+
+        # confirm_resolution 中断 —— main_agent 调用了 complete，等待用户确认
         if "confirm_resolution" in next_nodes:
             log.info("confirm_resolution interrupt")
             if not self._complete_streamed:
@@ -640,10 +652,10 @@ class AgentRunner:
         sid = channel.split(":")[-1][:8] if ":" in channel else ""
         stream_log = get_logger(component="stream", sid=sid)
 
-        # coordinator_agent: 推送 thinking 流到前端主时间线
+        # main_agent: 推送 thinking 流到前端主时间线
         # 其他所有节点: 各自通过 EventPublisher 直接发布，或无需 SSE
         # 父图的 astream_events() 还会传播子图内部事件，也必须过滤
-        if node != "coordinator_agent":
+        if node != "main_agent":
             return
 
         phase, agent = self._get_phase_agent(event)

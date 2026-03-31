@@ -353,3 +353,25 @@ class TestRegressionWriteDangerousStays:
 
     def test_rm_rf_root_blocked(self):
         assert ShellSafety.classify("rm -rf /") is CommandType.BLOCKED
+
+
+# ═══════════════════════════════════════════
+# Migrated from test_ops_agent_runtime_hints.py
+# ═══════════════════════════════════════════
+
+
+class TestMigratedClassifierCases:
+    def test_shell_safety_treats_timeout_wrapped_tcp_probe_as_write(self):
+        """bash -c can execute arbitrary code, so it requires approval even for TCP probes."""
+        command = (
+            "timeout 5 bash -c 'echo > /dev/tcp/10.200.100.85/8082' 2>&1 "
+            '&& echo "Port 8082 is open" || echo "Port 8082 connection failed"'
+        )
+        assert ShellSafety.classify(command, local=True) is CommandType.WRITE
+
+    def test_shell_safety_treats_pwd_and_readlink_as_read(self):
+        command = "pwd; echo '---'; readlink /proc/20450/cwd"
+        assert ShellSafety.classify(command) is CommandType.READ
+
+    def test_service_safety_treats_mongodb_ping_as_read(self):
+        assert ServiceSafety.classify("mongodb", '{"ping": 1}') is CommandType.READ

@@ -9,28 +9,13 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from src.env import get_settings
 from src.lib.logger import get_logger
 from src.ops_agent.prompts.investigation_agent import INVESTIGATION_AGENT_SYSTEM_PROMPT
+from src.ops_agent.shared_tools import build_skills_context, build_shared_tools
 from src.ops_agent.state import InvestigationState
-from src.ops_agent.tools.ssh_bash_tool import list_servers as _list_servers
-from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash
 from src.ops_agent.tools.bash_tool import local_bash as _local_bash
-from src.ops_agent.tools.service_exec_tool import (
-    list_services as _list_services,
-    service_exec as _service_exec,
-)
+from src.ops_agent.tools.service_exec_tool import service_exec as _service_exec
+from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash
 from src.ops_agent.tools.tool_classifier import CommandType, ServiceSafety, ShellSafety
 from src.services.skill_service import SkillService
-
-
-def _build_skills_context(skill_service: SkillService) -> str:
-    """构建精简的 skills 上下文。"""
-    available = skill_service.get_available_skills()
-    if not available:
-        return ""
-    lines = ["\n<available_skills>"]
-    for s in available:
-        lines.append(f'  <skill name="{s["slug"]}">{s["description"]}</skill>')
-    lines.append("</available_skills>")
-    return "\n".join(lines)
 
 
 def build_investigation_tools():
@@ -65,45 +50,9 @@ def build_investigation_tools():
         return await _service_exec(service_id=service_id, command=command)
 
     @tool
-    async def list_servers() -> list[dict] | str:
-        """列出所有可用服务器。返回 id, name, host, status。"""
-        result = await _list_servers()
-        if not result:
-            return "当前没有注册任何服务器。"
-        return result
-
-    @tool
-    async def list_services() -> list[dict] | str:
-        """列出所有可用服务。返回 id, name, service_type, host, port, status。"""
-        result = await _list_services()
-        if not result:
-            return "当前没有注册任何服务。"
-        return result
-
-    @tool
     def ask_human(question: str) -> str:
         """缺少关键信息时向用户提问。question 应简短精练（1-3行）。"""
         return question
-
-    @tool
-    def read_skill(path: str) -> str:
-        """读取技能文件。"?" 列出所有可用技能，"slug" 读 SKILL.md，"slug/scripts/x.sh" 读脚本。"""
-        service = SkillService()
-        if path.strip() == "?":
-            available = service.get_available_skills()
-            if not available:
-                return "当前没有可用技能。"
-            lines = ["所有可用技能:"]
-            for s in available:
-                lines.append(f"- {s['slug']}: {s['description']}")
-            return "\n".join(lines)
-        parts = path.split("/", 1)
-        slug = parts[0]
-        rel_path = parts[1] if len(parts) > 1 else None
-        try:
-            return service.read_file(slug, rel_path)
-        except FileNotFoundError:
-            return f"未找到: {path}"
 
     @tool
     def report(status: str, summary: str, report: str) -> str:
@@ -118,9 +67,7 @@ def build_investigation_tools():
         ssh_bash,
         bash,
         service_exec,
-        list_servers,
-        list_services,
-        read_skill,
+        *build_shared_tools(),
         ask_human,
         report,
     ]
@@ -185,7 +132,7 @@ async def investigation_agent_node(state: InvestigationState) -> dict:
     kb_context = f"## 项目知识库上下文\n{kb_summary}" if kb_summary else ""
 
     skill_service = SkillService()
-    skills_context = _build_skills_context(skill_service)
+    skills_context = build_skills_context(skill_service)
 
     system_prompt = INVESTIGATION_AGENT_SYSTEM_PROMPT.format(
         hypothesis_id=state["hypothesis_id"],

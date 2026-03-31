@@ -11,7 +11,7 @@ class HypothesisResult(TypedDict):
     report: str  # 结构化排查报告（含排查链路、关键证据、修复操作等）
 
 
-class CoordinatorState(MessagesState):
+class MainState(MessagesState):
     incident_id: str
     description: str
     severity: str
@@ -23,8 +23,6 @@ class CoordinatorState(MessagesState):
     kb_project_ids: list[str]
 
     # 假设管理
-    hypotheses: list[dict]  # [{id: "H1", desc: "...", priority: 1}, ...]
-    current_hypothesis_index: int
     hypothesis_results: list[HypothesisResult]
 
     # 子 Agent 状态
@@ -47,7 +45,8 @@ class CoordinatorState(MessagesState):
     approval_supplement: str | None
     pending_approval_id: str | None  # 子 Agent 审批的 ApprovalRequest ID
 
-    # coordinator retry
+    # main agent
+    ask_human_count: int
     tool_call_retry_count: int
 
 

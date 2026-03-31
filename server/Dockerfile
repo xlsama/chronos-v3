@@ -15,5 +15,8 @@ RUN uv sync --frozen --no-dev
 
 COPY . .
 
+RUN useradd -r -s /bin/false chronos && chown -R chronos:chronos /app
+USER chronos
+
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["bash", "entrypoint.sh"]
