@@ -1,4 +1,7 @@
-"""主 Agent 和子 Agent 共享的 skill 上下文构建与工具定义。"""
+"""Skill 上下文构建。
+
+构建 XML 格式的技能目录，注入 Agent 系统提示词。
+"""
 
 from src.lib.logger import get_logger
 from src.services.skill_service import SkillService
@@ -48,49 +51,3 @@ def build_skills_context(skill_service: SkillService) -> str:
 
     xml_lines.append("</available_skills>")
     return "\n".join(xml_lines)
-
-
-def build_shared_tools():
-    """构建主 Agent 和子 Agent 共享的工具：read_skill、list_servers、list_services。"""
-    from langchain_core.tools import tool
-
-    from src.ops_agent.tools.service_exec_tool import list_services as _list_services
-    from src.ops_agent.tools.ssh_bash_tool import list_servers as _list_servers
-
-    @tool
-    def read_skill(path: str) -> str:
-        """读取技能文件。"?" 列出所有可用技能，"slug" 读 SKILL.md，"slug/scripts/x.sh" 读脚本。"""
-        service = SkillService()
-        if path.strip() == "?":
-            available = service.get_available_skills()
-            if not available:
-                return "当前没有可用技能。"
-            lines = ["所有可用技能:"]
-            for s in available:
-                lines.append(f"- {s['slug']}: {s['description']}")
-            return "\n".join(lines)
-        parts = path.split("/", 1)
-        slug = parts[0]
-        rel_path = parts[1] if len(parts) > 1 else None
-        try:
-            return service.read_file(slug, rel_path)
-        except FileNotFoundError:
-            return f"未找到: {path}"
-
-    @tool
-    async def list_servers() -> list[dict] | str:
-        """列出所有可用服务器。返回 id, name, host, status。"""
-        result = await _list_servers()
-        if not result:
-            return "当前没有注册任何服务器。"
-        return result
-
-    @tool
-    async def list_services() -> list[dict] | str:
-        """列出所有可用服务。返回 id, name, service_type, host, port, status。"""
-        result = await _list_services()
-        if not result:
-            return "当前没有注册任何服务。"
-        return result
-
-    return [read_skill, list_servers, list_services]

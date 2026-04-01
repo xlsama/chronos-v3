@@ -4,15 +4,14 @@ import json
 import re
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from sqlalchemy import select
 
 from src.db.connection import get_session_factory
-from src.db.models import IncidentHistory, Project, ProjectDocument
+from src.db.models import IncidentHistory
 from src.lib.logger import get_logger
-from src.services.post_incident.base import get_main_llm
+from src.services.post_incident.base import get_mini_llm
 from src.services.skill_service import SkillService
 from src.services.version_service import VersionService
 
@@ -184,7 +183,7 @@ def _clean_code_block(text: str) -> str:
     """去除 LLM 输出中的代码块标记。"""
     content = text.strip().strip("`").strip()
     if content.startswith("markdown\n"):
-        content = content[len("markdown\n"):]
+        content = content[len("markdown\n") :]
     if content.startswith("```\n"):
         content = content[4:]
     if content.endswith("\n```"):
@@ -197,32 +196,6 @@ def _ensure_draft(content: str) -> str:
     if "draft: true" not in content:
         content = content.replace("---\n", "---\ndraft: true\n", 1)
     return content
-
-
-# ── 数据获取 ──────────────────────────────────────────────
-
-async def _fetch_data() -> tuple[list[IncidentHistory], list[dict]]:
-    """获取最近 24 小时的历史事件 + 所有项目的 AGENTS.md。"""
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
-
-    async with get_session_factory()() as session:
-        result = await session.execute(
-            select(IncidentHistory)
-            .where(IncidentHistory.last_seen_at >= since)
-            .order_by(IncidentHistory.last_seen_at.desc())
-        )
-        incidents = list(result.scalars().all())
-
-        result = await session.execute(
-            select(ProjectDocument, Project.name, Project.slug)
-            .join(Project, ProjectDocument.project_id == Project.id)
-            .where(ProjectDocument.doc_type == "agents_config")
-        )
-        agents_docs = [
-            {"project_name": row[1], "project_slug": row[2], "content": row[0].content}
-            for row in result.all()
-        ]
-    return incidents, agents_docs
 
 
 def _build_analysis_input(
@@ -246,9 +219,10 @@ def _build_analysis_input(
 
 # ── Phase 1: 分析 ──────────────────────────────────────────
 
+
 async def _analyze_patterns(incidents_text: str, agents_text: str) -> list[dict]:
     """Phase 1: LLM 分析跨事件共性模式，返回模式候选列表。"""
-    llm = get_main_llm()
+    llm = get_mini_llm()
     prompt = _CROSS_INCIDENT_ANALYSIS_PROMPT.format(
         incidents_text=incidents_text,
         agents_text=agents_text,
@@ -256,10 +230,12 @@ async def _analyze_patterns(incidents_text: str, agents_text: str) -> list[dict]
     log.info("Phase 1: analyzing cross-incident patterns", prompt_len=len(prompt))
     t0 = time.monotonic()
 
-    resp = await llm.ainvoke([
-        SystemMessage(content="你是一个运维知识架构师，擅长从多个事件中归纳通用排查模式。"),
-        HumanMessage(content=prompt),
-    ])
+    resp = await llm.ainvoke(
+        [
+            SystemMessage(content="你是一个运维知识架构师，擅长从多个事件中归纳通用排查模式。"),
+            HumanMessage(content=prompt),
+        ]
+    )
 
     elapsed = time.monotonic() - t0
     raw = resp.content.strip()
@@ -270,7 +246,7 @@ async def _analyze_patterns(incidents_text: str, agents_text: str) -> list[dict]
         # 处理可能被代码块包裹的 JSON
         cleaned = _clean_code_block(raw)
         if cleaned.startswith("json\n"):
-            cleaned = cleaned[len("json\n"):]
+            cleaned = cleaned[len("json\n") :]
         patterns = json.loads(cleaned)
         if not isinstance(patterns, list):
             log.warning("Phase 1: LLM returned non-list", type=type(patterns).__name__)
@@ -284,9 +260,10 @@ async def _analyze_patterns(incidents_text: str, agents_text: str) -> list[dict]
 
 # ── Phase 2: 匹配 + 生成/合并 ────────────────────────────────
 
+
 async def _process_pattern_candidates(patterns: list[dict]) -> list[str]:
     """Phase 2: 逐个处理模式候选，匹配/创建/合并 skill。"""
-    llm = get_main_llm()
+    llm = get_mini_llm()
     service = SkillService()
     results = []
 
@@ -314,8 +291,16 @@ async def _process_pattern_candidates(patterns: list[dict]) -> list[str]:
 
         try:
             result = await _match_and_apply(
-                llm, service, skills_list, name, description, pat_type,
-                domain, rationale, outline, now_iso,
+                llm,
+                service,
+                skills_list,
+                name,
+                description,
+                pat_type,
+                domain,
+                rationale,
+                outline,
+                now_iso,
             )
             results.append(result)
             log.info("Phase 2: pattern processed", index=i, result=result)
@@ -351,12 +336,25 @@ async def _match_and_apply(
 
     if match_result.startswith("MATCH:"):
         return await _merge_skill(
-            llm, service, match_result, name, description, outline,
+            llm,
+            service,
+            match_result,
+            name,
+            description,
+            outline,
         )
     elif match_result.startswith("NEW:"):
         return await _create_skill(
-            llm, service, match_result, name, description, pattern,
-            domain, rationale, outline, now_iso,
+            llm,
+            service,
+            match_result,
+            name,
+            description,
+            pattern,
+            domain,
+            rationale,
+            outline,
+            now_iso,
         )
     else:
         log.warning("Unexpected match result", name=name, result=match_result)
@@ -469,34 +467,35 @@ async def _create_skill(
 
 # ── 入口 ────────────────────────────────────────────────
 
-async def run_skill_evolution_job() -> None:
-    """定时任务入口: 批量分析历史事件，自动进化 skill。"""
+
+async def run_skill_evolution_job(
+    incidents: list[IncidentHistory],
+    agents_docs: list[dict],
+) -> None:
+    """定时任务入口: 批量分析历史事件，自动进化 skill。
+
+    Args:
+        incidents: 近 24h 的 IncidentHistory 列表
+        agents_docs: 所有项目的 AGENTS.md，每项含 project_id, project_name, project_slug, content
+    """
     log.info("=== Skill Evolution Job Started ===")
     t_start = time.monotonic()
 
     try:
-        # 1. 获取数据
-        incidents, agents_docs = await _fetch_data()
-        log.info(
-            "Data fetched",
-            incidents=len(incidents),
-            agents_docs=len(agents_docs),
-        )
-
         if not incidents:
             log.info("No recent incidents, skipping skill evolution")
             return
 
-        # 2. 构建分析输入
+        # 1. 构建分析输入
         incidents_text, agents_text = _build_analysis_input(incidents, agents_docs)
 
-        # 3. Phase 1: 跨事件模式分析
+        # 2. Phase 1: 跨事件模式分析
         patterns = await _analyze_patterns(incidents_text, agents_text)
         if not patterns:
             log.info("No cross-incident patterns identified, done")
             return
 
-        # 4. Phase 2: 匹配 + 生成/合并
+        # 3. Phase 2: 匹配 + 生成/合并
         results = await _process_pattern_candidates(patterns)
 
         elapsed = time.monotonic() - t_start

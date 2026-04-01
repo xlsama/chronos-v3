@@ -1,7 +1,7 @@
 """Agent integration test fixtures.
 
 These tests require:
-- docker-compose.dev.yml running (PG + Redis)
+- docker-compose.yaml running (PG + Redis)
 - docker-compose.agent.yml running (mysql-target, mongo-target, postgres-target)
 - DASHSCOPE_API_KEY environment variable set
 """

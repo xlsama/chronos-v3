@@ -11,7 +11,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_ROOT/tests/agent/docker-compose.agent.yml"
 COMPOSE_PROJECT="chronos-agent-test"
 
-# Requires: docker compose -f docker-compose.dev.yml up -d (PG + Redis)
+# Requires: docker compose up -d (PG + Redis)
 echo "Starting agent target databases..."
 docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" up -d --wait
 

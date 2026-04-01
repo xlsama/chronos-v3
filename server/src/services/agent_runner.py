@@ -7,7 +7,8 @@ from langchain_core.messages import HumanMessage, ToolMessage
 
 from src.env import get_settings
 from src.ops_agent.event_publisher import EventPublisher
-from src.ops_agent.tools.tool_output import normalize_tool_output
+from src.ops_agent.tools.registry import APPROVAL_TOOL_NAMES
+from src.ops_agent.tools.normalization import normalize_tool_output
 from src.ops_agent.graph import compile_graph
 from src.db.connection import get_session_factory
 from src.db.models import Incident
@@ -125,6 +126,7 @@ class AgentRunner:
             "description": description,
             "severity": severity,
             "is_complete": False,
+            "intent": None,
             "needs_approval": False,
             "pending_tool_call": None,
             "approval_decision": None,
@@ -200,7 +202,7 @@ class AgentRunner:
 
         state = await self.graph.aget_state(config)
         next_nodes = state.next or ()
-        valid_resume_nodes = {"ask_human", "confirm_resolution", "sub_agent_ask_human"}
+        valid_resume_nodes = {"ask_human", "confirm_resolution", "sub_agent_ask_human", "triage"}
         if not valid_resume_nodes.intersection(next_nodes):
             return
 
@@ -440,6 +442,14 @@ class AgentRunner:
             is_complete=vals.get("is_complete"),
         )
 
+        # triage 中断 —— 描述不充分，向用户提问
+        if "triage" in next_nodes:
+            log.info("triage interrupt")
+            question = self._extract_triage_question(state)
+            if question:
+                await self.publisher.publish(channel, "ask_human", {"question": question})
+                await self.publisher.publish(channel, "ask_human_done", {})
+
         # 子 Agent 审批/ask_human 中断 —— 已由 run_sub_agent_node 处理
         if "sub_agent_approval" in next_nodes:
             log.info("sub_agent_approval interrupt (already published by run_sub_agent)")
@@ -454,9 +464,7 @@ class AgentRunner:
                 # Fallback: 没有流式推送过，一次性发送
                 question = self._extract_ask_human_question(vals)
                 if question:
-                    await self.publisher.publish(
-                        channel, "ask_human", {"question": question}
-                    )
+                    await self.publisher.publish(channel, "ask_human", {"question": question})
                     await self.publisher.publish(channel, "ask_human_done", {})
             self._ask_human_streamed = False
 
@@ -470,9 +478,7 @@ class AgentRunner:
                     await self.publisher.publish(
                         channel, "answer", {"content": answer_md, "phase": "investigation"}
                     )
-                    await self.publisher.publish(
-                        channel, "answer_done", {"phase": "investigation"}
-                    )
+                    await self.publisher.publish(channel, "answer_done", {"phase": "investigation"})
             self._complete_streamed = False
             await self.publisher.publish(channel, "confirm_resolution_required", {})
 
@@ -493,7 +499,15 @@ class AgentRunner:
                 )
             )
 
-    _APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
+    @staticmethod
+    def _extract_triage_question(state) -> str | None:
+        """Extract triage question from interrupt value in checkpoint."""
+        for task in state.tasks:
+            if hasattr(task, "interrupts") and task.interrupts:
+                for intr in task.interrupts:
+                    if isinstance(intr.value, dict) and intr.value.get("type") == "triage":
+                        return intr.value.get("question", "")
+        return None
 
     @staticmethod
     def _extract_pending_tool_call(vals: dict) -> dict | None:
@@ -502,7 +516,7 @@ class AgentRunner:
         for msg in reversed(messages):
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    if tc["name"] in AgentRunner._APPROVAL_TOOLS:
+                    if tc["name"] in APPROVAL_TOOL_NAMES:
                         return tc
         return None
 
@@ -729,7 +743,11 @@ class AgentRunner:
                                 {"content": delta, "phase": phase},
                             )
 
-            if chunk.content and not self._ask_human_stream_active and not self._complete_stream_active:
+            if (
+                chunk.content
+                and not self._ask_human_stream_active
+                and not self._complete_stream_active
+            ):
                 self._thinking_content_log_buffer += chunk.content
                 await self.publisher.publish(
                     channel,
@@ -761,12 +779,8 @@ class AgentRunner:
                 await self.publisher.publish(channel, "ask_human_done", {})
                 self._reset_ask_human_stream_state()
             elif self._complete_stream_active:
-                stream_log.info(
-                    "Complete stream done", answer_chars=self._complete_published_len
-                )
-                await self.publisher.publish(
-                    channel, "answer_done", {"phase": phase}
-                )
+                stream_log.info("Complete stream done", answer_chars=self._complete_published_len)
+                await self.publisher.publish(channel, "answer_done", {"phase": phase})
                 self._reset_complete_stream_state()
             else:
                 thinking_len = len(self._thinking_content_log_buffer)

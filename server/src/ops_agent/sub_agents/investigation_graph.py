@@ -3,12 +3,12 @@
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from src.ops_agent.nodes.compact import investigation_compact_node
+from src.ops_agent.nodes.compact_node import investigation_compact_node
 from src.ops_agent.sub_agents.investigation_agent import (
-    build_investigation_tools,
     investigation_agent_node,
     route_investigation_decision,
 )
+from src.ops_agent.tools.registry import build_tools_for_agent
 from src.ops_agent.state import InvestigationState
 
 
@@ -20,7 +20,7 @@ def route_after_investigation_approval(state: InvestigationState) -> str:
 
 def build_investigation_graph():
     """构建子 Agent 图。"""
-    tools = build_investigation_tools()
+    tools = build_tools_for_agent("investigation")
     tool_node = ToolNode(tools)
 
     graph = StateGraph(InvestigationState)

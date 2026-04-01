@@ -5,13 +5,18 @@ from typing import Any
 
 from langchain_core.messages import ToolMessage
 
+from src.ops_agent.tools.truncation import truncate_output
 
-def normalize_tool_output(raw: Any) -> tuple[str, str]:
+# SSE 事件桥中输出截断阈值（字符），防止过大的 tool_result 事件
+_SSE_OUTPUT_MAX_CHARS = 50_000
+
+
+def normalize_tool_output(raw: Any, max_chars: int = _SSE_OUTPUT_MAX_CHARS) -> tuple[str, str]:
     """从 LangGraph on_tool_end 事件中提取工具输出。
 
     Returns:
         (output_str, status)
-        - output_str: 干净的字符串（dict/list 会 JSON 序列化，str 保持原样）
+        - output_str: 干净的字符串（dict/list 会 JSON 序列化，str 保持原样），超长时截断
         - status: "success" | "error"
     """
     # Step 1: 从 ToolMessage 中解包 content
@@ -25,7 +30,10 @@ def normalize_tool_output(raw: Any) -> tuple[str, str]:
     else:
         output_str = str(content)
 
-    # Step 3: 判断 status
+    # Step 3: 截断过长输出
+    output_str = truncate_output(output_str, max_chars)
+
+    # Step 4: 判断 status
     status = _determine_status(output_str)
     return output_str, status
 

@@ -12,7 +12,7 @@ Tests the full flow:
 9. Verify agent reaches terminal state with findings
 
 Requires:
-- docker-compose.dev.yml running (PG + Redis)
+- docker-compose.yaml running (PG + Redis)
 - docker-compose.agent.yml + docker-compose.etl.yml running (target databases)
 - DASHSCOPE_API_KEY environment variable set
 """

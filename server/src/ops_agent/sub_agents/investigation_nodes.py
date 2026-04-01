@@ -1,14 +1,16 @@
 """子 Agent 专用节点 —— 适配 InvestigationState 的 human_approval / ask_human / retry_tool_call。"""
 
-import base64
-
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import interrupt
 
 from src.lib.logger import get_logger
+from src.ops_agent._llm import build_multimodal_content, parse_resume
 from src.ops_agent.state import InvestigationState
-
-_APPROVAL_TOOLS = {"ssh_bash", "bash", "service_exec"}
+from src.ops_agent.tools.approval_validation import (
+    build_missing_approval_explanation_retry_message,
+    get_missing_approval_explanation_tool_name,
+)
+from src.ops_agent.tools.registry import APPROVAL_TOOL_NAMES
 
 RETRY_MARKER = "[RETRY_TOOL_CALL]"
 RETRY_MESSAGE = (
@@ -16,7 +18,7 @@ RETRY_MESSAGE = (
     "你刚才的回复没有调用任何工具。你必须始终以工具调用结束每一轮回复。\n"
     '- 需要向用户提问 → 调用 ask_human(question="你的具体问题")\n'
     "- 需要执行命令排查 → 调用对应的执行工具\n"
-    "- 调查完成 → 调用 report(status=..., summary=..., report=...)\n"
+    "- 调查完成 → 调用 conclude(status=..., summary=..., detail=...)\n"
     "请重新回复，这次必须调用一个工具。"
 )
 
@@ -40,7 +42,7 @@ async def investigation_human_approval_node(state: InvestigationState) -> dict:
             tool_messages = []
             if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                 for tc in last_message.tool_calls:
-                    if tc["name"] in _APPROVAL_TOOLS:
+                    if tc["name"] in APPROVAL_TOOL_NAMES:
                         tool_messages.append(ToolMessage(content=content, tool_call_id=tc["id"]))
             return {
                 "messages": tool_messages,
@@ -60,27 +62,12 @@ async def investigation_human_approval_node(state: InvestigationState) -> dict:
 
     # Initial entry
     last_message = state["messages"][-1]
-    approval_calls = [tc for tc in last_message.tool_calls if tc["name"] in _APPROVAL_TOOLS]
+    approval_calls = [tc for tc in last_message.tool_calls if tc["name"] in APPROVAL_TOOL_NAMES]
     log.info("Initial entry", pending=len(approval_calls))
     return {
         "needs_approval": True,
         "pending_tool_call": approval_calls[0] if approval_calls else None,
     }
-
-
-def _parse_resume(user_response) -> tuple[str, list[dict]]:
-    if isinstance(user_response, dict) and "text" in user_response:
-        return user_response["text"], user_response.get("images") or []
-    return str(user_response), []
-
-
-def _build_multimodal_content(text: str, images: list[dict]) -> list[dict]:
-    blocks: list[dict] = [{"type": "text", "text": text}]
-    for img in images[:5]:
-        b64 = base64.b64encode(img["bytes"]).decode()
-        mime = img.get("content_type") or "image/png"
-        blocks.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
-    return blocks
 
 
 async def investigation_ask_human_node(state: InvestigationState) -> dict:
@@ -99,12 +86,12 @@ async def investigation_ask_human_node(state: InvestigationState) -> dict:
                 user_response = interrupt({"question": question})
                 log.info("Resume", response_len=len(str(user_response)))
 
-                text, images = _parse_resume(user_response)
+                text, images = parse_resume(user_response)
                 messages = [ToolMessage(content=text, tool_call_id=tc["id"])]
                 if images:
                     messages.append(
                         HumanMessage(
-                            content=_build_multimodal_content("用户补充了以下截图：", images)
+                            content=build_multimodal_content("用户补充了以下截图：", images)
                         )
                     )
                 return {
@@ -122,8 +109,8 @@ async def investigation_ask_human_node(state: InvestigationState) -> dict:
     log.info("Interrupt (fallback)", question=question[:200])
     user_response = interrupt({"question": question})
 
-    text, images = _parse_resume(user_response)
-    content = _build_multimodal_content(text, images) if images else text
+    text, images = parse_resume(user_response)
+    content = build_multimodal_content(text, images) if images else text
 
     return {
         "messages": [HumanMessage(content=content)],
@@ -138,7 +125,19 @@ async def investigation_retry_tool_call_node(state: InvestigationState) -> dict:
     current_count = state.get("tool_call_retry_count", 0)
     log = get_logger(component="inv_retry", sid=sid)
     log.info("Retry tool call", attempt=current_count + 1)
+    last_message = state["messages"][-1] if state.get("messages") else None
+    missing_tool_name = (
+        await get_missing_approval_explanation_tool_name(last_message) if last_message else None
+    )
     return {
-        "messages": [HumanMessage(content=RETRY_MESSAGE)],
+        "messages": [
+            HumanMessage(
+                content=(
+                    build_missing_approval_explanation_retry_message(missing_tool_name)
+                    if missing_tool_name
+                    else RETRY_MESSAGE
+                )
+            )
+        ],
         "tool_call_retry_count": current_count + 1,
     }

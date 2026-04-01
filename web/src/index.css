@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "react-photo-view/dist/react-photo-view.css";
 
 @font-face {
   font-family: 'HarmonyOS Sans SC';
@@ -213,6 +214,21 @@
   table { font-size: 0.8125rem; }
   h2 + *, h3 + *, h4 + * { margin-top: 0; }
   strong { font-weight: 600; }
+}
+
+.chronos-photo-preview .chronos-photo-preview__photo {
+  scale: 0.8;
+  transform-origin: center center;
+  border-radius: 0.75rem;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.28);
+}
+
+@supports not (scale: 1) {
+  .chronos-photo-preview .chronos-photo-preview__photo {
+    max-width: 80vw !important;
+    max-height: 80vh !important;
+    object-fit: contain;
+  }
 }
 
 .prose-compact {

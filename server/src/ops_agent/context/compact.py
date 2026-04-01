@@ -15,102 +15,12 @@ from src.db.models import Incident
 from src.env import get_settings
 from src.lib.logger import get_logger
 from src.lib.redis import get_redis
+from src.ops_agent.context.compact_prompts import (
+    INVESTIGATION_COMPACT_SYSTEM_PROMPT,
+    MAIN_COMPACT_SYSTEM_PROMPT,
+)
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.state import HypothesisResult
-
-# ---------------------------------------------------------------------------
-# Prompt templates
-# ---------------------------------------------------------------------------
-
-MAIN_COMPACT_SYSTEM_PROMPT = """\
-你是运维排查进展总结助手。请根据提供的排查上下文，生成一份结构化的排查进展摘要。
-
-这份摘要将作为后续排查的唯一上下文，必须包含所有关键信息，确保排查能无缝继续。
-
-请先在 <analysis> 标签中整理思路，然后在 <summary> 标签中输出最终摘要。
-
-<summary> 必须包含以下部分：
-
-1. **事件概述**: 事件描述和严重程度
-2. **已验证的假设**: 每个假设的验证结果、关键证据和结论
-3. **已执行的排查操作**: 关键命令和发现（保留命令原文和关键输出）
-4. **已执行的修复操作**: 修复命令、验证方式和结果
-5. **用户反馈**: 用户提供的所有反馈和额外信息
-6. **当前排查状态**: 正在进行的工作和最新进展
-7. **下一步方向**: 接下来应该做什么
-
-示例输出格式：
-
-<analysis>
-[整理排查过程中的关键信息，确保不遗漏]
-</analysis>
-
-<summary>
-1. **事件概述**:
-   [描述]
-
-2. **已验证的假设**:
-   - H1 [已排除] xxx: 结论...
-   - H2 [已确认] xxx: 结论...
-
-3. **已执行的排查操作**:
-   - `docker ps -a` → 发现...
-   - `service_exec` 查询连接数 → 23/200
-
-4. **已执行的修复操作**:
-   - 执行 `docker restart xxx` → 服务恢复
-
-5. **用户反馈**:
-   - 用户反馈: "页面还是没有数据"
-
-6. **当前排查状态**:
-   [描述]
-
-7. **下一步方向**:
-   [描述]
-</summary>
-"""
-
-INVESTIGATION_COMPACT_SYSTEM_PROMPT = """\
-你是运维排查进展总结助手。请总结以下单个假设的排查进展。
-
-这份摘要将作为后续排查的唯一上下文，确保排查能无缝继续。
-
-请先在 <analysis> 标签中整理思路，然后在 <summary> 标签中输出最终摘要。
-
-<summary> 必须包含以下部分：
-
-1. **假设与目标**: 假设描述和排查目标
-2. **已执行的命令和查询**: 关键操作及其结果（保留命令原文和关键输出）
-3. **发现的关键线索**: 重要的诊断信息和证据
-4. **当前判断**: 假设是否可能成立的倾向和依据
-5. **下一步排查方向**: 接下来应该检查什么
-
-示例输出格式：
-
-<analysis>
-[整理排查链路中的关键信息]
-</analysis>
-
-<summary>
-1. **假设与目标**:
-   [描述]
-
-2. **已执行的命令和查询**:
-   - `docker logs --tail 200 xxx` → 发现 OOM 错误
-   - `service_exec` 查询慢查询 → 无异常
-
-3. **发现的关键线索**:
-   - [线索1]
-   - [线索2]
-
-4. **当前判断**:
-   [描述]
-
-5. **下一步排查方向**:
-   [描述]
-</summary>
-"""
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +37,16 @@ def is_context_limit_error(e: Exception) -> bool:
         or "prompt is too long" in s
         or "maximum context length" in s
     )
+
+
+def should_proactive_compact(messages: list[BaseMessage]) -> bool:
+    """估算消息总字符数，超过阈值时返回 True，用于在 LLM 调用前主动触发 compact。"""
+    total = 0
+    for msg in messages:
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        total += len(content)
+    threshold = get_settings().proactive_compact_chars
+    return total > threshold
 
 
 # ---------------------------------------------------------------------------

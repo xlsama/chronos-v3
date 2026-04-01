@@ -1,11 +1,10 @@
 import { memo, useState } from "react";
 import { FileText, Paperclip } from "lucide-react";
+import { PhotoView } from "react-photo-view";
 import { getAttachmentUrl } from "@/api/attachments";
-import {
-  AttachmentPreviewDialog,
-  ImageLightbox,
-} from "@/components/incidents/attachment-preview-dialog";
+import { AttachmentPreviewDialog } from "@/components/incidents/attachment-preview-dialog";
 import type { PreviewableAttachment } from "@/components/incidents/attachment-preview-dialog";
+import { ConstrainedPhotoProvider } from "@/components/ui/constrained-photo-provider";
 
 interface OptimisticAttachment {
   filename: string;
@@ -44,10 +43,6 @@ export const UserMessageBubble = memo(function UserMessageBubble({
   const hasMeta = attachments_meta && attachments_meta.length > 0;
   const hasServerIds = attachment_ids && attachment_ids.length > 0;
 
-  const [lightbox, setLightbox] = useState<{
-    url: string;
-    filename: string;
-  } | null>(null);
   const [previewAttachment, setPreviewAttachment] =
     useState<PreviewableAttachment | null>(null);
 
@@ -60,26 +55,27 @@ export const UserMessageBubble = memo(function UserMessageBubble({
           {/* Optimistic attachments (from local upload, before server confirms) */}
           {hasOptimistic && (
             <div className="mt-2 flex items-center gap-1.5">
-              {attachments.map((a, i) =>
-                a.preview_url && a.content_type.startsWith("image/") ? (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() =>
-                      setLightbox({
-                        url: a.preview_url!,
-                        filename: a.filename,
-                      })
-                    }
-                    className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
-                  >
-                    <img
-                      src={a.preview_url}
-                      alt={a.filename}
-                      className="size-8 rounded object-cover"
-                    />
-                  </button>
-                ) : (
+              <ConstrainedPhotoProvider>
+                {attachments
+                  .filter((a) => a.preview_url && a.content_type.startsWith("image/"))
+                  .map((a, i) => (
+                    <PhotoView key={i} src={a.preview_url!}>
+                      <button
+                        type="button"
+                        className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
+                      >
+                        <img
+                          src={a.preview_url!}
+                          alt={a.filename}
+                          className="size-8 rounded object-cover"
+                        />
+                      </button>
+                    </PhotoView>
+                  ))}
+              </ConstrainedPhotoProvider>
+              {attachments
+                .filter((a) => !(a.preview_url && a.content_type.startsWith("image/")))
+                .map((a, i) => (
                   <div
                     key={i}
                     className="flex items-center gap-1.5 rounded-md bg-blue-100 px-2.5 py-1.5 text-xs dark:bg-blue-900/50"
@@ -90,30 +86,34 @@ export const UserMessageBubble = memo(function UserMessageBubble({
                       {formatFileSize(a.size)}
                     </span>
                   </div>
-                ),
-              )}
+                ))}
             </div>
           )}
 
           {/* Server-side attachments with metadata (new messages) */}
           {!hasOptimistic && hasMeta && (
             <div className="mt-2 flex items-center gap-1.5">
-              {attachments_meta.map((meta) => {
-                const url = getAttachmentUrl(meta.id);
-                return meta.content_type.startsWith("image/") ? (
-                  <button
-                    key={meta.id}
-                    type="button"
-                    onClick={() => setPreviewAttachment(meta)}
-                    className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
-                  >
-                    <img
-                      src={url}
-                      alt={meta.filename}
-                      className="size-8 rounded object-cover"
-                    />
-                  </button>
-                ) : (
+              <ConstrainedPhotoProvider>
+                {attachments_meta
+                  .filter((m) => m.content_type.startsWith("image/"))
+                  .map((meta) => (
+                    <PhotoView key={meta.id} src={getAttachmentUrl(meta.id)}>
+                      <button
+                        type="button"
+                        className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
+                      >
+                        <img
+                          src={getAttachmentUrl(meta.id)}
+                          alt={meta.filename}
+                          className="size-8 rounded object-cover"
+                        />
+                      </button>
+                    </PhotoView>
+                  ))}
+              </ConstrainedPhotoProvider>
+              {attachments_meta
+                .filter((m) => !m.content_type.startsWith("image/"))
+                .map((meta) => (
                   <button
                     key={meta.id}
                     type="button"
@@ -128,8 +128,7 @@ export const UserMessageBubble = memo(function UserMessageBubble({
                       {formatFileSize(meta.size)}
                     </span>
                   </button>
-                );
-              })}
+                ))}
             </div>
           )}
 
@@ -156,13 +155,6 @@ export const UserMessageBubble = memo(function UserMessageBubble({
         </div>
       </div>
 
-      {lightbox && (
-        <ImageLightbox
-          src={lightbox.url}
-          filename={lightbox.filename}
-          onClose={() => setLightbox(null)}
-        />
-      )}
       <AttachmentPreviewDialog
         attachment={previewAttachment}
         open={!!previewAttachment}

@@ -77,9 +77,7 @@ async def lifespan(app: FastAPI):
         count = (await session.execute(select(func.count()).select_from(User))).scalar()
         if count == 0:
             service = AuthService(session=session, jwt_secret=settings.jwt_secret)
-            await service.register(
-                email="admin@chronos.dev", password="changeme", name="Admin"
-            )
+            await service.register(email="admin@chronos.dev", password="changeme", name="Admin")
             log.info("Created default admin user: admin@chronos.dev / changeme")
 
     for warning in settings.validate_production_secrets():

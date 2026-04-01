@@ -1,7 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { X } from "lucide-react";
-// PreviewableAttachment is exported from this module; full Attachment type not needed
+import { useEffect, useState } from "react";
 import { getAttachmentUrl } from "@/api/attachments";
 import { getFileTypeFromContentType } from "@/lib/file-utils";
 import { FilePreview } from "@/components/ui/file-preview";
@@ -24,54 +21,6 @@ interface AttachmentPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ImageLightbox({
-  src,
-  filename,
-  onClose,
-}: {
-  src: string;
-  filename: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-      onClick={onClose}
-    >
-      {/* Top bar */}
-      <div
-        className="fixed top-0 right-0 left-0 z-10 flex items-center justify-between px-4 py-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <span className="truncate text-sm text-white/80">{filename}</span>
-        <button
-          onClick={onClose}
-          className="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
-        >
-          <X className="size-5" />
-        </button>
-      </div>
-
-      {/* Image */}
-      <img
-        src={src}
-        alt={filename}
-        className="max-h-[90vh] max-w-[90vw] object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>,
-    document.body,
-  );
-}
-
 export function AttachmentPreviewDialog({
   attachment,
   open,
@@ -84,10 +33,7 @@ export function AttachmentPreviewDialog({
     ? getFileTypeFromContentType(attachment.content_type, attachment.filename)
     : "text";
   const fileUrl = attachment ? getAttachmentUrl(attachment.id) : "";
-  const isImage = fileType === "image";
-  const needsFetch = !isImage && fileType !== "pdf";
-
-  const handleClose = useCallback(() => onOpenChange(false), [onOpenChange]);
+  const needsFetch = fileType !== "pdf" && fileType !== "image";
 
   useEffect(() => {
     if (!open || !attachment || !needsFetch) {
@@ -106,18 +52,6 @@ export function AttachmentPreviewDialog({
 
   if (!attachment || !open) return null;
 
-  // Image → lightbox overlay
-  if (isImage) {
-    return (
-      <ImageLightbox
-        src={fileUrl}
-        filename={attachment.filename}
-        onClose={handleClose}
-      />
-    );
-  }
-
-  // Non-image → Dialog
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">

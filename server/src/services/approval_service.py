@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import ApprovalRequest
-from src.lib.errors import ApprovalAlreadyDecidedError, ApprovalNotFoundError
+from src.lib.errors import ApprovalAlreadyDecidedError, ApprovalNotFoundError, ValidationError
 
 
 class ApprovalService:
@@ -20,7 +20,12 @@ class ApprovalService:
         risk_level: str | None = None,
         risk_detail: str | None = None,
         explanation: str | None = None,
+        require_explanation: bool = False,
     ) -> ApprovalRequest:
+        explanation = explanation.strip() if explanation else None
+        if require_explanation and not explanation:
+            raise ValidationError("需审批的工具调用必须提供 explanation 说明")
+
         approval = ApprovalRequest(
             incident_id=incident_id,
             tool_name=tool_name,

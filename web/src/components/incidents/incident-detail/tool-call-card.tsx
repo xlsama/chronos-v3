@@ -54,6 +54,7 @@ export const ToolCallCard = memo(function ToolCallCard({
 }: ToolCallCardProps) {
   const isApproval = !!approvalId;
   const isHigh = riskLevel === "HIGH";
+  const normalizedExplanation = explanation?.trim() ?? "";
 
   const [expanded, setExpanded] = useState(isApproval ? true : (isExecuting ?? false));
 
@@ -270,9 +271,14 @@ export const ToolCallCard = memo(function ToolCallCard({
           )}
 
           {/* Explanation */}
-          {isApproval && explanation && (
+          {isApproval && (
             <p className="text-sm">
-              <span className="font-medium">说明:</span> {explanation}
+              <span className="font-medium">说明:</span>{" "}
+              {normalizedExplanation ? (
+                normalizedExplanation
+              ) : (
+                <span className="text-muted-foreground">未提供说明</span>
+              )}
             </p>
           )}
 

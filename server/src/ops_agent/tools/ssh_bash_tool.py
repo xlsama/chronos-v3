@@ -3,11 +3,61 @@ import re
 import time
 import uuid
 
+from langchain_core.tools import StructuredTool
+
 from src.lib.logger import get_logger
 from src.ops_agent.ssh import SSHConnector
-from src.ops_agent.tools.tool_classifier import ShellSafety, CommandType
+from src.ops_agent.tools.base_tool import BaseTool, PermissionBehavior, PermissionResult
+from src.ops_agent.tools.truncation import truncate_output
+from src.ops_agent.tools.safety import CommandType, ShellSafety
 
 log = get_logger(component="ssh_bash")
+
+# ── SSH Bash Tool Prompt ──
+
+_SSH_BASH_PROMPT = """\
+通过 SSH 在目标服务器上执行 Shell 命令。
+
+## 适用场景
+- 检查远程服务器状态：进程、磁盘、内存、网络
+- 查看应用日志：tail, grep, zcat
+- Docker 容器操作：docker ps, docker logs, docker restart
+- 系统服务管理：systemctl status/restart, journalctl -u
+
+## 不适用
+- 本地 Docker/K8s 操作 → 用 bash
+- 数据库/缓存/监控查询 → 用 service_exec
+
+## 参数
+- server_id（必填）：必须是 list_servers() 返回的有效 UUID，不是主机名
+- command（必填）：要执行的 Shell 命令
+- explanation（写操作时必填）：说明操作原因和预期影响
+
+## 前置条件
+首次使用前必须调用 list_servers() 获取有效的 server_id。
+
+## 返回格式
+{"exit_code": 0, "stdout": "...", "stderr": "...", "error": null}
+- exit_code=0 表示成功，非零表示失败
+- error 非空表示系统级错误（连接失败、超时等）
+
+## 安全规则
+- 只读命令自动执行，写操作需人工审批，危险命令被拦截
+- 系统自动去除 2>/dev/null，确保 stderr 中的权限错误等信息不丢失
+- 权限不足时加 sudo 重试
+
+## 跳板机/堡垒机
+SSH 连接路径对 Agent 透明，无需手动指定跳板机。
+
+## 最佳实践
+- 先只读命令收集证据，再考虑写操作
+- 用 tail -n 限制大文件输出，避免输出过大
+- 多个查询命令用 && 串联：hostname && df -h && free -m
+- 优先检查 Docker 容器状态：docker ps -a | grep <service>
+- 进程存活不代表服务正常，接口超时时用 service_exec 检查依赖服务
+- 超时后进程可能已启动，用 ps/pgrep 确认
+- 写操作必须在 explanation 中说明原因和风险
+"""
 
 # 匹配 2>/dev/null 和 2> /dev/null（含前导空白）
 _STDERR_DISCARD_RE = re.compile(r"\s*2>\s*/dev/null")
@@ -125,16 +175,16 @@ async def list_servers() -> list[dict]:
         ]
 
 
-async def ssh_bash(server_id: str, command: str) -> dict:
-    """Execute a shell command on the target server via SSH."""
+async def _execute_ssh(server_id: str, command: str) -> dict:
+    """Execute a shell command on the target server via SSH (internal implementation)."""
+    # Defense-in-depth: always block dangerous commands
     cmd_type = ShellSafety.classify(command)
-
-    log.info("Executing", server=server_id[:8], cmd_type=cmd_type.name, command_len=len(command))
-    log.debug("Executing", server=server_id[:8], command=command)
-
     if cmd_type == CommandType.BLOCKED:
         log.warning("BLOCKED", command=command)
         return {"error": "命令被系统拦截：此命令过于危险，禁止执行"}
+
+    log.info("Executing", server=server_id[:8], cmd_type=cmd_type.name, command_len=len(command))
+    log.debug("Executing", server=server_id[:8], command=command)
 
     try:
         connector = await get_connector(server_id)
@@ -193,3 +243,54 @@ async def ssh_bash(server_id: str, command: str) -> dict:
         "stderr": result.stderr,
         "error": None,
     }
+
+
+class SSHBashTool(BaseTool):
+    """远程服务器 SSH 命令执行工具。"""
+
+    @property
+    def name(self) -> str:
+        return "ssh_bash"
+
+    @property
+    def summary(self) -> str:
+        return "在目标服务器执行 Shell 命令（通过 SSH）"
+
+    @property
+    def prompt(self) -> str:
+        return _SSH_BASH_PROMPT
+
+    def is_read_only(self, **kwargs) -> bool:
+        return ShellSafety.classify(kwargs.get("command", "")) == CommandType.READ
+
+    def is_destructive(self, **kwargs) -> bool:
+        return ShellSafety.classify(kwargs.get("command", "")) == CommandType.DANGEROUS
+
+    def is_concurrency_safe(self, **kwargs) -> bool:
+        return self.is_read_only(**kwargs)
+
+    async def check_permissions(self, **kwargs) -> PermissionResult:
+        cmd_type = ShellSafety.classify(kwargs.get("command", ""))
+        if cmd_type == CommandType.BLOCKED:
+            return PermissionResult(PermissionBehavior.DENY, "命令被系统拦截")
+        if cmd_type == CommandType.DANGEROUS:
+            return PermissionResult(PermissionBehavior.ASK, risk_level="HIGH")
+        if cmd_type == CommandType.WRITE:
+            return PermissionResult(PermissionBehavior.ASK, risk_level="MEDIUM")
+        return PermissionResult(PermissionBehavior.ALLOW)
+
+    async def execute(self, **kwargs) -> dict:
+        return await _execute_ssh(kwargs.get("server_id", ""), kwargs.get("command", ""))
+
+    def _build_langchain_tool(self):
+        tool_self = self
+
+        async def _execute(server_id: str, command: str, explanation: str = "") -> dict:
+            result = await tool_self.execute(server_id=server_id, command=command)
+            return truncate_output(result, tool_self.max_result_size_chars)
+
+        return StructuredTool.from_function(
+            coroutine=_execute,
+            name=self.name,
+            description=self.prompt,
+        )

@@ -7,38 +7,10 @@ from sqlalchemy import select
 from src.db.connection import get_session_factory
 from src.db.models import Incident, Message, Server, Service
 from src.lib.logger import get_logger
-from src.services.post_incident.base import format_db_messages, get_main_llm
+from src.ops_agent.prompts.post_incident import SUMMARIZE_SYSTEM_PROMPT
 from src.services.post_incident.agents_md_task import auto_update_agents_md
+from src.services.post_incident.base import format_db_messages, get_mini_llm
 from src.services.post_incident.history_task import auto_save_history
-
-SUMMARIZE_SYSTEM_PROMPT = """你是一个运维报告生成器。根据完整的对话历史，生成结构化的排查报告。
-
-报告格式（Markdown）：
-
-# 事件排查报告
-
-## 事件概要
-- 标题: （简明扼要的事件标题）
-- 严重程度: （P0/P1/P2/P3）
-- 处理状态: （已解决/部分解决/待观察）
-
-## 问题描述
-什么服务受影响、症状、影响范围。
-
-## 排查过程
-按时间顺序列出关键排查步骤和发现。
-
-## 根因分析
-有证据支撑的根本原因分析。
-
-## 修复措施
-执行的修复操作及验证结果。
-
-注意事项：
-- 基于实际对话内容撰写，不编造未发生的操作或结论
-- 使用中文撰写，技术术语保持原文
-- 不要在报告末尾添加"报告生成时间"等元信息
-"""
 
 
 def _is_valid_uuid(s: str) -> bool:
@@ -229,13 +201,20 @@ async def run_post_incident_tasks(
         log.error("Post-incident tasks failed", exc_info=True)
 
 
+def _strip_analysis_block(text: str) -> str:
+    """Strip <analysis>...</analysis> scratchpad from LLM output."""
+    import re
+
+    return re.sub(r"<analysis>[\s\S]*?</analysis>", "", text, count=1).strip()
+
+
 async def _generate_summary(conversation_text: str, severity: str, sid: str) -> str:
     """用 main_model 生成 summary_md。"""
     log = get_logger(component="post_incident", sid=sid)
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        llm = get_main_llm()
+        llm = get_mini_llm()
         human_content = (
             f"请根据以下完整对话历史生成排查报告：\n\n严重程度: {severity}\n\n{conversation_text}"
         )
@@ -258,7 +237,7 @@ async def _generate_summary(conversation_text: str, severity: str, sid: str) -> 
             resp_len=len(resp.content) if resp.content else 0,
             preview=resp.content[:200] if resp.content else None,
         )
-        summary = resp.content.strip()
+        summary = _strip_analysis_block(resp.content or "")
         log.info("Summary generated", chars=len(summary))
         return summary or "报告生成失败"
     except Exception:

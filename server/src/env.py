@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     tool_call_max_retries: int = 2  # LLM 未调用工具时的最大重试次数
     command_timeout: int = 10  # 命令执行超时（秒），适用于 bash/SSH/服务查询
     max_compact_recent_chars: int = 100000  # compact 输入中最近消息的最大字符数
+    proactive_compact_chars: int = 200000  # 主动 compact 触发阈值（消息总字符数）
 
     # Cron
     skill_evolution_interval: int = 8  # skill 自进化间隔（小时）
@@ -42,7 +43,7 @@ class Settings(BaseSettings):
 
     # Security — override these in production via environment variables
     encryption_key: str = "dGVzdC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVz"
-    jwt_secret: str = "dev-jwt-secret"
+    jwt_secret: str = "024HX4wfCMjAQMsm9G3LVIhCFERo5G0-mR5s2KxBOqE"
 
     def validate_production_secrets(self) -> list[str]:
         """Return warnings if default secrets are still in use."""
@@ -51,7 +52,7 @@ class Settings(BaseSettings):
             warnings.append(
                 "ENCRYPTION_KEY is using the default dev value — set a unique key in production"
             )
-        if self.jwt_secret == "dev-jwt-secret":
+        if self.jwt_secret == "024HX4wfCMjAQMsm9G3LVIhCFERo5G0-mR5s2KxBOqE":
             warnings.append(
                 "JWT_SECRET is using the default dev value — set a unique secret in production"
             )

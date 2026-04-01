@@ -36,7 +36,7 @@ cd test && uv run pytest -k 'test_name'     # single test
 
 ### Infrastructure
 ```bash
-docker compose -f docker-compose.dev.yml up -d   # PostgreSQL 17 (pgvector) + Redis 7
+docker compose up -d   # PostgreSQL 17 (pgvector) + Redis 7
 ```
 
 ## Development Practices

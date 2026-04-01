@@ -13,6 +13,19 @@ venv/
 # Node
 node_modules/
 dist/
+dist-ssr/
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Environment
 .env
@@ -21,10 +34,16 @@ dist/
 
 # IDE
 .vscode/
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
+*.sw?
 *~
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 
 # OS
 .DS_Store

@@ -52,44 +52,50 @@ async def gather_context_node(state: MainState) -> dict:
     channel = EventPublisher.channel_for_incident(state["incident_id"])
     description = state["description"]
 
-    log.info("===== Gathering context started =====")
+    intent = state.get("intent", "incident")
+    skip_history = intent in ("question", "task")
 
-    history_cb, history_pub = _build_callback(channel, agent="history")
+    log.info("===== Gathering context started =====", intent=intent, skip_history=skip_history)
+
     kb_cb, kb_pub = _build_callback(channel, agent="kb")
+    await kb_cb("agent_status", {"status": "started"})
 
-    await asyncio.gather(
-        history_cb("agent_status", {"status": "started"}),
-        kb_cb("agent_status", {"status": "started"}),
-    )
+    history_result = None
+    if skip_history:
+        # question/task 不需要历史事件参考，只跑 KB
+        log.info("Skipping history agent (intent=%s)", intent)
+        t0 = time.monotonic()
+        kb_result = await _safe_run(run_kb_agent, description, kb_cb)
+        elapsed = time.monotonic() - t0
+        log.info("KB agent completed", elapsed=f"{elapsed:.2f}s")
+    else:
+        history_cb, history_pub = _build_callback(channel, agent="history")
+        await history_cb("agent_status", {"status": "started"})
 
-    log.info("Starting parallel sub-agents: history + kb")
-    t0 = time.monotonic()
-    history_result, kb_result = await asyncio.gather(
-        _safe_run(run_history_agent, description, history_cb),
-        _safe_run(run_kb_agent, description, kb_cb),
-    )
-    parallel_elapsed = time.monotonic() - t0
-    log.info("Parallel sub-agents completed", elapsed=f"{parallel_elapsed:.2f}s")
+        log.info("Starting parallel sub-agents: history + kb")
+        t0 = time.monotonic()
+        history_result, kb_result = await asyncio.gather(
+            _safe_run(run_history_agent, description, history_cb),
+            _safe_run(run_kb_agent, description, kb_cb),
+        )
+        parallel_elapsed = time.monotonic() - t0
+        log.info("Parallel sub-agents completed", elapsed=f"{parallel_elapsed:.2f}s")
 
-    if history_pub:
-        await history_pub.flush_remaining(channel)
+        if history_pub:
+            await history_pub.flush_remaining(channel)
+
+        history_failed = isinstance(history_result, str) and history_result.startswith("[ERROR]")
+        await history_cb("agent_status", {"status": "failed" if history_failed else "completed"})
+        log.info("History agent", status="FAILED" if history_failed else "OK")
+
     if kb_pub:
         await kb_pub.flush_remaining(channel)
-
-    history_failed = isinstance(history_result, str) and history_result.startswith("[ERROR]")
     kb_failed = isinstance(kb_result, str) and kb_result.startswith("[ERROR]")
-    await asyncio.gather(
-        history_cb("agent_status", {"status": "failed" if history_failed else "completed"}),
-        kb_cb("agent_status", {"status": "failed" if kb_failed else "completed"}),
-    )
+    await kb_cb("agent_status", {"status": "failed" if kb_failed else "completed"})
+    log.info("KB agent", status="FAILED" if kb_failed else "OK")
 
-    log.info(
-        "Sub-agents completed",
-        history="FAILED" if history_failed else "OK",
-        kb="FAILED" if kb_failed else "OK",
-    )
-
-    if isinstance(history_result, str) and not history_failed:
+    history_is_valid = isinstance(history_result, str) and not history_result.startswith("[ERROR]")
+    if history_is_valid:
         log.info("history_summary", chars=len(history_result))
         log.debug("history_summary full", history_summary=history_result)
 
@@ -136,7 +142,7 @@ async def gather_context_node(state: MainState) -> dict:
     log.info("===== Gathering context completed =====")
 
     return {
-        "incident_history_summary": history_result if isinstance(history_result, str) else None,
+        "incident_history_summary": history_result if history_is_valid else None,
         "kb_summary": kb_summary,
         "kb_project_ids": kb_project_ids,
     }

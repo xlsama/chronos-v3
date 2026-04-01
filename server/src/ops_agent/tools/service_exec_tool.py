@@ -2,12 +2,65 @@ import asyncio
 import time
 import uuid
 
+from langchain_core.tools import StructuredTool
+
 from src.env import get_settings
 from src.lib.logger import get_logger
-from src.ops_agent.tools.tool_classifier import ServiceSafety, CommandType
+from src.ops_agent.tools.base_tool import BaseTool, PermissionBehavior, PermissionResult
+from src.ops_agent.tools.truncation import truncate_output
 from src.ops_agent.tools.service_connectors.base import ServiceConnector
+from src.ops_agent.tools.safety import CommandType, ServiceSafety
 
 log = get_logger(component="service_exec")
+
+# ── Service Exec Tool Prompt ──
+
+_SERVICE_EXEC_PROMPT = """\
+绕过 SSH 直接连接服务执行命令/查询。
+
+## 支持的服务类型及命令语法
+
+| 类型 | 命令格式 | 示例 |
+|------|----------|------|
+| PostgreSQL | SQL | SELECT * FROM pg_stat_activity LIMIT 10 |
+| MySQL | SQL | SHOW PROCESSLIST; SELECT ... LIMIT 10 |
+| Redis | Redis 命令 | INFO, GET key, KEYS pattern*, DBSIZE |
+| Prometheus | PromQL | up, rate(http_requests_total[5m]) |
+| MongoDB | JSON 命令 | {"find":"coll","filter":{},"limit":10} |
+| Elasticsearch | REST 路径 | GET /_cluster/health |
+| Doris/StarRocks | SQL | 同 MySQL 语法 |
+| Kubernetes | kubectl 命令 | get pods -n default |
+| Docker | Docker 命令 | ps, inspect <id> |
+| Jenkins | API 路径 | GET /api/json |
+| Hive | HiveQL | SHOW DATABASES; SELECT ... LIMIT 10 |
+
+## 参数
+- service_id（必填）：必须是 list_services() 返回的有效 UUID
+- command（必填）：要执行的命令/查询
+- explanation（写操作时必填）：说明操作原因和预期影响
+
+## 前置条件
+首次使用前必须调用 list_services() 获取有效的 service_id 和 service_type。
+根据 service_type 选择正确的命令语法。
+
+## 返回格式
+纯文本字符串（查询结果或错误信息）。
+
+## 安全规则
+- SELECT/只读查询自动执行
+- INSERT/UPDATE/DELETE 等 DML 需人工审批
+- DROP/TRUNCATE/ALTER 等 DDL 被拦截
+- 各服务类型有独立的安全分类规则
+
+## 最佳实践
+- 数据查询必须加 LIMIT，避免全表扫描
+- 先查服务健康状态再查业务数据
+- 慢查询用 EXPLAIN 分析执行计划（MySQL/PostgreSQL）
+- Redis 避免 KEYS * 在生产环境（用 SCAN 替代）
+- ES 优先检查 /_cluster/health 判断集群状态
+- Prometheus 查询注意时间范围，避免拉取过多数据
+- 写操作必须在 explanation 中说明原因和风险
+"""
 
 # Registry of service connectors with TTL and capacity management
 _connector_registry: dict[str, tuple[ServiceConnector, float]] = {}
@@ -280,13 +333,29 @@ async def list_services() -> list[dict]:
         ]
 
 
-async def service_exec(service_id: str, command: str) -> str:
-    """Execute a command on a service. Returns plain text string."""
+async def get_service_type(service_id: str) -> str:
+    """Lookup service_type for a given service_id."""
+    if not service_id:
+        return ""
+    try:
+        from src.db.connection import get_session_factory
+        from src.db.models import Service
+
+        async with get_session_factory()() as session:
+            svc = await session.get(Service, uuid.UUID(service_id))
+            return svc.service_type if svc else ""
+    except Exception:
+        return ""
+
+
+async def _execute_service(service_id: str, command: str) -> str:
+    """Execute a command on a service (internal implementation). Returns plain text string."""
     try:
         connector = await get_service_connector(service_id)
     except ValueError as e:
         return f"错误: {e}"
 
+    # Defense-in-depth: always block dangerous commands
     cmd_type = ServiceSafety.classify(connector.service_type, command)
     if cmd_type == CommandType.BLOCKED:
         return "命令被系统拦截"
@@ -321,3 +390,55 @@ async def service_exec(service_id: str, command: str) -> str:
     if not result.success:
         return f"执行失败: {result.error}"
     return result.output
+
+
+class ServiceExecTool(BaseTool):
+    """直连服务命令执行工具（PostgreSQL/MySQL/Redis/Prometheus 等）。"""
+
+    @property
+    def name(self) -> str:
+        return "service_exec"
+
+    @property
+    def summary(self) -> str:
+        return "直连服务执行命令（PostgreSQL/MySQL/Redis/Prometheus 等）"
+
+    @property
+    def prompt(self) -> str:
+        return _SERVICE_EXEC_PROMPT
+
+    def is_read_only(self, **kwargs) -> bool:
+        # 无法同步获取 service_type，保守返回 False
+        return False
+
+    def is_concurrency_safe(self, **kwargs) -> bool:
+        return False
+
+    async def check_permissions(self, **kwargs) -> PermissionResult:
+        service_id = kwargs.get("service_id", "")
+        command = kwargs.get("command", "")
+        service_type = await get_service_type(service_id)
+        cmd_type = ServiceSafety.classify(service_type, command)
+        if cmd_type == CommandType.BLOCKED:
+            return PermissionResult(PermissionBehavior.DENY, "命令被系统拦截")
+        if cmd_type == CommandType.DANGEROUS:
+            return PermissionResult(PermissionBehavior.ASK, risk_level="HIGH")
+        if cmd_type == CommandType.WRITE:
+            return PermissionResult(PermissionBehavior.ASK, risk_level="MEDIUM")
+        return PermissionResult(PermissionBehavior.ALLOW)
+
+    async def execute(self, **kwargs) -> str:
+        return await _execute_service(kwargs.get("service_id", ""), kwargs.get("command", ""))
+
+    def _build_langchain_tool(self):
+        tool_self = self
+
+        async def _execute(service_id: str, command: str, explanation: str = "") -> str:
+            result = await tool_self.execute(service_id=service_id, command=command)
+            return truncate_output(result, tool_self.max_result_size_chars)
+
+        return StructuredTool.from_function(
+            coroutine=_execute,
+            name=self.name,
+            description=self.prompt,
+        )

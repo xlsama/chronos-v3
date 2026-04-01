@@ -8,9 +8,11 @@ import dayjs from "@/lib/dayjs";
 import { archiveIncident, getIncidents, stopIncident } from "@/api/incidents";
 import { getAttachmentUrl } from "@/api/attachments";
 import type { Attachment } from "@/lib/types";
+import { PhotoView } from "react-photo-view";
 import { isImageType } from "@/lib/file-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConstrainedPhotoProvider } from "@/components/ui/constrained-photo-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -191,31 +193,44 @@ export function IncidentList({ statusFilter, severityFilter }: IncidentListProps
                               {incident.description}
                             </p>
                             {incident.attachments && incident.attachments.length > 0 && (
-                              <div className="mt-1.5 flex items-center gap-1.5">
-                                {incident.attachments.slice(0, 4).map((att) => (
-                                  <button
-                                    key={att.id}
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setPreviewAttachment(att);
-                                    }}
-                                    className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
-                                  >
-                                    {isImageType(att.content_type) ? (
-                                      <img
-                                        src={getAttachmentUrl(att.id)}
-                                        alt={att.filename}
-                                        className="size-8 rounded object-cover"
-                                      />
-                                    ) : (
+                              <div
+                                className="mt-1.5 flex items-center gap-1.5"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                              >
+                                <ConstrainedPhotoProvider>
+                                  {incident.attachments
+                                    .slice(0, 4)
+                                    .filter((att) => isImageType(att.content_type))
+                                    .map((att) => (
+                                      <PhotoView key={att.id} src={getAttachmentUrl(att.id)}>
+                                        <button
+                                          type="button"
+                                          className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
+                                        >
+                                          <img
+                                            src={getAttachmentUrl(att.id)}
+                                            alt={att.filename}
+                                            className="size-8 rounded object-cover"
+                                          />
+                                        </button>
+                                      </PhotoView>
+                                    ))}
+                                </ConstrainedPhotoProvider>
+                                {incident.attachments
+                                  .slice(0, 4)
+                                  .filter((att) => !isImageType(att.content_type))
+                                  .map((att) => (
+                                    <button
+                                      key={att.id}
+                                      type="button"
+                                      onClick={() => setPreviewAttachment(att)}
+                                      className="shrink-0 overflow-hidden rounded border transition-opacity hover:opacity-80"
+                                    >
                                       <div className="flex size-8 items-center justify-center bg-muted text-muted-foreground">
                                         <FileText className="size-3.5" />
                                       </div>
-                                    )}
-                                  </button>
-                                ))}
+                                    </button>
+                                  ))}
                                 {incident.attachments.length > 4 && (
                                   <span className="text-xs text-muted-foreground">
                                     +{incident.attachments.length - 4}

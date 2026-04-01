@@ -2,127 +2,32 @@
 
 import time
 
-from langchain_core.messages import AIMessage, SystemMessage
-from langchain_openai import ChatOpenAI
-from openai import APIConnectionError, APITimeoutError, RateLimitError
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from langchain_core.messages import SystemMessage
 
 from src.env import get_settings
 from src.lib.logger import get_logger
-from src.ops_agent.compact import is_context_limit_error
+from src.ops_agent._llm import create_llm, invoke_with_retry, sanitize_response
+from src.ops_agent.context import (
+    build_skills_context,
+    build_system_prompt,
+    is_context_limit_error,
+    should_proactive_compact,
+)
 from src.ops_agent.prompts.investigation_agent import INVESTIGATION_AGENT_SYSTEM_PROMPT
-from src.ops_agent.shared_tools import build_skills_context, build_shared_tools
 from src.ops_agent.state import InvestigationState
-from src.ops_agent.tools.bash_tool import local_bash as _local_bash
-from src.ops_agent.tools.service_exec_tool import service_exec as _service_exec
-from src.ops_agent.tools.ssh_bash_tool import ssh_bash as _ssh_bash
-from src.ops_agent.tools.tool_classifier import CommandType, ServiceSafety, ShellSafety
+from src.ops_agent.tools.base_tool import PermissionBehavior
+from src.ops_agent.tools.approval_validation import get_tool_approval_context
+from src.ops_agent.tools.registry import (
+    APPROVAL_TOOL_NAMES,
+    build_tool_guide_for_agent,
+    build_tools_for_agent,
+)
 from src.services.skill_service import SkillService
 
 
 def build_investigation_tools():
-    """构建子 Agent 的工具集。"""
-    from langchain_core.tools import tool
-
-    @tool
-    async def ssh_bash(server_id: str, command: str, explanation: str = "") -> dict:
-        """在目标服务器执行 Shell 命令（通过 SSH）。
-        系统自动判断命令权限：只读命令直接执行，写操作需人工审批。
-        - server_id: 必须是 list_servers() 返回的有效 UUID
-        - command: 要执行的 Shell 命令
-        - explanation: 可选，写操作时提供操作说明
-        """
-        return await _ssh_bash(server_id=server_id, command=command)
-
-    @tool
-    async def bash(command: str, explanation: str = "") -> dict:
-        """在本地执行命令（docker/kubectl/systemctl/curl 等）。
-        - command: 要执行的命令
-        - explanation: 可选，写操作时提供操作说明
-        """
-        return await _local_bash(command=command)
-
-    @tool
-    async def service_exec(service_id: str, command: str, explanation: str = "") -> str:
-        """直连服务执行命令（PostgreSQL/MySQL/Redis/Prometheus 等）。
-        - service_id: 必须是 list_services() 返回的有效 UUID
-        - command: 要执行的命令/查询
-        - explanation: 可选，写操作时提供操作说明
-        """
-        return await _service_exec(service_id=service_id, command=command)
-
-    @tool
-    def ask_human(question: str) -> str:
-        """缺少关键信息时向用户提问。question 应简短精练（1-3行）。"""
-        return question
-
-    @tool
-    def report(status: str, summary: str, report: str) -> str:
-        """调查完成后调用，报告本次调查的完整结果。
-        - status: "confirmed"（假设成立）/ "eliminated"（假设排除）/ "inconclusive"（证据不足）
-        - summary: 一句话结论摘要
-        - report: 结构化排查报告（Markdown），包含排查链路、关键证据、修复操作等
-        """
-        return f"调查结果已记录: status={status}, summary={summary}"
-
-    return [
-        ssh_bash,
-        bash,
-        service_exec,
-        *build_shared_tools(),
-        ask_human,
-        report,
-    ]
-
-
-def _get_investigation_llm():
-    s = get_settings()
-    return ChatOpenAI(
-        model=s.main_model,
-        base_url=s.llm_base_url,
-        api_key=s.dashscope_api_key,
-        streaming=True,
-    )
-
-
-def _log_retry(retry_state):
-    get_logger(component="investigation").warning(
-        "LLM call failed, retrying",
-        attempt=retry_state.attempt_number,
-        error=str(retry_state.outcome.exception()),
-    )
-
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=30),
-    retry=retry_if_exception_type(
-        (
-            TimeoutError,
-            ConnectionError,
-            OSError,
-            RateLimitError,
-            APIConnectionError,
-            APITimeoutError,
-        )
-    ),
-    before_sleep=_log_retry,
-)
-async def _invoke_llm_with_retry(llm, messages):
-    return await llm.ainvoke(messages)
-
-
-def _sanitize_llm_response(response: AIMessage, valid_tool_names: set[str]) -> AIMessage:
-    """Strip invalid tool_calls when the model hallucinates an unknown tool."""
-    tool_calls = response.tool_calls if hasattr(response, "tool_calls") else []
-    unknown = [tc for tc in tool_calls if str(tc.get("name", "")).strip() not in valid_tool_names]
-    if not unknown:
-        return response
-    get_logger(component="investigation").warning(
-        "Stripping unknown tool calls",
-        tools=[tc.get("name") for tc in unknown],
-    )
-    return AIMessage(content=response.content or "")
+    """构建子 Agent 的 LangChain 工具集。"""
+    return build_tools_for_agent("investigation")
 
 
 async def investigation_agent_node(state: InvestigationState) -> dict:
@@ -131,35 +36,30 @@ async def investigation_agent_node(state: InvestigationState) -> dict:
     log = get_logger(component="investigation", sid=sid)
 
     tools = build_investigation_tools()
-    llm = _get_investigation_llm().bind_tools(tools)
+    llm = create_llm().bind_tools(tools)
 
-    # 构建 prior_findings 上下文
-    prior_findings = state.get("prior_findings", "")
-    prior_context = ""
-    if prior_findings:
-        prior_context = f"## 之前的调查发现\n\n{prior_findings}"
-
-    kb_summary = state.get("kb_summary")
-    kb_context = f"## 项目知识库上下文\n{kb_summary}" if kb_summary else ""
-
+    # 构建上下文
     skill_service = SkillService()
-    skills_context = build_skills_context(skill_service)
 
-    compact_md = state.get("compact_md")
-    compact_context = f"## 排查进展摘要（上下文压缩后）\n\n{compact_md}" if compact_md else ""
-
-    system_prompt = INVESTIGATION_AGENT_SYSTEM_PROMPT.format(
-        hypothesis_id=state["hypothesis_id"],
-        hypothesis_desc=state["hypothesis_desc"],
+    system_prompt = build_system_prompt(
+        INVESTIGATION_AGENT_SYSTEM_PROMPT,
         description=state["description"],
         severity=state["severity"],
-        prior_findings_context=prior_context,
-        kb_context=kb_context,
-        skills_context=skills_context,
-        compact_context=compact_context,
+        kb_summary=state.get("kb_summary"),
+        skills=build_skills_context(skill_service),
+        compact_md=state.get("compact_md"),
+        prior_findings=state.get("prior_findings") or None,
+        hypothesis_id=state["hypothesis_id"],
+        hypothesis_desc=state["hypothesis_desc"],
+        tool_guide=build_tool_guide_for_agent("investigation"),
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
+
+    # 主动 compact：在 LLM 调用前检查消息量，避免浪费一次失败的 API 调用
+    if should_proactive_compact(messages):
+        log.info("Proactive compact triggered", messages=len(messages))
+        return {"needs_compact": True}
 
     tool_names = [t.name for t in tools]
     log.info(
@@ -170,7 +70,7 @@ async def investigation_agent_node(state: InvestigationState) -> dict:
 
     t0 = time.monotonic()
     try:
-        response = await _invoke_llm_with_retry(llm, messages)
+        response = await invoke_with_retry(llm, messages)
     except Exception as e:
         if is_context_limit_error(e):
             log.warning("Context limit reached, triggering compact", error=str(e))
@@ -179,28 +79,15 @@ async def investigation_agent_node(state: InvestigationState) -> dict:
     elapsed = time.monotonic() - t0
     log.info("LLM responded", elapsed=f"{elapsed:.2f}s")
 
-    safe_response = _sanitize_llm_response(response, set(tool_names))
+    safe_response = sanitize_response(response, set(tool_names), component="investigation")
     return {"messages": [safe_response]}
 
 
-async def _get_service_type(service_id: str) -> str:
-    """Lookup service_type for a given service_id."""
-    if not service_id:
-        return ""
-    try:
-        from src.db.connection import get_session_factory
-        from src.db.models import Service
-        import uuid as _uuid
-
-        async with get_session_factory()() as session:
-            svc = await session.get(Service, _uuid.UUID(service_id))
-            return svc.service_type if svc else ""
-    except Exception:
-        return ""
-
-
 async def route_investigation_decision(state: InvestigationState) -> str:
-    """路由子 Agent 的下一步。"""
+    """路由子 Agent 的下一步。
+
+    权限检查统一委托给 tool.check_permissions()，不再内嵌分类器逻辑。
+    """
     sid = state["incident_id"][:8]
     log = get_logger(component="investigation", sid=sid)
 
@@ -231,8 +118,8 @@ async def route_investigation_decision(state: InvestigationState) -> str:
         if name not in valid_tool_names:
             log.warning("unknown tool -> ask_human", tool=name)
             return "ask_human"
-        if name == "report":
-            log.info("tool=report -> complete")
+        if name == "conclude":
+            log.info("tool=conclude -> complete")
             return "complete"
         if name == "ask_human":
             if state.get("ask_human_count", 0) >= 5:
@@ -240,17 +127,24 @@ async def route_investigation_decision(state: InvestigationState) -> str:
                 return "complete"
             log.info("tool=ask_human -> ask_human")
             return "ask_human"
-        if name in ("ssh_bash", "bash"):
-            cmd_type = ShellSafety.classify(tc["args"].get("command", ""), local=(name == "bash"))
-            if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
-                log.info("need_approval", tool=name, cmd_type=cmd_type.name)
-                return "need_approval"
-        if name == "service_exec":
-            service_type = await _get_service_type(tc["args"].get("service_id", ""))
-            cmd_type = ServiceSafety.classify(service_type, tc["args"].get("command", ""))
-            if cmd_type in (CommandType.WRITE, CommandType.DANGEROUS, CommandType.BLOCKED):
-                log.info("need_approval", tool="service_exec", cmd_type=cmd_type.name)
-                return "need_approval"
+
+        # 统一权限检查：委托给 tool.check_permissions()
+        if name in APPROVAL_TOOL_NAMES:
+            approval_context = await get_tool_approval_context(name, tc.get("args", {}))
+            if approval_context:
+                if approval_context.explanation_error:
+                    log.info("retry_missing_approval_explanation", tool=name)
+                    return "retry_tool_call"
+
+                perm = approval_context.permission
+                if perm.behavior in (PermissionBehavior.ASK, PermissionBehavior.DENY):
+                    log.info(
+                        "need_approval",
+                        tool=name,
+                        behavior=perm.behavior.value,
+                        risk_level=perm.risk_level,
+                    )
+                    return "need_approval"
 
     log.info("-> continue")
     return "continue"

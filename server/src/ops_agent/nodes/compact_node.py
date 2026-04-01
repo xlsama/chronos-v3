@@ -3,7 +3,7 @@
 from langchain_core.messages import HumanMessage, RemoveMessage
 
 from src.lib.logger import get_logger
-from src.ops_agent.compact import compact_investigation_agent, compact_main_agent
+from src.ops_agent.context import compact_investigation_agent, compact_main_agent
 from src.ops_agent.state import InvestigationState, MainState
 
 

@@ -1,39 +1,9 @@
-import base64
-
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import interrupt
 
 from src.lib.logger import get_logger
+from src.ops_agent._llm import build_multimodal_content, parse_resume
 from src.ops_agent.state import MainState
-
-
-def _parse_resume(user_response) -> tuple[str, list[dict]]:
-    """Extract text and optional images from a resume value.
-
-    Resume can be:
-    - str: plain text
-    - dict: {"text": "...", "images": [{"filename", "bytes", "content_type"}]}
-    """
-    if isinstance(user_response, dict) and "text" in user_response:
-        text = user_response["text"]
-        images = user_response.get("images") or []
-        return text, images
-    return str(user_response), []
-
-
-def _build_multimodal_content(text: str, images: list[dict]) -> list[dict]:
-    """Build LangChain multimodal content blocks."""
-    blocks: list[dict] = [{"type": "text", "text": text}]
-    for img in images[:5]:
-        b64 = base64.b64encode(img["bytes"]).decode()
-        mime = img.get("content_type") or "image/png"
-        blocks.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{b64}"},
-            }
-        )
-    return blocks
 
 
 async def ask_human_node(state: MainState) -> dict:
@@ -67,13 +37,13 @@ async def ask_human_node(state: MainState) -> dict:
                     from_count=state.get("tool_call_retry_count", 0),
                 )
 
-                text, images = _parse_resume(user_response)
+                text, images = parse_resume(user_response)
                 messages = [ToolMessage(content=text, tool_call_id=tc["id"])]
                 # Append a multimodal HumanMessage if images are present
                 if images:
                     messages.append(
                         HumanMessage(
-                            content=_build_multimodal_content("用户补充了以下截图：", images),
+                            content=build_multimodal_content("用户补充了以下截图：", images),
                         )
                     )
 
@@ -100,9 +70,9 @@ async def ask_human_node(state: MainState) -> dict:
     log.info("Resume", response_len=len(str(user_response)))
     log.info("Resetting tool_call_retry_count", from_count=state.get("tool_call_retry_count", 0))
 
-    text, images = _parse_resume(user_response)
+    text, images = parse_resume(user_response)
     if images:
-        content = _build_multimodal_content(text, images)
+        content = build_multimodal_content(text, images)
     else:
         content = text
 

@@ -8,7 +8,7 @@ class HypothesisResult(TypedDict):
     hypothesis_desc: str
     status: str  # "confirmed" | "eliminated" | "inconclusive"
     summary: str  # 一句话结论（用于后续子 Agent 上下文）
-    report: str  # 结构化排查报告（含排查链路、关键证据、修复操作等）
+    detail: str  # 结构化排查报告（含排查链路、关键证据、修复操作等）
 
 
 class MainState(MessagesState):
@@ -16,6 +16,9 @@ class MainState(MessagesState):
     description: str
     severity: str
     is_complete: bool
+
+    # 意图分类
+    intent: str | None  # "incident" | "question" | "task"
 
     # 上下文（来自 gather_context）
     incident_history_summary: str | None
