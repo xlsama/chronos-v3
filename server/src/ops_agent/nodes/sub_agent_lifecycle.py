@@ -13,11 +13,6 @@ from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.nodes.sub_agent_bridge import bridge_event
 from src.ops_agent.sub_agents.investigation_graph import compile_investigation_graph
 from src.ops_agent.state import MainState, HypothesisResult
-from src.ops_agent.tools.approval_validation import (
-    normalize_explanation,
-    validate_approval_explanation,
-)
-from src.ops_agent.tools.base_tool import PermissionBehavior
 from src.ops_agent.tools.registry import APPROVAL_TOOL_NAMES, get_tool
 from src.services.approval_service import ApprovalService
 from src.services.notification_service import notify_fire_and_forget
@@ -78,11 +73,7 @@ async def _create_and_publish_approval(
     if tool_instance:
         perm = await tool_instance.check_permissions(**args)
         risk_level = perm.risk_level or "MEDIUM"
-        explanation_error = validate_approval_explanation(args, perm)
-        if explanation_error:
-            raise ValueError(explanation_error)
     else:
-        perm = None
         risk_level = "MEDIUM"
     log.info(
         "Creating sub-agent approval",
@@ -98,10 +89,7 @@ async def _create_and_publish_approval(
             tool_name=tool_name,
             tool_args=orjson.dumps(args).decode(),
             risk_level=risk_level,
-            explanation=normalize_explanation(args.get("explanation")),
-            require_explanation=bool(
-                perm and perm.behavior == PermissionBehavior.ASK
-            ),
+            explanation=args.get("explanation"),
         )
     approval_id = str(approval.id)
     log.info("Approval created", approval_id=approval_id)

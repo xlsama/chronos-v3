@@ -16,11 +16,11 @@ from src.ops_agent.context import (
 from src.ops_agent.prompts.investigation_agent import INVESTIGATION_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import InvestigationState
 from src.ops_agent.tools.base_tool import PermissionBehavior
-from src.ops_agent.tools.approval_validation import get_tool_approval_context
 from src.ops_agent.tools.registry import (
     APPROVAL_TOOL_NAMES,
     build_tool_guide_for_agent,
     build_tools_for_agent,
+    get_tool,
 )
 from src.services.skill_service import SkillService
 
@@ -130,13 +130,9 @@ async def route_investigation_decision(state: InvestigationState) -> str:
 
         # 统一权限检查：委托给 tool.check_permissions()
         if name in APPROVAL_TOOL_NAMES:
-            approval_context = await get_tool_approval_context(name, tc.get("args", {}))
-            if approval_context:
-                if approval_context.explanation_error:
-                    log.info("retry_missing_approval_explanation", tool=name)
-                    return "retry_tool_call"
-
-                perm = approval_context.permission
+            tool_instance = get_tool(name)
+            if tool_instance:
+                perm = await tool_instance.check_permissions(**tc.get("args", {}))
                 if perm.behavior in (PermissionBehavior.ASK, PermissionBehavior.DENY):
                     log.info(
                         "need_approval",

@@ -216,11 +216,35 @@
   strong { font-weight: 600; }
 }
 
+.chronos-photo-preview .chronos-photo-preview__mask {
+  background: transparent !important;
+}
+
 .chronos-photo-preview .chronos-photo-preview__photo {
   scale: 0.8;
   transform-origin: center center;
   border-radius: 0.75rem;
   box-shadow: 0 24px 80px rgb(0 0 0 / 0.28);
+}
+
+.chronos-photo-preview .PhotoView-Slider__BannerWrap {
+  background: transparent;
+  padding: 0.75rem;
+}
+
+.chronos-photo-preview .PhotoView-Slider__Counter {
+  border-radius: 9999px;
+  background: rgb(15 23 42 / 0.58);
+  padding: 0.4rem 0.75rem;
+  box-shadow: 0 12px 40px rgb(15 23 42 / 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.chronos-photo-preview .PhotoView-Slider__toolbarIcon {
+  border-radius: 9999px;
+  background: rgb(15 23 42 / 0.58);
+  box-shadow: 0 12px 40px rgb(15 23 42 / 0.22);
+  backdrop-filter: blur(10px);
 }
 
 @supports not (scale: 1) {

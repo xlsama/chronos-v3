@@ -31,7 +31,7 @@ INVESTIGATION_AGENT_SYSTEM_PROMPT = (
 你是执行者，不是顾问。能修的就修，修完要验证。写操作会触发人工审批。
 
 ### 修复
-执行修复 → 若工具调用会触发人工审批，必须在 explanation 中写明原因、风险和预期影响 → 验证症状消失（curl/health check）
+执行修复 → explanation 说明原因和风险 → 验证症状消失（curl/health check）
 
 ### 报告
 调用 `conclude` 提交结果。

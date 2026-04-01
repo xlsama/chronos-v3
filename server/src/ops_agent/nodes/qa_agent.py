@@ -11,11 +11,11 @@ from src.ops_agent.context import build_skills_context, build_system_prompt
 from src.ops_agent.prompts.qa_agent import QA_AGENT_SYSTEM_PROMPT
 from src.ops_agent.state import MainState
 from src.ops_agent.tools.base_tool import PermissionBehavior
-from src.ops_agent.tools.approval_validation import get_tool_approval_context
 from src.ops_agent.tools.registry import (
     APPROVAL_TOOL_NAMES,
     build_tool_guide_for_agent,
     build_tools_for_agent,
+    get_tool,
 )
 from src.services.skill_service import SkillService
 
@@ -88,13 +88,9 @@ async def route_qa_decision(state: MainState) -> str:
             return "qa_ask_human"
         # 权限检查
         if name in APPROVAL_TOOL_NAMES:
-            approval_context = await get_tool_approval_context(name, tc.get("args", {}))
-            if approval_context:
-                if approval_context.explanation_error:
-                    log.info("retry_missing_approval_explanation", tool=name)
-                    return "qa_retry"
-
-                perm = approval_context.permission
+            tool_instance = get_tool(name)
+            if tool_instance:
+                perm = await tool_instance.check_permissions(**tc.get("args", {}))
                 if perm.behavior in (PermissionBehavior.ASK, PermissionBehavior.DENY):
                     log.info("need_approval", tool=name)
                     return "qa_approval"

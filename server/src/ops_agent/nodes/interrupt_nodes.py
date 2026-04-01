@@ -13,10 +13,6 @@ from langgraph.types import interrupt
 
 from src.lib.logger import get_logger
 from src.ops_agent.state import MainState
-from src.ops_agent.tools.approval_validation import (
-    build_missing_approval_explanation_retry_message,
-    get_missing_approval_explanation_tool_name,
-)
 
 
 # ═══════════════════════════════════════════
@@ -44,24 +40,19 @@ async def qa_retry_node(state: MainState) -> dict:
     """QA Agent 未调用工具时重试。"""
     count = state.get("tool_call_retry_count", 0)
     get_logger(component="qa_retry", sid=state["incident_id"][:8]).info("Retry", attempt=count + 1)
-    last_message = state["messages"][-1] if state.get("messages") else None
-    missing_tool_name = (
-        await get_missing_approval_explanation_tool_name(last_message) if last_message else None
-    )
-    retry_content = (
-        build_missing_approval_explanation_retry_message(missing_tool_name)
-        if missing_tool_name
-        else (
-            "[RETRY_TOOL_CALL]\n"
-            "你刚才的回复没有调用任何工具。你必须以工具调用结束每轮回复。\n"
-            '- 回答完毕 → 调用 complete(answer_md="回答内容")\n'
-            "- 需要查看信息 → 调用 list_servers / list_services / ssh_bash / bash 等\n"
-            "- 缺少信息 → 调用 ask_human(question)\n"
-            "请重新回复，这次必须调用一个工具。"
-        )
-    )
     return {
-        "messages": [HumanMessage(content=retry_content)],
+        "messages": [
+            HumanMessage(
+                content=(
+                    "[RETRY_TOOL_CALL]\n"
+                    "你刚才的回复没有调用任何工具。你必须以工具调用结束每轮回复。\n"
+                    '- 回答完毕 → 调用 complete(answer_md="回答内容")\n'
+                    "- 需要查看信息 → 调用 list_servers / list_services / ssh_bash / bash 等\n"
+                    "- 缺少信息 → 调用 ask_human(question)\n"
+                    "请重新回复，这次必须调用一个工具。"
+                )
+            )
+        ],
         "tool_call_retry_count": count + 1,
     }
 

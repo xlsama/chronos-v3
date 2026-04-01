@@ -6,10 +6,6 @@ from langgraph.types import interrupt
 from src.lib.logger import get_logger
 from src.ops_agent._llm import build_multimodal_content, parse_resume
 from src.ops_agent.state import InvestigationState
-from src.ops_agent.tools.approval_validation import (
-    build_missing_approval_explanation_retry_message,
-    get_missing_approval_explanation_tool_name,
-)
 from src.ops_agent.tools.registry import APPROVAL_TOOL_NAMES
 
 RETRY_MARKER = "[RETRY_TOOL_CALL]"
@@ -125,19 +121,7 @@ async def investigation_retry_tool_call_node(state: InvestigationState) -> dict:
     current_count = state.get("tool_call_retry_count", 0)
     log = get_logger(component="inv_retry", sid=sid)
     log.info("Retry tool call", attempt=current_count + 1)
-    last_message = state["messages"][-1] if state.get("messages") else None
-    missing_tool_name = (
-        await get_missing_approval_explanation_tool_name(last_message) if last_message else None
-    )
     return {
-        "messages": [
-            HumanMessage(
-                content=(
-                    build_missing_approval_explanation_retry_message(missing_tool_name)
-                    if missing_tool_name
-                    else RETRY_MESSAGE
-                )
-            )
-        ],
+        "messages": [HumanMessage(content=RETRY_MESSAGE)],
         "tool_call_retry_count": current_count + 1,
     }
