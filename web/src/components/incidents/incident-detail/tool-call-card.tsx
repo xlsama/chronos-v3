@@ -67,6 +67,7 @@ export const ToolCallCard = memo(function ToolCallCard({
   const approvalEntry = approvalId ? (decidedApprovals[approvalId] ?? null) : null;
   const resolvedDecision = approvalEntry?.decision ?? null;
   const supplementText = approvalEntry?.supplementText;
+  const decidedBy = approvalEntry?.decidedBy;
   const isSupplementing = pendingSupplement?.approvalId === approvalId;
   const isExpired =
     incidentStatus === "stopped" ||
@@ -77,7 +78,6 @@ export const ToolCallCard = memo(function ToolCallCard({
     mutationFn: (vars: { decision: string }) =>
       decideApproval(approvalId!, {
         decision: vars.decision,
-        decided_by: "admin",
         silent: true,
       }),
     onSuccess: (_, vars) => {
@@ -144,10 +144,10 @@ export const ToolCallCard = memo(function ToolCallCard({
       };
 
   // Decision badge component
-  const baseBadge = resolvedDecision ? (
+  const decisionBadge = resolvedDecision ? (
     <span
       className={cn(
-        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
         resolvedDecision === "approved"
           ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200"
           : resolvedDecision === "supplemented"
@@ -161,10 +161,11 @@ export const ToolCallCard = memo(function ToolCallCard({
         : resolvedDecision === "supplemented"
           ? "已补充"
           : "已拒绝"}
+      {decidedBy && (
+        <span className="opacity-70">· {decidedBy}</span>
+      )}
     </span>
   ) : null;
-
-  const decisionBadge = baseBadge;
 
   return (
     <div

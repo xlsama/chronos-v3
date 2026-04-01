@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, History } from "lucide-react";
+import { Bell, History, UserRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { IncidentHistoryPanel } from "./incident-history-panel";
 import { NotificationSettings } from "./notification-settings";
+import { ProfileSettings } from "./profile-settings";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface SettingsDialogProps {
 }
 
 const tabs = [
+  { id: "profile", label: "个人资料", icon: UserRound },
   { id: "notifications", label: "通知", icon: Bell },
   { id: "incident-history", label: "历史事件", icon: History },
 ] as const;
@@ -24,7 +26,7 @@ const tabs = [
 type TabId = (typeof tabs)[number]["id"];
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("notifications");
+  const [activeTab, setActiveTab] = useState<TabId>("profile");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -51,6 +53,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             ))}
           </nav>
           <ScrollArea className="flex-1 p-5 pt-2">
+            {activeTab === "profile" && <ProfileSettings />}
             {activeTab === "notifications" && <NotificationSettings />}
             {activeTab === "incident-history" && <IncidentHistoryPanel />}
           </ScrollArea>

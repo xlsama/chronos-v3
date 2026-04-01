@@ -7,6 +7,7 @@ from typing import Annotated
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import InjectedState
+from openai import APIConnectionError, APITimeoutError, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from src.db.connection import get_session_factory
@@ -14,6 +15,7 @@ from src.db.models import Incident
 from src.env import get_settings
 from src.lib.logger import get_logger
 from src.lib.redis import get_redis
+from src.ops_agent.compact import is_context_limit_error
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.prompts.main_agent import MAIN_AGENT_SYSTEM_PROMPT
 from src.ops_agent.shared_tools import build_skills_context, build_shared_tools
@@ -79,7 +81,7 @@ def build_main_tools():
     def ask_human(question: str) -> str:
         """当你缺少关键信息无法继续排查时，向用户提问。
         question 应简短精练（1-3行），只写你需要用户回答的关键问题。
-        分析推理写在思考过程中，不要放进 question。
+        分析推理直接写在回复中，不要放进 question。
         """
         return question
 
@@ -113,7 +115,16 @@ def _log_retry(retry_state):
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=30),
-    retry=retry_if_exception_type((TimeoutError, ConnectionError, OSError)),
+    retry=retry_if_exception_type(
+        (
+            TimeoutError,
+            ConnectionError,
+            OSError,
+            RateLimitError,
+            APIConnectionError,
+            APITimeoutError,
+        )
+    ),
     before_sleep=_log_retry,
 )
 async def _invoke_llm_with_retry(llm, messages):
@@ -170,6 +181,9 @@ async def main_agent_node(state: MainState) -> dict:
     skill_service = SkillService()
     skills_context = build_skills_context(skill_service)
 
+    compact_md = state.get("compact_md")
+    compact_context = f"## 排查进展摘要（上下文压缩后）\n\n{compact_md}" if compact_md else ""
+
     system_prompt = MAIN_AGENT_SYSTEM_PROMPT.format(
         description=state["description"],
         severity=state["severity"],
@@ -177,6 +191,7 @@ async def main_agent_node(state: MainState) -> dict:
         kb_context=kb_context,
         plan_context=plan_context,
         skills_context=skills_context,
+        compact_context=compact_context,
     )
 
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
@@ -189,7 +204,13 @@ async def main_agent_node(state: MainState) -> dict:
     )
 
     t0 = time.monotonic()
-    response = await _invoke_llm_with_retry(llm, messages)
+    try:
+        response = await _invoke_llm_with_retry(llm, messages)
+    except Exception as e:
+        if is_context_limit_error(e):
+            log.warning("Context limit reached, triggering compact", error=str(e))
+            return {"needs_compact": True}
+        raise
     elapsed = time.monotonic() - t0
     log.info("LLM responded", elapsed=f"{elapsed:.2f}s")
 
@@ -218,6 +239,11 @@ async def route_main_decision(state: MainState) -> str:
     """路由主 Agent 的下一步。"""
     sid = state["incident_id"][:8]
     log = get_logger(component="main", sid=sid)
+
+    if state.get("needs_compact"):
+        log.info("-> compact (context limit reached)")
+        return "compact"
+
     last_message = state["messages"][-1]
     tools = build_main_tools()
     valid_tool_names = {t.name for t in tools}

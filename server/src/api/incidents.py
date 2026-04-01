@@ -45,13 +45,15 @@ async def _start_agent_background(
     try:
         # Set status to investigating BEFORE starting agent
         # so the frontend sees the correct status on first query invalidation
+        thread_id = str(uuid.uuid4())
         factory = get_session_factory()
         async with factory() as session:
             incident = await session.get(Incident, uuid.UUID(incident_id))
             if incident:
                 incident.status = "investigating"
+                incident.thread_id = thread_id
                 await session.commit()
-                log.info("Status updated", sid=sid, status="investigating")
+                log.info("Status updated", sid=sid, status="investigating", thread_id=thread_id)
                 notify_fire_and_forget(
                     "investigating",
                     incident_id,
@@ -86,11 +88,12 @@ async def _start_agent_background(
         # runner.start() publishes its own error event on failure,
         # so we catch separately to avoid double-publishing.
         try:
-            thread_id = await runner.start(
+            await runner.start(
                 incident_id=incident_id,
                 description=description,
                 severity=severity,
                 image_attachments=image_attachments,
+                thread_id=thread_id,
             )
         except Exception as e:
             log.error("Agent start failed", sid=sid, error=str(e))
@@ -103,14 +106,6 @@ async def _start_agent_background(
             except Exception:
                 log.error("Failed to update incident status to error", incident_id=incident_id)
             return
-
-        # Write thread_id back after agent completes
-        async with factory() as session:
-            incident = await session.get(Incident, uuid.UUID(incident_id))
-            if incident:
-                incident.thread_id = thread_id
-                await session.commit()
-                log.info("Thread ID saved", sid=sid, thread=thread_id)
     except Exception as e:
         log.error("Failed to start agent (preparation)", incident_id=incident_id, error=str(e))
         try:
@@ -132,6 +127,30 @@ async def _start_agent_background(
                     await err_session.commit()
         except Exception:
             log.error("Failed to update incident status to error", incident_id=incident_id)
+
+
+async def _resume_agent_background(
+    coro_func,
+    incident_id: str,
+    **kwargs,
+) -> None:
+    """Wrapper that catches resume failures and sets incident status to error."""
+    try:
+        await coro_func(incident_id=incident_id, **kwargs)
+    except Exception as e:
+        log.error("Agent resume failed", incident_id=incident_id, error=str(e))
+        try:
+            factory = get_session_factory()
+            async with factory() as session:
+                incident = await session.get(Incident, uuid.UUID(incident_id))
+                if incident and incident.status not in ("stopped", "resolved"):
+                    incident.status = "error"
+                    await session.commit()
+        except Exception:
+            log.error(
+                "Failed to update incident status to error after resume failure",
+                incident_id=incident_id,
+            )
 
 
 @router.post("", response_model=IncidentResponse)
@@ -268,7 +287,7 @@ def _message_to_event(m: Message) -> dict:
         data = metadata or {}
     elif m.event_type == "resolution_confirmed":
         data = {}
-    elif m.event_type == "planner_started":
+    elif m.event_type == "plan_started":
         data = metadata or {}
     elif m.event_type in ("plan_generated", "plan_updated"):
         data = metadata or {}
@@ -437,9 +456,10 @@ async def send_user_message(
 
         runner: AgentRunner = request.app.state.agent_runner
         background_tasks.add_task(
+            _resume_agent_background,
             runner.resume_with_human_input,
+            str(incident.id),
             thread_id=incident.thread_id,
-            incident_id=str(incident.id),
             human_input=human_input,
             image_attachments=msg_image_attachments,
         )
@@ -458,9 +478,32 @@ async def send_user_message(
 
         runner: AgentRunner = request.app.state.agent_runner
         background_tasks.add_task(
+            _resume_agent_background,
             runner.resume_after_interrupt,
+            str(incident.id),
             thread_id=incident.thread_id,
-            incident_id=str(incident.id),
+            human_input=human_input,
+            image_attachments=msg_image_attachments,
+        )
+
+    # If agent errored out, allow retry from checkpoint
+    elif incident.thread_id and incident.status == "error":
+        sid = str(incident.id)[:8]
+        log.info("User message received (error recovery), resuming agent", sid=sid)
+
+        incident.status = "investigating"
+        await session.commit()
+
+        # Clear stale cancel flags before resuming
+        redis = get_redis()
+        await redis.delete(f"incident:{incident_id}:cancel")
+
+        runner: AgentRunner = request.app.state.agent_runner
+        background_tasks.add_task(
+            _resume_agent_background,
+            runner.resume_after_interrupt,
+            str(incident.id),
+            thread_id=incident.thread_id,
             human_input=human_input,
             image_attachments=msg_image_attachments,
         )
@@ -491,9 +534,10 @@ async def confirm_resolution(
         sid = str(incident.id)[:8]
         log.info("Resolution confirmed, resuming agent", sid=sid)
         background_tasks.add_task(
+            _resume_agent_background,
             runner.resume_with_human_input,
+            str(incident.id),
             thread_id=incident.thread_id,
-            incident_id=str(incident.id),
             human_input="confirmed",
         )
 

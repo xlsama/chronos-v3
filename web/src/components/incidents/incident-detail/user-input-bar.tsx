@@ -117,7 +117,6 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
       }
       await decideApproval(pendingSupplement!.approvalId, {
         decision: "supplemented",
-        decided_by: "admin",
         supplement_text: fullContent,
         silent: true,
       });
@@ -164,15 +163,17 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
     ? ""
     : isSupplementMode
       ? "输入补充说明后发送，Agent 将重新思考方案..."
-      : incidentStatus === "interrupted"
-        ? "输入内容后发送以继续排查..."
-        : isAgentWorking
-          ? "输入内容，点击停止后发送..."
-          : resolutionConfirmRequired && !resolutionConfirmResolved
-            ? "输入新问题继续排查，或点击「已解决」..."
-            : askHumanQuestion
-                ? "回复 Agent 的问题..."
-                : "向 Agent 发送消息...";
+      : incidentStatus === "error"
+        ? "发送消息以重试排查..."
+        : incidentStatus === "interrupted"
+          ? "输入内容后发送以继续排查..."
+          : isAgentWorking
+            ? "输入内容，点击停止后发送..."
+            : resolutionConfirmRequired && !resolutionConfirmResolved
+              ? "输入新问题继续排查，或点击「已解决」..."
+              : askHumanQuestion
+                  ? "回复 Agent 的问题..."
+                  : "向 Agent 发送消息...";
 
   return (
     <div className="border-t px-14 py-4">

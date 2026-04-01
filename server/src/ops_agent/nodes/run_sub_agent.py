@@ -352,6 +352,23 @@ async def _stream_sub_agent(
             ask_human_streamed = bridge_result["ask_human_streamed"]
     except Exception as e:
         log.error("Sub-agent stream error", error=str(e))
+        try:
+            await publisher.flush_remaining(channel)
+        except Exception:
+            pass
+        try:
+            await publisher.publish(
+                channel,
+                "sub_agent_completed",
+                {
+                    "hypothesis_id": hypothesis_id,
+                    "status": "failed",
+                    "summary": f"排查异常: {str(e)[:200]}",
+                    "phase": "investigation",
+                },
+            )
+        except Exception:
+            pass
         raise
 
     await publisher.flush_remaining(channel)
@@ -466,6 +483,23 @@ async def _resume_sub_agent(
             approval_tool_name = bridge_result.get("approval_tool_name", approval_tool_name)
     except Exception as e:
         log.error("Sub-agent resume stream error", error=str(e))
+        try:
+            await publisher.flush_remaining(channel)
+        except Exception:
+            pass
+        try:
+            await publisher.publish(
+                channel,
+                "sub_agent_completed",
+                {
+                    "hypothesis_id": hypothesis_id,
+                    "status": "failed",
+                    "summary": f"排查异常: {str(e)[:200]}",
+                    "phase": "investigation",
+                },
+            )
+        except Exception:
+            pass
         raise
 
     await publisher.flush_remaining(channel)
@@ -502,6 +536,7 @@ async def _bridge_event(
     approval_tool_name: str = "",
 ) -> dict:
     """桥接子 Agent 事件到 SSE channel，附加 sub_agent_id。"""
+    log = get_logger(component="bridge_event")
     kind = event.get("event")
     metadata = event.get("metadata", {})
     node = metadata.get("langgraph_node", "")
@@ -515,96 +550,104 @@ async def _bridge_event(
             "approval_tool_name": approval_tool_name,
         }
 
-    if kind == "on_chat_model_stream":
-        chunk = event["data"].get("chunk")
-        if chunk and hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
-            for tcc in chunk.tool_call_chunks:
-                if tcc.get("name") == "report":
-                    await publisher.publish(
-                        channel,
-                        "sub_agent_reporting",
-                        {"hypothesis_id": hypothesis_id, "phase": "investigation"},
-                    )
-        if chunk and chunk.content and not ask_human_active:
-            thinking_buffer += chunk.content
-            await publisher.publish(
-                channel,
-                "thinking",
-                {
-                    "content": chunk.content,
+    try:
+        if kind == "on_chat_model_stream":
+            chunk = event["data"].get("chunk")
+            if chunk and hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
+                for tcc in chunk.tool_call_chunks:
+                    if tcc.get("name") == "report":
+                        await publisher.publish(
+                            channel,
+                            "sub_agent_reporting",
+                            {"hypothesis_id": hypothesis_id, "phase": "investigation"},
+                        )
+            if chunk and chunk.content and not ask_human_active:
+                thinking_buffer += chunk.content
+                await publisher.publish(
+                    channel,
+                    "thinking",
+                    {
+                        "content": chunk.content,
+                        "phase": "investigation",
+                        "sub_agent_id": hypothesis_id,
+                    },
+                )
+
+        elif kind == "on_chat_model_end":
+            if not ask_human_active:
+                thinking_buffer = ""
+                await publisher.publish(
+                    channel,
+                    "thinking_done",
+                    {"phase": "investigation", "sub_agent_id": hypothesis_id},
+                )
+
+        elif kind == "on_tool_start":
+            name = event.get("name", "")
+            if name in ("report", "ask_human", "read_skill"):
+                pass
+            else:
+                run_id = event.get("run_id", "")
+                tool_use_data: dict = {
+                    "name": name,
+                    "args": event["data"].get("input", {}),
+                    "tool_call_id": run_id,
                     "phase": "investigation",
                     "sub_agent_id": hypothesis_id,
-                },
-            )
+                }
+                # 标记已批准的 tool_use 事件
+                if approval_id and name == approval_tool_name:
+                    tool_use_data["approval_id"] = approval_id
+                await publisher.publish(channel, "tool_use", tool_use_data)
 
-    elif kind == "on_chat_model_end":
-        if not ask_human_active:
-            thinking_buffer = ""
-            await publisher.publish(
-                channel,
-                "thinking_done",
-                {"phase": "investigation", "sub_agent_id": hypothesis_id},
-            )
-
-    elif kind == "on_tool_start":
-        name = event.get("name", "")
-        if name in ("report", "ask_human", "read_skill"):
-            pass
-        else:
-            run_id = event.get("run_id", "")
-            tool_use_data: dict = {
-                "name": name,
-                "args": event["data"].get("input", {}),
-                "tool_call_id": run_id,
-                "phase": "investigation",
-                "sub_agent_id": hypothesis_id,
-            }
-            # 标记已批准的 tool_use 事件
-            if approval_id and name == approval_tool_name:
-                tool_use_data["approval_id"] = approval_id
-            await publisher.publish(channel, "tool_use", tool_use_data)
-
-    elif kind == "on_tool_end":
-        name = event.get("name", "")
-        if name in ("report", "ask_human"):
-            pass
-        elif name == "read_skill":
-            args = event["data"].get("input", {})
-            output, _ = normalize_tool_output(event["data"].get("output", ""))
-            success = not output.startswith("未找到")
-            parts = args.get("path", "").split("/", 1)
-            slug = parts[0]
-            file_path = parts[1] if len(parts) > 1 else None
-            await publisher.publish(
-                channel,
-                "skill_read",
-                {
-                    "skill_slug": slug,
-                    "skill_name": file_path or slug,
-                    "content": output,
-                    "success": success,
+        elif kind == "on_tool_end":
+            name = event.get("name", "")
+            if name in ("report", "ask_human"):
+                pass
+            elif name == "read_skill":
+                args = event["data"].get("input", {})
+                output, _ = normalize_tool_output(event["data"].get("output", ""))
+                success = not output.startswith("未找到")
+                parts = args.get("path", "").split("/", 1)
+                slug = parts[0]
+                file_path = parts[1] if len(parts) > 1 else None
+                await publisher.publish(
+                    channel,
+                    "skill_read",
+                    {
+                        "skill_slug": slug,
+                        "skill_name": file_path or slug,
+                        "content": output,
+                        "success": success,
+                        "phase": "investigation",
+                        "sub_agent_id": hypothesis_id,
+                    },
+                )
+            else:
+                run_id = event.get("run_id", "")
+                output_raw = event["data"].get("output", "")
+                output_str, status = normalize_tool_output(output_raw)
+                tool_result_data: dict = {
+                    "name": name,
+                    "output": output_str,
+                    "tool_call_id": run_id,
+                    "status": status,
                     "phase": "investigation",
                     "sub_agent_id": hypothesis_id,
-                },
-            )
-        else:
-            run_id = event.get("run_id", "")
-            output_raw = event["data"].get("output", "")
-            output_str, status = normalize_tool_output(output_raw)
-            tool_result_data: dict = {
-                "name": name,
-                "output": output_str,
-                "tool_call_id": run_id,
-                "status": status,
-                "phase": "investigation",
-                "sub_agent_id": hypothesis_id,
-            }
-            # 标记已批准的 tool_result 事件，并清除 approval 标记
-            if approval_id and name == approval_tool_name:
-                tool_result_data["approval_id"] = approval_id
-                approval_id = ""
-                approval_tool_name = ""
-            await publisher.publish(channel, "tool_result", tool_result_data)
+                }
+                # 标记已批准的 tool_result 事件，并清除 approval 标记
+                if approval_id and name == approval_tool_name:
+                    tool_result_data["approval_id"] = approval_id
+                    approval_id = ""
+                    approval_tool_name = ""
+                await publisher.publish(channel, "tool_result", tool_result_data)
+    except Exception as e:
+        log.warning(
+            "Failed to bridge sub-agent event",
+            kind=kind,
+            hypothesis=hypothesis_id,
+            error=str(e),
+        )
 
     return {
         "thinking_buffer": thinking_buffer,

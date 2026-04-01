@@ -48,9 +48,9 @@ export function useIncidentStream(
     setResolutionConfirmResolved,
     setWaitingForAgent,
     setApprovalDecided,
-    setPlannerPlanMd,
-    appendPlannerThinking,
-    setPlannerProgress,
+    setPlanMd,
+    appendPlanThinking,
+    setPlanProgress,
     endRound,
     startInvestigation,
     completeInvestigation,
@@ -235,11 +235,11 @@ export function useIncidentStream(
             } else if (event.event_type === "resolution_confirmed") {
               setResolutionConfirmResolved(true);
             } else if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
-              setPlannerPlanMd((event.data.plan_md as string) || "");
+              setPlanMd((event.data.plan_md as string) || "");
               if (event.event_type === "plan_updated" && phase === "investigation") {
                 addEvent(event);
               }
-            } else if (event.event_type === "planner_started" || event.event_type === "planner_progress") {
+            } else if (event.event_type === "plan_started" || event.event_type === "plan_progress") {
               // skip — phase update handled below
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
@@ -396,10 +396,10 @@ export function useIncidentStream(
               setAskHumanQuestion(askHumanStreamContent);
               clearAskHumanStream();
             }
-          } else if (event.event_type === "planner_started") {
+          } else if (event.event_type === "plan_started") {
             updatePhase("planning");
-          } else if (event.event_type === "planner_progress") {
-            setPlannerProgress(event.data.status as string);
+          } else if (event.event_type === "plan_progress") {
+            setPlanProgress(event.data.status as string);
             updatePhase("planning");
           } else if (event.event_type === "thinking" && event.data.sub_agent_id) {
             // Route thinking to investigation sub-agent
@@ -443,14 +443,14 @@ export function useIncidentStream(
             setWaitingForAgent(false);
             if (phase === "planning") {
               updatePhase("planning");
-              appendPlannerThinking(event.data.content as string);
+              appendPlanThinking(event.data.content as string);
             } else {
               updatePhase("investigation");
               appendThinking(event.data.content as string);
             }
           } else if (event.event_type === "thinking_done") {
             if (phase === "planning") {
-              // Planner thinking done — structured result event will follow
+              // Plan thinking done — structured result event will follow
             } else {
               const { thinkingContent } =
                 useIncidentStreamStore.getState();
@@ -490,7 +490,7 @@ export function useIncidentStream(
               clearAnswer();
             }
           } else if (event.event_type === "plan_generated" || event.event_type === "plan_updated") {
-            setPlannerPlanMd((event.data.plan_md as string) || "");
+            setPlanMd((event.data.plan_md as string) || "");
             // plan_updated during investigation → also add to timeline for inline indicator
             if (event.event_type === "plan_updated" && phase === "investigation") {
               addEvent(event);
@@ -498,6 +498,24 @@ export function useIncidentStream(
             updatePhase(phase || "planning");
           } else if (event.event_type === "sub_agent_started") {
             updatePhase("investigation");
+            // Flush main agent thinking/answer buffers before creating investigation
+            const { thinkingContent: thk, answerContent: ans } = useIncidentStreamStore.getState();
+            if (thk) {
+              addEvent({
+                event_type: "thinking",
+                data: { content: thk },
+                timestamp: event.timestamp,
+              });
+              clearThinking();
+            }
+            if (ans) {
+              addEvent({
+                event_type: "answer",
+                data: { content: ans },
+                timestamp: event.timestamp,
+              });
+              clearAnswer();
+            }
             startInvestigation(
               event.data.hypothesis_id as string,
               event.data.hypothesis_title as string,

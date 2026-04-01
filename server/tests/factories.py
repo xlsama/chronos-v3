@@ -66,6 +66,17 @@ def make_approval_decision_payload(**overrides) -> dict:
     return defaults
 
 
+def make_register_payload(**overrides) -> dict:
+    hex = uuid.uuid4().hex[:6]
+    defaults = {
+        "email": f"test-{hex}@chronos.dev",
+        "password": "Test1234!",
+        "name": f"Test User {hex}",
+    }
+    defaults.update(overrides)
+    return defaults
+
+
 def make_notification_settings_payload(**overrides) -> dict:
     defaults = {
         "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/test-hook",

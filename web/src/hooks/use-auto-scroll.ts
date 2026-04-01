@@ -31,6 +31,7 @@ export function useAutoScroll(
   const scrollRafId = useRef(0);
   const mutationTimerId = useRef<ReturnType<typeof setTimeout>>(undefined);
   const resizeRafId = useRef(0);
+  const contentResizeRafId = useRef(0);
 
   // scroll 事件：rAF 节流，检测用户是否在底部
   useEffect(() => {
@@ -73,6 +74,12 @@ export function useAutoScroll(
       mutationTimerId.current = setTimeout(() => {
         mutationTimerId.current = undefined;
         doScroll();
+        // DOM 变化后重新检测是否在底部（覆盖折叠/展开导致内容高度变化的场景）
+        // 只更新 UI 状态，不动 shouldAutoScroll（它只由用户滚动行为控制）
+        const atBottom =
+          scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
+          threshold;
+        setIsAtBottom(atBottom);
       }, 150);
     });
 
@@ -117,6 +124,33 @@ export function useAutoScroll(
       if (resizeRafId.current) cancelAnimationFrame(resizeRafId.current);
     };
   }, [scrollEl, enabled, smooth, threshold]);
+
+  // ResizeObserver on content children：检测内容高度变化（覆盖 CSS 动画、Virtuoso 懒渲染等场景）
+  // MutationObserver 只能捕获 DOM 节点增删，无法捕获 framer-motion 的 height 动画（纯 style 变化）
+  // 通过监听滚动容器子元素的 resize，能在动画过程中实时更新 isAtBottom
+  useEffect(() => {
+    if (!scrollEl) return;
+
+    const ro = new ResizeObserver(() => {
+      if (contentResizeRafId.current) cancelAnimationFrame(contentResizeRafId.current);
+      contentResizeRafId.current = requestAnimationFrame(() => {
+        contentResizeRafId.current = 0;
+        const atBottom =
+          scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight <
+          threshold;
+        setIsAtBottom(atBottom);
+      });
+    });
+
+    for (const child of Array.from(scrollEl.children)) {
+      ro.observe(child);
+    }
+
+    return () => {
+      ro.disconnect();
+      if (contentResizeRafId.current) cancelAnimationFrame(contentResizeRafId.current);
+    };
+  }, [scrollEl, threshold]);
 
   const scrollToBottom = useCallback(() => {
     shouldAutoScroll.current = true;

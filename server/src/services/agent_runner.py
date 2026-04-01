@@ -62,9 +62,16 @@ class AgentRunner:
     def _format_agent_error(exc: Exception) -> str:
         """Normalize runtime errors into user-readable messages."""
         from langgraph.errors import GraphRecursionError
+        from openai import AuthenticationError, PermissionDeniedError, RateLimitError
 
         if isinstance(exc, GraphRecursionError):
             return "Agent 排查步骤超出上限，问题可能过于复杂。请补充更具体的信息后重试。"
+        if isinstance(exc, PermissionDeniedError):
+            return "LLM API 额度已耗尽或权限不足（403），请充值后发送消息重试。"
+        if isinstance(exc, RateLimitError):
+            return "LLM API 请求频率超限（429），请稍后发送消息重试。"
+        if isinstance(exc, AuthenticationError):
+            return "LLM API 认证失败（401），请检查 API Key 配置。"
         if isinstance(exc, TimeoutError):
             return "Agent 调用 LLM 超时，请稍后重试。"
         if isinstance(exc, (ConnectionError, OSError)):
@@ -96,13 +103,14 @@ class AgentRunner:
         description: str,
         severity: str,
         image_attachments: list[dict] | None = None,
+        thread_id: str | None = None,
     ) -> str:
         self._thinking_done_sent = False
         self._ask_human_streamed = False
         self._reset_ask_human_stream_state()
         sid = incident_id[:8]
         log = get_logger(component="main", sid=sid)
-        thread_id = str(uuid.uuid4())
+        thread_id = thread_id or str(uuid.uuid4())
         channel = EventPublisher.channel_for_incident(incident_id)
 
         config = {
@@ -640,7 +648,7 @@ class AgentRunner:
         node = metadata.get("langgraph_node", "")
         if node == "gather_context":
             return "gather_context", "history"
-        if node == "planner":
+        if node == "plan":
             return "planning", ""
         return "investigation", ""
 

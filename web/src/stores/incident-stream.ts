@@ -30,9 +30,9 @@ interface IncidentStreamState {
   events: SSEEvent[];
   historyAgentState: SubAgentState;
   kbAgentState: SubAgentState;
-  plannerPlanMd: string;
-  plannerThinkingContent: string;
-  plannerProgress: string;
+  planMd: string;
+  planThinkingContent: string;
+  planProgress: string;
   currentRound: number;
   roundSummaries: { round: number; summary: string }[];
   // Investigation sub-agents (new architecture)
@@ -47,14 +47,14 @@ interface IncidentStreamState {
   isWaitingForAgent: boolean;
   resolutionConfirmRequired: boolean;
   resolutionConfirmResolved: boolean;
-  decidedApprovals: Record<string, { decision: string; supplementText?: string }>;
+  decidedApprovals: Record<string, { decision: string; supplementText?: string; decidedBy?: string }>;
   pendingSupplement: { approvalId: string } | null;
   scrollToBottomTrigger: number;
   addEvent: (event: SSEEvent) => void;
-  setPlannerPlanMd: (md: string) => void;
-  appendPlannerThinking: (content: string) => void;
-  clearPlannerThinking: () => void;
-  setPlannerProgress: (status: string) => void;
+  setPlanMd: (md: string) => void;
+  appendPlanThinking: (content: string) => void;
+  clearPlanThinking: () => void;
+  setPlanProgress: (status: string) => void;
   endRound: (round: number, summary: string) => void;
   startInvestigation: (hypothesisId: string, hypothesisTitle: string, hypothesisDesc: string) => void;
   completeInvestigation: (hypothesisId: string, status: string, summary: string) => void;
@@ -78,7 +78,7 @@ interface IncidentStreamState {
   setResolutionConfirmRequired: (required: boolean) => void;
   setWaitingForAgent: (waiting: boolean) => void;
   setResolutionConfirmResolved: (resolved: boolean) => void;
-  setApprovalDecided: (approvalId: string, decision: string, supplementText?: string) => void;
+  setApprovalDecided: (approvalId: string, decision: string, supplementText?: string, decidedBy?: string) => void;
   setPendingSupplement: (pending: { approvalId: string } | null) => void;
   triggerScrollToBottom: () => void;
   setConnected: (connected: boolean) => void;
@@ -102,9 +102,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   events: [],
   historyAgentState: emptySubAgent(),
   kbAgentState: emptySubAgent(),
-  plannerPlanMd: "",
-  plannerThinkingContent: "",
-  plannerProgress: "",
+  planMd: "",
+  planThinkingContent: "",
+  planProgress: "",
   currentRound: 1,
   roundSummaries: [],
   investigations: [],
@@ -214,14 +214,14 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       };
     }),
 
-  setPlannerPlanMd: (md) => set({ plannerPlanMd: md, plannerThinkingContent: "", plannerProgress: "" }),
+  setPlanMd: (md) => set({ planMd: md, planThinkingContent: "", planProgress: "" }),
 
-  appendPlannerThinking: (content) =>
-    set((state) => ({ plannerThinkingContent: state.plannerThinkingContent + content })),
+  appendPlanThinking: (content) =>
+    set((state) => ({ planThinkingContent: state.planThinkingContent + content })),
 
-  clearPlannerThinking: () => set({ plannerThinkingContent: "" }),
+  clearPlanThinking: () => set({ planThinkingContent: "" }),
 
-  setPlannerProgress: (status) => set({ plannerProgress: status }),
+  setPlanProgress: (status) => set({ planProgress: status }),
 
   endRound: (round, summary) =>
     set((state) => ({
@@ -326,11 +326,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   setResolutionConfirmResolved: (resolved) => set({ resolutionConfirmResolved: resolved }),
 
-  setApprovalDecided: (approvalId, decision, supplementText) =>
+  setApprovalDecided: (approvalId, decision, supplementText, decidedBy) =>
     set((state) => ({
       decidedApprovals: {
         ...state.decidedApprovals,
-        [approvalId]: { decision, supplementText },
+        [approvalId]: { decision, supplementText, decidedBy },
       },
     })),
 
@@ -345,7 +345,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     const historyEvents: SSEEvent[] = [];
     const kbEvents: SSEEvent[] = [];
     const mainEvents: SSEEvent[] = [];
-    const decided: Record<string, { decision: string; supplementText?: string }> = {};
+    const decided: Record<string, { decision: string; supplementText?: string; decidedBy?: string }> = {};
     let askQuestion: string | null = null;
     let lastAskHumanIndex = -1;
     let hasUserMessageAfterAsk = false;
@@ -369,6 +369,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         decided[event.data.approval_id as string] = {
           decision: event.data.decision as string,
           supplementText: event.data.supplement_text as string | undefined,
+          decidedBy: event.data.decided_by as string | undefined,
         };
         continue;
       }
@@ -447,8 +448,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // planner_started / planner_progress → skip (no UI state needed)
-      if (event.event_type === "planner_started" || event.event_type === "planner_progress") {
+      // plan_started / plan_progress → skip (no UI state needed)
+      if (event.event_type === "plan_started" || event.event_type === "plan_progress") {
         continue;
       }
 
@@ -482,7 +483,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // Skip planner thinking — already represented by plannerPlanMd
+      // Skip plan thinking — already represented by planMd
       if (event.event_type === "thinking" && phase === "planning") {
         continue;
       }
@@ -548,7 +549,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       events: mainEvents,
       historyAgentState: { events: historyEvents, thinkingContent: "", status: historyStatus },
       kbAgentState: { events: kbEvents, thinkingContent: "", status: kbStatus },
-      plannerPlanMd: loadedPlanMd,
+      planMd: loadedPlanMd,
       currentRound: loadedCurrentRound,
       roundSummaries: loadedRoundSummaries,
       investigations: loadedInvestigations,
@@ -567,9 +568,9 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       events: [],
       historyAgentState: emptySubAgent(),
       kbAgentState: emptySubAgent(),
-      plannerPlanMd: "",
-      plannerThinkingContent: "",
-      plannerProgress: "",
+      planMd: "",
+      planThinkingContent: "",
+      planProgress: "",
       currentRound: 1,
       roundSummaries: [],
       investigations: [],

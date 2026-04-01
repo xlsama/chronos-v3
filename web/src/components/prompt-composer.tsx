@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Loader2, Mic, Paperclip, Plus, Send, Square, X } from "lucide-react";
+import { ArrowUp, Check, Loader2, Mic, Paperclip, Plus, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { TextDotsLoader } from "@/components/ui/loader";
@@ -306,7 +306,7 @@ export function PromptComposer({
                       disabled={disabled || isLoading || (!text.trim() && files.length === 0)}
                       data-testid="submit-incident"
                     >
-                      <Send className="size-4 -translate-x-px translate-y-px" />
+                      <ArrowUp className="size-4" />
                     </Button>
                   )}
                 </motion.div>

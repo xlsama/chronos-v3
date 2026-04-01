@@ -49,6 +49,10 @@ class MainState(MessagesState):
     ask_human_count: int
     tool_call_retry_count: int
 
+    # compact
+    compact_md: str | None
+    needs_compact: bool
+
 
 class InvestigationState(MessagesState):
     incident_id: str
@@ -65,3 +69,7 @@ class InvestigationState(MessagesState):
     approval_supplement: str | None
     ask_human_count: int
     tool_call_retry_count: int
+
+    # compact
+    compact_md: str | None
+    needs_compact: bool

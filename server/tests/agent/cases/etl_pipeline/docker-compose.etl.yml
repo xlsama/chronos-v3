@@ -1,0 +1,59 @@
+# ETL Pipeline 测试场景 - 3 个 MySQL 实例模拟上下游数据链路
+# Usage: docker compose -f server/tests/agent/cases/etl_pipeline/docker-compose.etl.yml up -d --wait
+services:
+  mysql-etl-source:
+    image: mysql:8.0
+    ports:
+      - "13307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: sourcepass
+      MYSQL_DATABASE: source_db
+      MYSQL_USER: etl_user
+      MYSQL_PASSWORD: sourcepass
+    volumes:
+      - ./init/source_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+
+  mysql-etl-staging:
+    image: mysql:8.0
+    ports:
+      - "13308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: stagingpass
+      MYSQL_DATABASE: staging_db
+      MYSQL_USER: etl_user
+      MYSQL_PASSWORD: stagingpass
+    volumes:
+      - ./init/staging_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+
+  mysql-etl-target:
+    image: mysql:8.0
+    ports:
+      - "13309:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: targetpass
+      MYSQL_DATABASE: target_db
+      MYSQL_USER: etl_user
+      MYSQL_PASSWORD: targetpass
+    volumes:
+      - ./init/target_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 3s
+      timeout: 2s
+      retries: 15

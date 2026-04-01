@@ -14,6 +14,38 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page_size: int
 
 
+class RegisterRequest(BaseModel):
+    email: str = Field(..., pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(..., min_length=6)
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserResponse(BaseModel):
+    id: uuid.UUID
+    email: str
+    name: str
+    avatar: str | None = None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str = Field(..., min_length=6)
+
+
 class ProjectCreate(BaseModel):
     name: str
     slug: str | None = None
@@ -232,7 +264,6 @@ class ApprovalResponse(BaseModel):
 
 class ApprovalDecisionRequest(BaseModel):
     decision: Literal["approved", "rejected", "supplemented"]
-    decided_by: str = "admin"
     supplement_text: str | None = None
 
 

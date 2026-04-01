@@ -21,9 +21,9 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
 
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from src.services.post_incident.base import get_mini_llm
+    from src.services.post_incident.base import get_main_llm
 
-    llm = get_mini_llm()
+    llm = get_main_llm()
     log.info(
         "Generating title and severity",
         summary_md_len=len(summary_md),
@@ -76,9 +76,9 @@ async def _generate_title_and_severity(summary_md: str) -> tuple[str, str]:
 async def _generate_filename(title: str) -> str:
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from src.services.post_incident.base import get_mini_llm
+    from src.services.post_incident.base import get_main_llm
 
-    llm = get_mini_llm()
+    llm = get_main_llm()
     log.info("Generating filename", title=title)
     resp = await llm.ainvoke(
         [
@@ -103,9 +103,9 @@ async def _generate_filename(title: str) -> str:
 async def _merge_summaries(existing_md: str, new_md: str) -> str | None:
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from src.services.post_incident.base import get_mini_llm
+    from src.services.post_incident.base import get_main_llm
 
-    llm = get_mini_llm()
+    llm = get_main_llm()
     log.info("Merging summaries", existing_len=len(existing_md), new_len=len(new_md))
     resp = await llm.ainvoke(
         [

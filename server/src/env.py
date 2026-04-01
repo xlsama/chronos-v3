@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # DashScope / Bailian
     dashscope_api_key: str = ""
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    main_model: str = "qwen3.5-plus"
+    main_model: str = "kimi-k2.5"
     mini_model: str = "qwen3.5-flash"
     embedding_model: str = "text-embedding-v4"
     embedding_dimension: int = 1024
@@ -27,10 +27,11 @@ class Settings(BaseSettings):
     dashscope_ws_url: str = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
 
     # Agent
-    planner_thinking: bool = False  # planner 是否启用 thinking 模式
+
     agent_recursion_limit: int = 200
     tool_call_max_retries: int = 2  # LLM 未调用工具时的最大重试次数
     command_timeout: int = 10  # 命令执行超时（秒），适用于 bash/SSH/服务查询
+    max_compact_recent_chars: int = 100000  # compact 输入中最近消息的最大字符数
 
     # Cron
     skill_evolution_interval: int = 8  # skill 自进化间隔（小时）

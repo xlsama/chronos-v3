@@ -430,8 +430,6 @@ export function InvestigationPhase({
 
 
   const mergedItems = useMemo((): MergedItem[] => {
-    if (!hasInvestigations) return [];
-
     const merged: MergedItem[] = [];
 
     for (let i = 0; i < timelineItems.length; i++) {
@@ -449,12 +447,14 @@ export function InvestigationPhase({
       merged.push({ kind: "investigation", inv, ts: firstTs });
     }
 
-    merged.sort((a, b) => {
-      if (!a.ts && !b.ts) return 0;
-      if (!a.ts) return 1;
-      if (!b.ts) return -1;
-      return a.ts.localeCompare(b.ts);
-    });
+    if (hasInvestigations) {
+      merged.sort((a, b) => {
+        if (!a.ts && !b.ts) return 0;
+        if (!a.ts) return 1;
+        if (!b.ts) return -1;
+        return a.ts.localeCompare(b.ts);
+      });
+    }
 
     return merged;
   }, [timelineItems, investigations, hasInvestigations]);
@@ -680,53 +680,7 @@ export function InvestigationPhase({
 
   return (
     <div className="space-y-3">
-      {hasInvestigations ? (
-        scrollParent && mergedItems.length > 0 ? (
-          <Virtuoso
-            customScrollParent={scrollParent}
-            data={mergedItems}
-            computeItemKey={(index, item) =>
-              item.kind === "investigation"
-                ? `inv-${item.inv.hypothesisId}`
-                : `tl-${item.idx}`
-            }
-            increaseViewportBy={{ top: 400, bottom: 400 }}
-            itemContent={(index, item) => (
-              <div className={index < mergedItems.length - 1 ? "pb-3" : ""}>
-                {item.kind === "investigation"
-                  ? renderInvestigationCard(item.inv)
-                  : renderTimelineItem(item.item, item.idx)}
-              </div>
-            )}
-          />
-        ) : (
-          mergedItems.map((m) =>
-            m.kind === "investigation" ? (
-              <div key={`inv-${m.inv.hypothesisId}`}>
-                {renderInvestigationCard(m.inv)}
-              </div>
-            ) : (
-              <div key={`tl-${m.idx}`}>{renderTimelineItem(m.item, m.idx)}</div>
-            ),
-          )
-        )
-      ) : totalRounds <= 1 ? (
-        scrollParent && timelineItems.length > 0 ? (
-          <Virtuoso
-            customScrollParent={scrollParent}
-            data={timelineItems}
-            computeItemKey={(index) => `tl-${index}`}
-            increaseViewportBy={{ top: 400, bottom: 400 }}
-            itemContent={(index, item) => (
-              <div className={index < timelineItems.length - 1 ? "pb-3" : ""}>
-                {renderTimelineItem(item, index)}
-              </div>
-            )}
-          />
-        ) : (
-          timelineItems.map((item, i) => renderTimelineItem(item, i))
-        )
-      ) : (
+      {totalRounds > 1 && !hasInvestigations ? (
         Array.from(roundGrouped.entries()).map(([round, items]) => {
           const isCurrentRound = round === currentRound;
           const isExpanded = isCurrentRound || expandedRounds.has(round);
@@ -769,6 +723,34 @@ export function InvestigationPhase({
             </div>
           );
         })
+      ) : scrollParent && mergedItems.length > 0 ? (
+        <Virtuoso
+          customScrollParent={scrollParent}
+          data={mergedItems}
+          computeItemKey={(_index, item) =>
+            item.kind === "investigation"
+              ? `inv-${item.inv.hypothesisId}`
+              : `tl-${item.idx}`
+          }
+          increaseViewportBy={{ top: 400, bottom: 400 }}
+          itemContent={(index, item) => (
+            <div className={index < mergedItems.length - 1 ? "pb-3" : ""}>
+              {item.kind === "investigation"
+                ? renderInvestigationCard(item.inv)
+                : renderTimelineItem(item.item, item.idx)}
+            </div>
+          )}
+        />
+      ) : (
+        mergedItems.map((m) =>
+          m.kind === "investigation" ? (
+            <div key={`inv-${m.inv.hypothesisId}`}>
+              {renderInvestigationCard(m.inv)}
+            </div>
+          ) : (
+            <div key={`tl-${m.idx}`}>{renderTimelineItem(m.item, m.idx)}</div>
+          ),
+        )
       )}
 
       {!hasInvestigations && isTransitioning && timelineItems.length === 0 && !hasThinking && (

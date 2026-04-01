@@ -3,6 +3,7 @@
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from src.ops_agent.nodes.compact import investigation_compact_node
 from src.ops_agent.sub_agents.investigation_agent import (
     build_investigation_tools,
     investigation_agent_node,
@@ -36,6 +37,7 @@ def build_investigation_graph():
     graph.add_node("human_approval", investigation_human_approval_node)
     graph.add_node("ask_human", investigation_ask_human_node)
     graph.add_node("retry_tool_call", investigation_retry_tool_call_node)
+    graph.add_node("compact", investigation_compact_node)
 
     graph.set_entry_point("investigation_agent")
 
@@ -47,6 +49,7 @@ def build_investigation_graph():
             "need_approval": "human_approval",
             "ask_human": "ask_human",
             "retry_tool_call": "retry_tool_call",
+            "compact": "compact",
             "complete": END,
         },
     )
@@ -61,6 +64,7 @@ def build_investigation_graph():
     )
     graph.add_edge("ask_human", "investigation_agent")
     graph.add_edge("retry_tool_call", "investigation_agent")
+    graph.add_edge("compact", "investigation_agent")
 
     return graph
 

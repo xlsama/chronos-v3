@@ -1,6 +1,6 @@
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { PhaseSection } from "./phase-section";
-import { PlannerContent } from "./planner-phase-section";
+import { PlanContent } from "./plan-phase-section";
 import { ContextGatheringPhase } from "./context-gathering-phase";
 import { InvestigationPhase } from "./investigation-phase";
 
@@ -12,7 +12,7 @@ interface EventTimelineProps {
 
 export function EventTimeline({ incidentId, incidentStatus, scrollParent }: EventTimelineProps) {
   const phaseState = useIncidentStreamStore((s) => s.phaseState);
-  const plannerPlanMd = useIncidentStreamStore((s) => s.plannerPlanMd);
+  const planMd = useIncidentStreamStore((s) => s.planMd);
   const hasEvents = useIncidentStreamStore((s) => s.events.length > 0);
   const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
   const hasAnswerStream = useIncidentStreamStore((s) => !!s.answerContent);
@@ -51,12 +51,12 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
     isActiveIncident &&
     phaseState.planning === "active" &&
     phaseState.investigation === "pending" &&
-    !!plannerPlanMd;
+    !!planMd;
 
   // Phase visibility
   const showContextGathering =
     hasGatherContext || phaseState.contextGathering !== "pending" || isActiveIncident;
-  const showPlanning = !!plannerPlanMd || phaseState.planning !== "pending";
+  const showPlanning = !!planMd || phaseState.planning !== "pending";
   const showInvestigation =
     hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation || isTransitioningFromPlanning;
 
@@ -77,7 +77,7 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
           status={phaseState.planning}
           isLast={!showInvestigation}
         >
-          <PlannerContent />
+          <PlanContent />
         </PhaseSection>
       )}
 

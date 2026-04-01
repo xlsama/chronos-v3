@@ -747,7 +747,10 @@ def _classify_mongodb(command: str) -> CommandType:
     """Classify a MongoDB command document (JSON) or shell command."""
     import json
 
-    from src.ops_agent.tools.service_connectors.mongodb import _translate_shell_command
+    from src.ops_agent.tools.service_connectors.mongodb import (
+        _js_to_json,
+        _translate_shell_command,
+    )
 
     translated = _translate_shell_command(command)
     raw = translated if translated is not None else command.strip()
@@ -755,7 +758,11 @@ def _classify_mongodb(command: str) -> CommandType:
     try:
         cmd_doc = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        return CommandType.WRITE
+        # Try JS-style parsing as fallback
+        try:
+            cmd_doc = _js_to_json(raw)
+        except (ValueError, json.JSONDecodeError, TypeError):
+            return CommandType.WRITE
 
     if not isinstance(cmd_doc, dict) or not cmd_doc:
         return CommandType.WRITE

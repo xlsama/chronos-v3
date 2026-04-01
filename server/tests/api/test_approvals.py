@@ -24,7 +24,7 @@ class TestGetApproval:
 
 
 class TestDecideApproval:
-    async def test_decide_approved(self, client, db_session):
+    async def test_decide_approved(self, client, db_session, auth_headers):
         incident = await create_incident_in_db(
             db_session, status="investigating", thread_id="test-thread"
         )
@@ -32,15 +32,16 @@ class TestDecideApproval:
 
         resp = await client.post(
             f"/api/approvals/{approval.id}/decide",
-            json={"decision": "approved", "decided_by": "admin"},
+            json={"decision": "approved"},
+            headers=auth_headers,
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["decision"] == "approved"
-        assert data["decided_by"] == "admin"
+        assert data["decided_by"] is not None
         assert data["decided_at"] is not None
 
-    async def test_decide_rejected(self, client, db_session):
+    async def test_decide_rejected(self, client, db_session, auth_headers):
         incident = await create_incident_in_db(
             db_session, status="investigating", thread_id="test-thread"
         )
@@ -48,12 +49,13 @@ class TestDecideApproval:
 
         resp = await client.post(
             f"/api/approvals/{approval.id}/decide",
-            json={"decision": "rejected", "decided_by": "admin"},
+            json={"decision": "rejected"},
+            headers=auth_headers,
         )
         assert resp.status_code == 200
         assert resp.json()["decision"] == "rejected"
 
-    async def test_decide_supplemented(self, client, db_session):
+    async def test_decide_supplemented(self, client, db_session, auth_headers):
         incident = await create_incident_in_db(
             db_session, status="investigating", thread_id="test-thread"
         )
@@ -63,14 +65,14 @@ class TestDecideApproval:
             f"/api/approvals/{approval.id}/decide",
             json={
                 "decision": "supplemented",
-                "decided_by": "admin",
                 "supplement_text": "try using port 3307 instead",
             },
+            headers=auth_headers,
         )
         assert resp.status_code == 200
         assert resp.json()["decision"] == "supplemented"
 
-    async def test_decide_already_decided(self, client, db_session):
+    async def test_decide_already_decided(self, client, db_session, auth_headers):
         incident = await create_incident_in_db(
             db_session, status="investigating", thread_id="test-thread"
         )
@@ -79,39 +81,57 @@ class TestDecideApproval:
         # First decision
         await client.post(
             f"/api/approvals/{approval.id}/decide",
-            json={"decision": "approved", "decided_by": "admin"},
+            json={"decision": "approved"},
+            headers=auth_headers,
         )
 
         # Second decision should conflict
         resp = await client.post(
             f"/api/approvals/{approval.id}/decide",
-            json={"decision": "rejected", "decided_by": "admin"},
+            json={"decision": "rejected"},
+            headers=auth_headers,
         )
         assert resp.status_code == 409
 
-    async def test_decide_stopped_incident(self, client, db_session):
+    async def test_decide_stopped_incident(self, client, db_session, auth_headers):
         incident = await create_incident_in_db(db_session, status="stopped")
         approval = await create_approval_in_db(db_session, incident.id)
 
         resp = await client.post(
             f"/api/approvals/{approval.id}/decide",
-            json={"decision": "approved", "decided_by": "admin"},
+            json={"decision": "approved"},
+            headers=auth_headers,
         )
         assert resp.status_code == 400
 
-    async def test_decide_invalid_decision(self, client, db_session):
+    async def test_decide_invalid_decision(self, client, db_session, auth_headers):
         incident = await create_incident_in_db(db_session, status="investigating")
         approval = await create_approval_in_db(db_session, incident.id)
 
         resp = await client.post(
             f"/api/approvals/{approval.id}/decide",
-            json={"decision": "maybe", "decided_by": "admin"},
+            json={"decision": "maybe"},
+            headers=auth_headers,
         )
         assert resp.status_code == 422
 
-    async def test_decide_not_found(self, client):
+    async def test_decide_not_found(self, client, auth_headers):
         resp = await client.post(
             f"/api/approvals/{uuid.uuid4()}/decide",
-            json={"decision": "approved", "decided_by": "admin"},
+            json={"decision": "approved"},
+            headers=auth_headers,
         )
         assert resp.status_code == 404
+
+    async def test_decide_without_auth(self, client, db_session):
+        """Decide without auth should return 401."""
+        incident = await create_incident_in_db(
+            db_session, status="investigating", thread_id="test-thread"
+        )
+        approval = await create_approval_in_db(db_session, incident.id)
+
+        resp = await client.post(
+            f"/api/approvals/{approval.id}/decide",
+            json={"decision": "approved"},
+        )
+        assert resp.status_code == 401

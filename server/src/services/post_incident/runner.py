@@ -7,7 +7,7 @@ from sqlalchemy import select
 from src.db.connection import get_session_factory
 from src.db.models import Incident, Message, Server, Service
 from src.lib.logger import get_logger
-from src.services.post_incident.base import format_db_messages, get_mini_llm
+from src.services.post_incident.base import format_db_messages, get_main_llm
 from src.services.post_incident.agents_md_task import auto_update_agents_md
 from src.services.post_incident.history_task import auto_save_history
 
@@ -230,12 +230,12 @@ async def run_post_incident_tasks(
 
 
 async def _generate_summary(conversation_text: str, severity: str, sid: str) -> str:
-    """用 mini_model 生成 summary_md。"""
+    """用 main_model 生成 summary_md。"""
     log = get_logger(component="post_incident", sid=sid)
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        llm = get_mini_llm()
+        llm = get_main_llm()
         human_content = (
             f"请根据以下完整对话历史生成排查报告：\n\n严重程度: {severity}\n\n{conversation_text}"
         )

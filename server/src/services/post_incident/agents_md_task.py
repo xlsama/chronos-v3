@@ -10,7 +10,7 @@ from src.db.connection import get_session_factory
 from src.db.models import DocumentChunk, Project, ProjectDocument, Server, Service
 from src.lib.embedder import Embedder
 from src.lib.logger import get_logger
-from src.services.post_incident.base import get_mini_llm
+from src.services.post_incident.base import get_main_llm
 
 EXTRACT_KNOWLEDGE_PROMPT = """\
 你是一个运维知识提取器。从以下事件排查过程中提取可复用的运维知识。
@@ -250,7 +250,7 @@ async def _extract_knowledge(
         input_len=len(input_text),
         prompt_len=len(system_prompt),
     )
-    llm = get_mini_llm()
+    llm = get_main_llm()
     log.info("Calling LLM for knowledge extraction")
     try:
         resp = await llm.ainvoke(
@@ -357,7 +357,7 @@ async def _update_project_agents_md(
     )
 
     # Ask LLM whether to update
-    llm = get_mini_llm()
+    llm = get_main_llm()
     prompt = SHOULD_UPDATE_PROMPT.format(
         current_content=current_content if current_content.strip() else "(空)",
         knowledge_text=knowledge_text,

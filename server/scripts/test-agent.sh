@@ -8,10 +8,11 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-COMPOSE_FILE="$(dirname "$PROJECT_ROOT")/docker-compose.test.yml"
-COMPOSE_PROJECT="chronos-test"
+COMPOSE_FILE="$PROJECT_ROOT/tests/agent/docker-compose.agent.yml"
+COMPOSE_PROJECT="chronos-agent-test"
 
-echo "Starting test infrastructure (including target databases)..."
+# Requires: docker compose -f docker-compose.dev.yml up -d (PG + Redis)
+echo "Starting agent target databases..."
 docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" up -d --wait
 
 echo "Infrastructure ready. Running agent integration tests..."
@@ -19,7 +20,7 @@ cd "$PROJECT_ROOT"
 uv run pytest tests/agent/ -x -v --timeout=300 "$@"
 TEST_EXIT=$?
 
-echo "Tearing down test infrastructure..."
+echo "Tearing down agent target databases..."
 docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" down -v
 
 exit $TEST_EXIT

@@ -9,109 +9,127 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as SkillsIndexRouteImport } from './routes/skills/index'
-import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
-import { Route as IncidentsIndexRouteImport } from './routes/incidents/index'
-import { Route as ConnectionsIndexRouteImport } from './routes/connections/index'
-import { Route as SkillsSlugRouteImport } from './routes/skills/$slug'
-import { Route as IncidentsIncidentIdRouteImport } from './routes/incidents/$incidentId'
-import { Route as ProjectsProjectIdRouteRouteImport } from './routes/projects/$projectId/route'
-import { Route as ProjectsProjectIdIndexRouteImport } from './routes/projects/$projectId/index'
-import { Route as ProjectsProjectIdDocumentsDocumentIdRouteImport } from './routes/projects/$projectId/documents/$documentId'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppSkillsIndexRouteImport } from './routes/_app/skills/index'
+import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects/index'
+import { Route as AppIncidentsIndexRouteImport } from './routes/_app/incidents/index'
+import { Route as AppConnectionsIndexRouteImport } from './routes/_app/connections/index'
+import { Route as AppSkillsSlugRouteImport } from './routes/_app/skills/$slug'
+import { Route as AppIncidentsIncidentIdRouteImport } from './routes/_app/incidents/$incidentId'
+import { Route as AppProjectsProjectIdRouteRouteImport } from './routes/_app/projects/$projectId/route'
+import { Route as AppProjectsProjectIdIndexRouteImport } from './routes/_app/projects/$projectId/index'
+import { Route as AppProjectsProjectIdDocumentsDocumentIdRouteImport } from './routes/_app/projects/$projectId/documents/$documentId'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SkillsIndexRoute = SkillsIndexRouteImport.update({
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSkillsIndexRoute = AppSkillsIndexRouteImport.update({
   id: '/skills/',
   path: '/skills/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
+const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
   id: '/projects/',
   path: '/projects/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const IncidentsIndexRoute = IncidentsIndexRouteImport.update({
+const AppIncidentsIndexRoute = AppIncidentsIndexRouteImport.update({
   id: '/incidents/',
   path: '/incidents/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const ConnectionsIndexRoute = ConnectionsIndexRouteImport.update({
+const AppConnectionsIndexRoute = AppConnectionsIndexRouteImport.update({
   id: '/connections/',
   path: '/connections/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const SkillsSlugRoute = SkillsSlugRouteImport.update({
+const AppSkillsSlugRoute = AppSkillsSlugRouteImport.update({
   id: '/skills/$slug',
   path: '/skills/$slug',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const IncidentsIncidentIdRoute = IncidentsIncidentIdRouteImport.update({
+const AppIncidentsIncidentIdRoute = AppIncidentsIncidentIdRouteImport.update({
   id: '/incidents/$incidentId',
   path: '/incidents/$incidentId',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const ProjectsProjectIdRouteRoute = ProjectsProjectIdRouteRouteImport.update({
-  id: '/projects/$projectId',
-  path: '/projects/$projectId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProjectsProjectIdIndexRoute = ProjectsProjectIdIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ProjectsProjectIdRouteRoute,
-} as any)
-const ProjectsProjectIdDocumentsDocumentIdRoute =
-  ProjectsProjectIdDocumentsDocumentIdRouteImport.update({
+const AppProjectsProjectIdRouteRoute =
+  AppProjectsProjectIdRouteRouteImport.update({
+    id: '/projects/$projectId',
+    path: '/projects/$projectId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppProjectsProjectIdIndexRoute =
+  AppProjectsProjectIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppProjectsProjectIdRouteRoute,
+  } as any)
+const AppProjectsProjectIdDocumentsDocumentIdRoute =
+  AppProjectsProjectIdDocumentsDocumentIdRouteImport.update({
     id: '/documents/$documentId',
     path: '/documents/$documentId',
-    getParentRoute: () => ProjectsProjectIdRouteRoute,
+    getParentRoute: () => AppProjectsProjectIdRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/projects/$projectId': typeof ProjectsProjectIdRouteRouteWithChildren
-  '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
-  '/skills/$slug': typeof SkillsSlugRoute
-  '/connections/': typeof ConnectionsIndexRoute
-  '/incidents/': typeof IncidentsIndexRoute
-  '/projects/': typeof ProjectsIndexRoute
-  '/skills/': typeof SkillsIndexRoute
-  '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
-  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRoute
+  '/': typeof AppIndexRoute
+  '/login': typeof LoginRoute
+  '/projects/$projectId': typeof AppProjectsProjectIdRouteRouteWithChildren
+  '/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
+  '/skills/$slug': typeof AppSkillsSlugRoute
+  '/connections/': typeof AppConnectionsIndexRoute
+  '/incidents/': typeof AppIncidentsIndexRoute
+  '/projects/': typeof AppProjectsIndexRoute
+  '/skills/': typeof AppSkillsIndexRoute
+  '/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
+  '/projects/$projectId/documents/$documentId': typeof AppProjectsProjectIdDocumentsDocumentIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
-  '/skills/$slug': typeof SkillsSlugRoute
-  '/connections': typeof ConnectionsIndexRoute
-  '/incidents': typeof IncidentsIndexRoute
-  '/projects': typeof ProjectsIndexRoute
-  '/skills': typeof SkillsIndexRoute
-  '/projects/$projectId': typeof ProjectsProjectIdIndexRoute
-  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRoute
+  '/login': typeof LoginRoute
+  '/': typeof AppIndexRoute
+  '/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
+  '/skills/$slug': typeof AppSkillsSlugRoute
+  '/connections': typeof AppConnectionsIndexRoute
+  '/incidents': typeof AppIncidentsIndexRoute
+  '/projects': typeof AppProjectsIndexRoute
+  '/skills': typeof AppSkillsIndexRoute
+  '/projects/$projectId': typeof AppProjectsProjectIdIndexRoute
+  '/projects/$projectId/documents/$documentId': typeof AppProjectsProjectIdDocumentsDocumentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/projects/$projectId': typeof ProjectsProjectIdRouteRouteWithChildren
-  '/incidents/$incidentId': typeof IncidentsIncidentIdRoute
-  '/skills/$slug': typeof SkillsSlugRoute
-  '/connections/': typeof ConnectionsIndexRoute
-  '/incidents/': typeof IncidentsIndexRoute
-  '/projects/': typeof ProjectsIndexRoute
-  '/skills/': typeof SkillsIndexRoute
-  '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
-  '/projects/$projectId/documents/$documentId': typeof ProjectsProjectIdDocumentsDocumentIdRoute
+  '/_app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/projects/$projectId': typeof AppProjectsProjectIdRouteRouteWithChildren
+  '/_app/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
+  '/_app/skills/$slug': typeof AppSkillsSlugRoute
+  '/_app/connections/': typeof AppConnectionsIndexRoute
+  '/_app/incidents/': typeof AppIncidentsIndexRoute
+  '/_app/projects/': typeof AppProjectsIndexRoute
+  '/_app/skills/': typeof AppSkillsIndexRoute
+  '/_app/projects/$projectId/': typeof AppProjectsProjectIdIndexRoute
+  '/_app/projects/$projectId/documents/$documentId': typeof AppProjectsProjectIdDocumentsDocumentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/projects/$projectId'
     | '/incidents/$incidentId'
     | '/skills/$slug'
@@ -123,6 +141,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId/documents/$documentId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/login'
     | '/'
     | '/incidents/$incidentId'
     | '/skills/$slug'
@@ -134,130 +153,158 @@ export interface FileRouteTypes {
     | '/projects/$projectId/documents/$documentId'
   id:
     | '__root__'
-    | '/'
-    | '/projects/$projectId'
-    | '/incidents/$incidentId'
-    | '/skills/$slug'
-    | '/connections/'
-    | '/incidents/'
-    | '/projects/'
-    | '/skills/'
-    | '/projects/$projectId/'
-    | '/projects/$projectId/documents/$documentId'
+    | '/_app'
+    | '/login'
+    | '/_app/'
+    | '/_app/projects/$projectId'
+    | '/_app/incidents/$incidentId'
+    | '/_app/skills/$slug'
+    | '/_app/connections/'
+    | '/_app/incidents/'
+    | '/_app/projects/'
+    | '/_app/skills/'
+    | '/_app/projects/$projectId/'
+    | '/_app/projects/$projectId/documents/$documentId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  ProjectsProjectIdRouteRoute: typeof ProjectsProjectIdRouteRouteWithChildren
-  IncidentsIncidentIdRoute: typeof IncidentsIncidentIdRoute
-  SkillsSlugRoute: typeof SkillsSlugRoute
-  ConnectionsIndexRoute: typeof ConnectionsIndexRoute
-  IncidentsIndexRoute: typeof IncidentsIndexRoute
-  ProjectsIndexRoute: typeof ProjectsIndexRoute
-  SkillsIndexRoute: typeof SkillsIndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/skills/': {
-      id: '/skills/'
+    '/_app/skills/': {
+      id: '/_app/skills/'
       path: '/skills'
       fullPath: '/skills/'
-      preLoaderRoute: typeof SkillsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppSkillsIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/projects/': {
-      id: '/projects/'
+    '/_app/projects/': {
+      id: '/_app/projects/'
       path: '/projects'
       fullPath: '/projects/'
-      preLoaderRoute: typeof ProjectsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppProjectsIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/incidents/': {
-      id: '/incidents/'
+    '/_app/incidents/': {
+      id: '/_app/incidents/'
       path: '/incidents'
       fullPath: '/incidents/'
-      preLoaderRoute: typeof IncidentsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIncidentsIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/connections/': {
-      id: '/connections/'
+    '/_app/connections/': {
+      id: '/_app/connections/'
       path: '/connections'
       fullPath: '/connections/'
-      preLoaderRoute: typeof ConnectionsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppConnectionsIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/skills/$slug': {
-      id: '/skills/$slug'
+    '/_app/skills/$slug': {
+      id: '/_app/skills/$slug'
       path: '/skills/$slug'
       fullPath: '/skills/$slug'
-      preLoaderRoute: typeof SkillsSlugRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppSkillsSlugRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/incidents/$incidentId': {
-      id: '/incidents/$incidentId'
+    '/_app/incidents/$incidentId': {
+      id: '/_app/incidents/$incidentId'
       path: '/incidents/$incidentId'
       fullPath: '/incidents/$incidentId'
-      preLoaderRoute: typeof IncidentsIncidentIdRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIncidentsIncidentIdRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/projects/$projectId': {
-      id: '/projects/$projectId'
+    '/_app/projects/$projectId': {
+      id: '/_app/projects/$projectId'
       path: '/projects/$projectId'
       fullPath: '/projects/$projectId'
-      preLoaderRoute: typeof ProjectsProjectIdRouteRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppProjectsProjectIdRouteRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/projects/$projectId/': {
-      id: '/projects/$projectId/'
+    '/_app/projects/$projectId/': {
+      id: '/_app/projects/$projectId/'
       path: '/'
       fullPath: '/projects/$projectId/'
-      preLoaderRoute: typeof ProjectsProjectIdIndexRouteImport
-      parentRoute: typeof ProjectsProjectIdRouteRoute
+      preLoaderRoute: typeof AppProjectsProjectIdIndexRouteImport
+      parentRoute: typeof AppProjectsProjectIdRouteRoute
     }
-    '/projects/$projectId/documents/$documentId': {
-      id: '/projects/$projectId/documents/$documentId'
+    '/_app/projects/$projectId/documents/$documentId': {
+      id: '/_app/projects/$projectId/documents/$documentId'
       path: '/documents/$documentId'
       fullPath: '/projects/$projectId/documents/$documentId'
-      preLoaderRoute: typeof ProjectsProjectIdDocumentsDocumentIdRouteImport
-      parentRoute: typeof ProjectsProjectIdRouteRoute
+      preLoaderRoute: typeof AppProjectsProjectIdDocumentsDocumentIdRouteImport
+      parentRoute: typeof AppProjectsProjectIdRouteRoute
     }
   }
 }
 
-interface ProjectsProjectIdRouteRouteChildren {
-  ProjectsProjectIdIndexRoute: typeof ProjectsProjectIdIndexRoute
-  ProjectsProjectIdDocumentsDocumentIdRoute: typeof ProjectsProjectIdDocumentsDocumentIdRoute
+interface AppProjectsProjectIdRouteRouteChildren {
+  AppProjectsProjectIdIndexRoute: typeof AppProjectsProjectIdIndexRoute
+  AppProjectsProjectIdDocumentsDocumentIdRoute: typeof AppProjectsProjectIdDocumentsDocumentIdRoute
 }
 
-const ProjectsProjectIdRouteRouteChildren: ProjectsProjectIdRouteRouteChildren =
+const AppProjectsProjectIdRouteRouteChildren: AppProjectsProjectIdRouteRouteChildren =
   {
-    ProjectsProjectIdIndexRoute: ProjectsProjectIdIndexRoute,
-    ProjectsProjectIdDocumentsDocumentIdRoute:
-      ProjectsProjectIdDocumentsDocumentIdRoute,
+    AppProjectsProjectIdIndexRoute: AppProjectsProjectIdIndexRoute,
+    AppProjectsProjectIdDocumentsDocumentIdRoute:
+      AppProjectsProjectIdDocumentsDocumentIdRoute,
   }
 
-const ProjectsProjectIdRouteRouteWithChildren =
-  ProjectsProjectIdRouteRoute._addFileChildren(
-    ProjectsProjectIdRouteRouteChildren,
+const AppProjectsProjectIdRouteRouteWithChildren =
+  AppProjectsProjectIdRouteRoute._addFileChildren(
+    AppProjectsProjectIdRouteRouteChildren,
   )
 
+interface AppRouteChildren {
+  AppIndexRoute: typeof AppIndexRoute
+  AppProjectsProjectIdRouteRoute: typeof AppProjectsProjectIdRouteRouteWithChildren
+  AppIncidentsIncidentIdRoute: typeof AppIncidentsIncidentIdRoute
+  AppSkillsSlugRoute: typeof AppSkillsSlugRoute
+  AppConnectionsIndexRoute: typeof AppConnectionsIndexRoute
+  AppIncidentsIndexRoute: typeof AppIncidentsIndexRoute
+  AppProjectsIndexRoute: typeof AppProjectsIndexRoute
+  AppSkillsIndexRoute: typeof AppSkillsIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppIndexRoute: AppIndexRoute,
+  AppProjectsProjectIdRouteRoute: AppProjectsProjectIdRouteRouteWithChildren,
+  AppIncidentsIncidentIdRoute: AppIncidentsIncidentIdRoute,
+  AppSkillsSlugRoute: AppSkillsSlugRoute,
+  AppConnectionsIndexRoute: AppConnectionsIndexRoute,
+  AppIncidentsIndexRoute: AppIncidentsIndexRoute,
+  AppProjectsIndexRoute: AppProjectsIndexRoute,
+  AppSkillsIndexRoute: AppSkillsIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  ProjectsProjectIdRouteRoute: ProjectsProjectIdRouteRouteWithChildren,
-  IncidentsIncidentIdRoute: IncidentsIncidentIdRoute,
-  SkillsSlugRoute: SkillsSlugRoute,
-  ConnectionsIndexRoute: ConnectionsIndexRoute,
-  IncidentsIndexRoute: IncidentsIndexRoute,
-  ProjectsIndexRoute: ProjectsIndexRoute,
-  SkillsIndexRoute: SkillsIndexRoute,
+  AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

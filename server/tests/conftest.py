@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 # Set test env vars BEFORE any src imports
 os.environ["DATABASE_URL"] = (
-    "postgresql+asyncpg://chronos_test:chronos_test@localhost:15432/chronos_test"
+    "postgresql+asyncpg://chronos:chronos@localhost:5432/chronos"
 )
 os.environ["LANGGRAPH_CHECKPOINT_DSN"] = (
-    "postgresql://chronos_test:chronos_test@localhost:15432/chronos_test"
+    "postgresql://chronos:chronos@localhost:5432/chronos"
 )
-os.environ["REDIS_URL"] = "redis://localhost:16379/0"
+os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 os.environ["ENCRYPTION_KEY"] = "dGVzdC1lbmNyeXB0aW9uLWtleS0zMmJ5dGVz"
 
 import pytest

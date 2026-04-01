@@ -7,13 +7,14 @@ from langgraph.types import interrupt
 
 from src.lib.logger import get_logger
 from src.ops_agent.nodes.ask_human import ask_human_node
+from src.ops_agent.nodes.compact import main_compact_node
 from src.ops_agent.nodes.main_agent import (
     build_main_tools,
     main_agent_node,
     route_main_decision,
 )
 from src.ops_agent.nodes.gather_context import gather_context_node
-from src.ops_agent.nodes.planner import planner_node
+from src.ops_agent.nodes.plan import plan_node
 from src.ops_agent.nodes.run_sub_agent import run_sub_agent_node
 from src.ops_agent.state import MainState
 
@@ -31,12 +32,18 @@ async def confirm_resolution_node(state: MainState) -> dict:
     if user_response == "confirmed":
         return {"is_complete": True}
 
+    # Extract text from structured response (same pattern as ask_human_node)
+    if isinstance(user_response, dict) and "text" in user_response:
+        text = user_response["text"]
+    else:
+        text = str(user_response)
+
     return {
         "messages": [
             HumanMessage(
                 content=(
                     f"[用户反馈 - 问题未解决]\n"
-                    f"用户消息: {user_response}\n\n"
+                    f"用户消息: {text}\n\n"
                     f"用户明确表示上一轮排查结论未能解决问题。"
                     f"请根据用户反馈重新分析，继续排查。"
                 )
@@ -83,11 +90,13 @@ async def sub_agent_ask_human_node(state: MainState) -> dict:
         text = user_response["text"]
         images_meta = []
         for img in user_response.get("images") or []:
-            images_meta.append({
-                "filename": img.get("filename", ""),
-                "stored_filename": img.get("stored_filename", ""),
-                "content_type": img.get("content_type", "image/png"),
-            })
+            images_meta.append(
+                {
+                    "filename": img.get("filename", ""),
+                    "stored_filename": img.get("stored_filename", ""),
+                    "content_type": img.get("content_type", "image/png"),
+                }
+            )
         return {
             "messages": [HumanMessage(content=text)],
             "pending_human_images": images_meta if images_meta else None,
@@ -156,7 +165,7 @@ def build_graph():
     graph = StateGraph(MainState)
 
     graph.add_node("gather_context", gather_context_node)
-    graph.add_node("planner", planner_node)
+    graph.add_node("plan", plan_node)
     graph.add_node("main_agent", main_agent_node)
     graph.add_node("tools", tool_node)
     graph.add_node("run_sub_agent", run_sub_agent_node)
@@ -165,11 +174,12 @@ def build_graph():
     graph.add_node("sub_agent_ask_human", sub_agent_ask_human_node)
     graph.add_node("ask_human", ask_human_node)
     graph.add_node("retry_tool_call", main_retry_node)
+    graph.add_node("compact", main_compact_node)
 
     graph.set_entry_point("gather_context")
 
-    graph.add_edge("gather_context", "planner")
-    graph.add_edge("planner", "main_agent")
+    graph.add_edge("gather_context", "plan")
+    graph.add_edge("plan", "main_agent")
 
     graph.add_conditional_edges(
         "main_agent",
@@ -180,11 +190,13 @@ def build_graph():
             "complete": "confirm_resolution",
             "ask_human": "ask_human",
             "retry_tool_call": "retry_tool_call",
+            "compact": "compact",
         },
     )
 
     graph.add_edge("tools", "main_agent")
     graph.add_edge("ask_human", "main_agent")
+    graph.add_edge("compact", "main_agent")
     # run_sub_agent: 条件路由 — 子 Agent 完成→main_agent，中断→透传节点
     graph.add_conditional_edges(
         "run_sub_agent",

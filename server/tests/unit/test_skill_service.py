@@ -2,15 +2,15 @@ from src.lib.paths import seeds_skills_dir
 from src.services.skill_service import SkillService
 
 
-def test_seed_incident_triage_skill_is_available_and_readable():
+def test_seed_database_skill_is_available_and_readable():
     service = SkillService(base_dir=seeds_skills_dir())
 
     available = {skill["slug"]: skill for skill in service.get_available_skills()}
 
-    assert "incident-triage" in available
-    assert "分诊框架" in available["incident-triage"]["description"]
+    assert "database" in available
+    assert "数据库" in available["database"]["description"]
 
-    content = service.read_file("incident-triage")
+    content = service.read_file("database")
 
-    assert "症状归类" in content
-    assert "目标锁定" in content
+    assert "service_exec" in content
+    assert "ssh_bash" in content

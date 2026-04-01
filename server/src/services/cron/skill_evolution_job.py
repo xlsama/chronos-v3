@@ -12,7 +12,7 @@ from sqlalchemy import select
 from src.db.connection import get_session_factory
 from src.db.models import IncidentHistory, Project, ProjectDocument
 from src.lib.logger import get_logger
-from src.services.post_incident.base import get_mini_llm
+from src.services.post_incident.base import get_main_llm
 from src.services.skill_service import SkillService
 from src.services.version_service import VersionService
 
@@ -248,7 +248,7 @@ def _build_analysis_input(
 
 async def _analyze_patterns(incidents_text: str, agents_text: str) -> list[dict]:
     """Phase 1: LLM 分析跨事件共性模式，返回模式候选列表。"""
-    llm = get_mini_llm()
+    llm = get_main_llm()
     prompt = _CROSS_INCIDENT_ANALYSIS_PROMPT.format(
         incidents_text=incidents_text,
         agents_text=agents_text,
@@ -286,7 +286,7 @@ async def _analyze_patterns(incidents_text: str, agents_text: str) -> list[dict]
 
 async def _process_pattern_candidates(patterns: list[dict]) -> list[str]:
     """Phase 2: 逐个处理模式候选，匹配/创建/合并 skill。"""
-    llm = get_mini_llm()
+    llm = get_main_llm()
     service = SkillService()
     results = []
 

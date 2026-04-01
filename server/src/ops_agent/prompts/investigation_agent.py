@@ -15,6 +15,8 @@ INVESTIGATION_AGENT_SYSTEM_PROMPT = """\
 
 {skills_context}
 
+{compact_context}
+
 ## 工具
 - **ssh_bash(server_id, command, explanation)**: 在目标服务器执行 Shell 命令（通过 SSH）。写操作需人工审批。
 - **bash(command, explanation)**: 在本地执行命令（docker/kubectl/curl 等）。
@@ -62,8 +64,8 @@ INVESTIGATION_AGENT_SYSTEM_PROMPT = """\
 - 排查运行状态时，建议优先检查 Docker 容器（`docker ps -a 2>&1`），确认容器存在后优先通过 `docker logs` 获取日志。Docker 命令失败时先判断是权限问题（加 sudo 重试）还是未安装（`command not found` 则跳过）
 - 进程存活不等于服务正常：如果进程/容器在运行但业务接口超时或阻塞，应通过 `list_services()` + `service_exec` 检查依赖服务（数据库锁状态、连接数、慢查询、缓存等），而不是仅凭进程存活就排除假设
 - 每轮回复必须包含至少一个工具调用
-- 思考过程用中文，命令和技术术语保持原文
-- 思考过程用陈述句，不要用疑问句
+- 分析内容用中文，命令和技术术语保持原文
+- 分析内容用陈述句，不要用疑问句
 
 ## report 使用指南
 

@@ -7,6 +7,7 @@ from psycopg import AsyncConnection
 
 from src.db.connection import get_session_factory
 from src.ops_agent.event_publisher import EventPublisher
+from src.api.auth import router as auth_router
 from src.api.approvals import router as approvals_router
 from src.api.attachments import router as attachments_router
 from src.api.documents import router as documents_router
@@ -66,6 +67,20 @@ async def lifespan(app: FastAPI):
     from src.lib.seeder import seed_skills
 
     await seed_skills(get_session_factory())
+
+    # Seed default admin user if no users exist
+    from src.services.auth_service import AuthService
+    from src.db.models import User
+    from sqlalchemy import select, func
+
+    async with get_session_factory()() as session:
+        count = (await session.execute(select(func.count()).select_from(User))).scalar()
+        if count == 0:
+            service = AuthService(session=session, jwt_secret=settings.jwt_secret)
+            await service.register(
+                email="admin@chronos.dev", password="changeme", name="Admin"
+            )
+            log.info("Created default admin user: admin@chronos.dev / changeme")
 
     for warning in settings.validate_production_secrets():
         log.warning(warning)
@@ -129,6 +144,7 @@ async def health():
     return {"status": "ok"}
 
 
+app.include_router(auth_router)
 app.include_router(servers_router)
 app.include_router(incidents_router)
 app.include_router(approvals_router)

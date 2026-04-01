@@ -29,15 +29,17 @@ _EVENT_ROLE = {
     "agent_interrupted": "system",
     "confirm_resolution_required": "system",
     "resolution_confirmed": "system",
-    "planner_started": "system",
+    "plan_started": "system",
     "plan_generated": "system",
     "plan_updated": "system",
-    "planner_progress": "system",
+    "plan_progress": "system",
     "round_started": "system",
     "round_ended": "system",
     "sub_agent_started": "system",
     "sub_agent_completed": "system",
     "sub_agent_reporting": "system",
+    "compact_start": "system",
+    "compact_done": "system",
 }
 
 
@@ -206,9 +208,9 @@ class EventPublisher:
             return ""
         if event_type == "resolution_confirmed":
             return ""
-        if event_type == "planner_started":
+        if event_type == "plan_started":
             return ""
-        if event_type == "planner_progress":
+        if event_type == "plan_progress":
             return data.get("status", "")
         if event_type == "round_started":
             return data.get("reason", "")
@@ -220,6 +222,10 @@ class EventPublisher:
             return data.get("hypothesis_id", "")
         if event_type == "sub_agent_reporting":
             return data.get("hypothesis_id", "")
+        if event_type == "compact_start":
+            return ""
+        if event_type == "compact_done":
+            return data.get("compact_md", "")[:500]
         return ""
 
     @staticmethod
@@ -282,12 +288,17 @@ class EventPublisher:
                 meta["sub_agent_id"] = data["sub_agent_id"]
             return meta
         if event_type == "skill_read":
-            return {
+            meta = {
                 "skill_slug": data.get("skill_slug", ""),
                 "skill_name": data.get("skill_name", ""),
                 "content": data.get("content", ""),
                 "success": data.get("success", True),
             }
+            if data.get("phase"):
+                meta["phase"] = data["phase"]
+            if data.get("sub_agent_id"):
+                meta["sub_agent_id"] = data["sub_agent_id"]
+            return meta
         if event_type == "approval_required":
             meta = {
                 "approval_id": data.get("approval_id", ""),
@@ -313,9 +324,9 @@ class EventPublisher:
             return None
         if event_type == "resolution_confirmed":
             return None
-        if event_type == "planner_started":
+        if event_type == "plan_started":
             return {"phase": data.get("phase", "")}
-        if event_type == "planner_progress":
+        if event_type == "plan_progress":
             meta = {"status": data.get("status", ""), "phase": data.get("phase", "")}
             if data.get("ttft") is not None:
                 meta["ttft"] = data["ttft"]
@@ -349,6 +360,15 @@ class EventPublisher:
         if event_type == "sub_agent_reporting":
             return {
                 "hypothesis_id": data.get("hypothesis_id", ""),
+                "phase": data.get("phase", ""),
+            }
+        if event_type == "compact_start":
+            return {
+                "phase": data.get("phase", ""),
+                "agent_type": data.get("agent_type", ""),
+            }
+        if event_type == "compact_done":
+            return {
                 "phase": data.get("phase", ""),
             }
         return None

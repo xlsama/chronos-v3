@@ -430,7 +430,7 @@ export const SubAgentCard = memo(function SubAgentCard({
     >
       {/* Header */}
       <button
-        className="flex w-full items-center gap-2 p-3 text-left text-sm font-medium text-foreground"
+        className="flex w-full items-center gap-2 p-3 text-left text-xs font-medium text-foreground"
         onClick={() => setUserExpanded(!expanded)}
       >
         {expanded ? (

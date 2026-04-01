@@ -33,7 +33,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file: .env.prod
+    env_file: server/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://chronos:${POSTGRES_PASSWORD:-chronos}@postgres:5432/chronos
       LANGGRAPH_CHECKPOINT_DSN: postgresql://chronos:${POSTGRES_PASSWORD:-chronos}@postgres:5432/chronos

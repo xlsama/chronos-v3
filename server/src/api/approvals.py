@@ -3,9 +3,11 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.deps import get_current_user
+from src.api.incidents import _resume_agent_background
 from src.api.schemas import ApprovalDecisionRequest, ApprovalResponse
 from src.db.connection import get_session
-from src.db.models import ApprovalRequest, Incident
+from src.db.models import ApprovalRequest, Incident, User
 from src.lib.errors import BadRequestError, NotFoundError
 from src.ops_agent.event_publisher import EventPublisher
 from src.services.approval_service import ApprovalService
@@ -31,6 +33,7 @@ async def decide_approval(
     request: Request,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     # Check if the incident is still active before deciding
     approval_record = await session.get(ApprovalRequest, approval_id)
@@ -40,8 +43,9 @@ async def decide_approval(
     if incident and incident.status in ("stopped", "resolved", "interrupted"):
         raise BadRequestError("事件已终止，无法审批")
 
+    decided_by = current_user.name
     service = ApprovalService(session=session)
-    approval = await service.decide(approval_id, decision=body.decision, decided_by=body.decided_by)
+    approval = await service.decide(approval_id, decision=body.decision, decided_by=decided_by)
 
     # Publish approval_decided SSE event (use app-level publisher for persistence)
     publisher = request.app.state.agent_runner.publisher
@@ -49,7 +53,7 @@ async def decide_approval(
     decided_data: dict = {
         "approval_id": str(approval.id),
         "decision": body.decision,
-        "decided_by": body.decided_by,
+        "decided_by": decided_by,
     }
     if body.supplement_text:
         decided_data["supplement_text"] = body.supplement_text
@@ -74,9 +78,10 @@ async def decide_approval(
 
         runner = request.app.state.agent_runner
         background_tasks.add_task(
+            _resume_agent_background,
             runner.resume,
+            str(incident.id),
             thread_id=incident.thread_id,
-            incident_id=str(incident.id),
             approval_result=approval_result,
             approval_id=str(approval.id),
             approval_tool_name=approval.tool_name,

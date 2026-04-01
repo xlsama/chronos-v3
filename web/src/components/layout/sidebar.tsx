@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useAuthStore } from "@/stores/auth";
 import { motion } from "motion/react";
 import {
   Activity,
@@ -25,6 +26,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -46,7 +48,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getAvatarUrl } from "@/api/auth";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 
 const mainItems = [{ to: "/incidents", label: "事件", icon: Activity }] as const;
@@ -91,11 +94,14 @@ export function AppSidebar() {
   const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const user = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
 
   const handleLogout = useCallback(() => {
-    // TODO: implement logout
+    useAuthStore.getState().clearAuth();
     setLogoutOpen(false);
-  }, []);
+    navigate({ to: "/login" });
+  }, [navigate]);
 
   const renderGroup = (
     items: ReadonlyArray<{
@@ -116,7 +122,7 @@ export function AppSidebar() {
       <SidebarHeader>
         <Link to="/incidents" className="flex h-8 items-center gap-3 px-2">
           <img src="/favicon.png" alt="logo" className="size-5" />
-          <h1 className="text-[17px] font-semibold">Enmolar Chronos</h1>
+          <h1 className="text-base font-medium">Enmolar Chronos</h1>
         </Link>
       </SidebarHeader>
       <SidebarContent>
@@ -132,6 +138,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
+        <SidebarSeparator className="-mx-2 w-auto!" />
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -144,10 +151,18 @@ export function AppSidebar() {
                 }
               >
                 <Avatar className="size-8 rounded-lg">
-                  <AvatarFallback className="rounded-lg">A</AvatarFallback>
+                  {user?.avatar && (
+                    <AvatarImage src={getAvatarUrl(user.avatar)} className="rounded-lg" />
+                  )}
+                  <AvatarFallback className="rounded-lg">
+                    {user?.name?.charAt(0).toUpperCase() ?? "U"}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Admin</span>
+                  <span className="truncate font-medium">{user?.name ?? "User"}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {user?.email ?? ""}
+                  </span>
                 </div>
                 <ChevronsUpDown className="ml-auto size-4" />
               </DropdownMenuTrigger>

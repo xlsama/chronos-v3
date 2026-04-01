@@ -7,6 +7,20 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import ApprovalRequest, Incident, IncidentHistory, Message
+from tests.factories import make_register_payload
+
+
+@pytest_asyncio.fixture
+async def auth_headers(client: AsyncClient) -> dict[str, str]:
+    """Register a test user and return auth headers."""
+    payload = make_register_payload()
+    await client.post("/api/auth/register", json=payload)
+    resp = await client.post(
+        "/api/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 async def create_incident_in_db(

@@ -66,3 +66,14 @@ def get_mini_llm() -> ChatOpenAI:
         api_key=s.dashscope_api_key,
         extra_body={"enable_thinking": False},
     )
+
+
+def get_main_llm() -> ChatOpenAI:
+    """获取 main_model LLM 实例。"""
+    s = get_settings()
+    return ChatOpenAI(
+        model=s.main_model,
+        base_url=s.llm_base_url,
+        api_key=s.dashscope_api_key,
+        extra_body={"enable_thinking": False},
+    )
