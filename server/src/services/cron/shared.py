@@ -12,11 +12,11 @@ log = get_logger(component="cron")
 
 
 async def fetch_recent_data() -> tuple[list[IncidentHistory], list[dict]]:
-    """获取最近 24 小时的历史事件 + 所有项目的 AGENTS.md。
+    """获取最近 24 小时的历史事件 + 所有项目的 MEMORY.md。
 
     Returns:
-        (incidents, agents_docs)
-        agents_docs 每项包含: project_id, project_name, project_slug, content
+        (incidents, memory_docs)
+        memory_docs 每项包含: project_id, project_name, project_slug, content
     """
     since = datetime.now(timezone.utc) - timedelta(hours=24)
 
@@ -31,9 +31,9 @@ async def fetch_recent_data() -> tuple[list[IncidentHistory], list[dict]]:
         result = await session.execute(
             select(ProjectDocument, Project.id, Project.name, Project.slug)
             .join(Project, ProjectDocument.project_id == Project.id)
-            .where(ProjectDocument.doc_type == "agents_config")
+            .where(ProjectDocument.doc_type == "memory_config")
         )
-        agents_docs = [
+        memory_docs = [
             {
                 "project_id": row[1],
                 "project_name": row[2],
@@ -46,6 +46,6 @@ async def fetch_recent_data() -> tuple[list[IncidentHistory], list[dict]]:
     log.info(
         "Fetched recent data",
         incidents=len(incidents),
-        agents_docs=len(agents_docs),
+        memory_docs=len(memory_docs),
     )
-    return incidents, agents_docs
+    return incidents, memory_docs

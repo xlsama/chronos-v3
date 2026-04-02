@@ -1,4 +1,4 @@
-"""只读工具 —— read_skill, list_servers, list_services。"""
+"""只读工具 —— skill_read, list_servers, list_services。"""
 
 from langchain_core.tools import StructuredTool
 
@@ -6,12 +6,12 @@ from src.ops_agent.tools.base_tool import BaseTool, PermissionBehavior, Permissi
 from src.ops_agent.tools.truncation import truncate_output
 
 
-class ReadSkillTool(BaseTool):
+class SkillReadTool(BaseTool):
     """读取技能文件。"""
 
     @property
     def name(self) -> str:
-        return "read_skill"
+        return "skill_read"
 
     @property
     def summary(self) -> str:
@@ -146,7 +146,7 @@ class ListServicesTool(BaseTool):
     @property
     def prompt(self) -> str:
         return """\
-列出所有已注册的可用服务，返回 id, name, service_type, host, port, status。
+列出所有已注册的可用服务，返回 id, name, service_type, host, port, database, status。
 
 ## 使用原则
 - 在使用 service_exec 前必须先调用此工具获取有效的 service_id（UUID 格式）

@@ -1,6 +1,6 @@
 """Plan 节点 —— 带只读工具的 mini agent loop，生成调查计划。
 
-Plan Agent 可以使用 list_servers/list_services/read_skill 探查基础设施，
+Plan Agent 可以使用 list_servers/list_services/skill_read 探查基础设施，
 然后生成基于真实环境的假设。最多 3 轮工具调用，之后必须输出计划。
 """
 
@@ -168,7 +168,7 @@ async def plan_node(state: MainState) -> dict:
         PLAN_SYSTEM_PROMPT + "\n\n## 可用工具\n"
         "- **list_servers**: 查看所有可用服务器（id, name, host, status）\n"
         "- **list_services**: 查看所有可用服务（id, name, type, host, port, status）\n"
-        '- **read_skill**: 读取技能文件（"?" 列出可用技能）\n\n'
+        '- **skill_read**: 读取技能文件（"?" 列出可用技能）\n\n'
         "你可以先调用这些工具了解基础设施，再生成更准确的假设。\n"
         "也可以直接生成计划（不调用工具）。最多调用 3 轮工具。"
     )

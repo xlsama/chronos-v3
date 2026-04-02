@@ -133,7 +133,19 @@ async def route_investigation_decision(state: InvestigationState) -> str:
             tool_instance = get_tool(name)
             if tool_instance:
                 perm = await tool_instance.check_permissions(**tc.get("args", {}))
-                if perm.behavior in (PermissionBehavior.ASK, PermissionBehavior.DENY):
+                if perm.behavior == PermissionBehavior.DENY:
+                    log.info(
+                        "need_approval",
+                        tool=name,
+                        behavior=perm.behavior.value,
+                        risk_level=perm.risk_level,
+                    )
+                    return "need_approval"
+                if perm.behavior == PermissionBehavior.ASK:
+                    explanation = tc.get("args", {}).get("explanation", "").strip()
+                    if not explanation:
+                        log.info("missing_explanation", tool=name, risk=perm.risk_level)
+                        return "missing_explanation"
                     log.info(
                         "need_approval",
                         tool=name,

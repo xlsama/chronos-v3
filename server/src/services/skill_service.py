@@ -29,6 +29,10 @@ class SkillMeta:
     reference_files: list[str] = field(default_factory=list)
     asset_files: list[str] = field(default_factory=list)
     draft: bool = False
+    # ── P0: 借鉴 Claude Code skill frontmatter 新增字段 ──
+    when_to_use: str = ""
+    tags: list[str] = field(default_factory=list)
+    related_services: list[str] = field(default_factory=list)
 
 
 class SkillService:
@@ -74,6 +78,14 @@ class SkillService:
             else []
         )
 
+        # 解析 tags / related_services：支持逗号分隔字符串或列表
+        raw_tags = fm.get("tags", [])
+        if isinstance(raw_tags, str):
+            raw_tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        raw_services = fm.get("related_services", [])
+        if isinstance(raw_services, str):
+            raw_services = [s.strip() for s in raw_services.split(",") if s.strip()]
+
         return SkillMeta(
             slug=slug,
             name=str(fm.get("name") or slug),
@@ -87,6 +99,9 @@ class SkillService:
             reference_files=reference_files,
             asset_files=asset_files,
             draft=bool(fm.get("draft", False)),
+            when_to_use=str(fm.get("when_to_use") or ""),
+            tags=list(raw_tags),
+            related_services=list(raw_services),
         )
 
     def _is_skill_ready(self, fm: dict, body: str) -> bool:
@@ -279,13 +294,16 @@ class SkillService:
                     "has_scripts": meta.has_scripts,
                     "has_references": meta.has_references,
                     "has_assets": meta.has_assets,
+                    "when_to_use": meta.when_to_use,
+                    "tags": meta.tags,
+                    "related_services": meta.related_services,
                 }
             )
         log.info("get_available_skills returning", count=len(result))
         return result
 
     def read_file(self, slug: str, rel_path: str | None = None) -> str:
-        """为 read_skill tool 服务。
+        """为 skill_read tool 服务。
 
         - rel_path 为空/None → 返回 SKILL.md body + 文件目录
         - rel_path 非空 → 返回该文件内容
@@ -323,7 +341,7 @@ class SkillService:
             return body
 
         lines = [body.rstrip(), "", "---", "## 附属文件"]
-        lines.append('以下文件可通过 read_skill("{slug}/{path}") 获取：')
+        lines.append('以下文件可通过 skill_read("{slug}/{path}") 获取：')
         for subdir in ("scripts", "references", "assets"):
             if files[subdir]:
                 lines.append(f"\n### {subdir}/")

@@ -102,11 +102,11 @@ class ImportConnectionsService:
             total_docs=len(documents),
         )
 
-        # Filter out agents_config and empty documents
+        # Filter out memory_config and empty documents
         docs_with_content = [
             doc
             for doc in documents
-            if doc.doc_type != "agents_config" and doc.content and doc.content.strip()
+            if doc.doc_type != "memory_config" and doc.content and doc.content.strip()
         ]
 
         log.info(

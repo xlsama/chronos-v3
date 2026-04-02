@@ -35,9 +35,9 @@ _EVENT_ROLE = {
     "plan_progress": "system",
     "round_started": "system",
     "round_ended": "system",
-    "sub_agent_started": "system",
-    "sub_agent_completed": "system",
-    "sub_agent_reporting": "system",
+    "agent_started": "system",
+    "agent_completed": "system",
+    "agent_reporting": "system",
     "compact_start": "system",
     "compact_done": "system",
 }
@@ -65,9 +65,9 @@ class EventPublisher:
                 buf_key, {"content": "", "phase": phase, "agent": agent}
             )
             buf["content"] += data.get("content", "")
-            # Preserve sub_agent_id for investigation sub-agents
-            if data.get("sub_agent_id"):
-                buf["sub_agent_id"] = data["sub_agent_id"]
+            # Preserve agent_id for investigation sub-agents
+            if data.get("agent_id"):
+                buf["agent_id"] = data["agent_id"]
             await self._publish_sse(channel, event_type, data, ts)
             return
 
@@ -95,6 +95,9 @@ class EventPublisher:
             # Accumulate ask_human tokens, push SSE immediately but don't persist
             buf = self._ask_human_buffer.setdefault(channel, {"question": ""})
             buf["question"] += data.get("question", "")
+            # Preserve phase from the first ask_human event in the stream
+            if data.get("phase") and "phase" not in buf:
+                buf["phase"] = data["phase"]
             await self._publish_sse(channel, event_type, data, ts)
             return
 
@@ -216,11 +219,11 @@ class EventPublisher:
             return data.get("reason", "")
         if event_type == "round_ended":
             return data.get("summary", "")[:500]
-        if event_type == "sub_agent_started":
+        if event_type == "agent_started":
             return data.get("hypothesis_id", "")
-        if event_type == "sub_agent_completed":
+        if event_type == "agent_completed":
             return data.get("hypothesis_id", "")
-        if event_type == "sub_agent_reporting":
+        if event_type == "agent_reporting":
             return data.get("hypothesis_id", "")
         if event_type == "compact_start":
             return ""
@@ -236,8 +239,8 @@ class EventPublisher:
                 meta["phase"] = data["phase"]
             if data.get("agent"):
                 meta["agent"] = data["agent"]
-            if data.get("sub_agent_id"):
-                meta["sub_agent_id"] = data["sub_agent_id"]
+            if data.get("agent_id"):
+                meta["agent_id"] = data["agent_id"]
             return meta or None
         if event_type == "thinking_done":
             meta = {}
@@ -245,10 +248,15 @@ class EventPublisher:
                 meta["phase"] = data["phase"]
             if data.get("agent"):
                 meta["agent"] = data["agent"]
-            if data.get("sub_agent_id"):
-                meta["sub_agent_id"] = data["sub_agent_id"]
+            if data.get("agent_id"):
+                meta["agent_id"] = data["agent_id"]
             return meta or None
         if event_type in ("answer", "answer_done"):
+            meta = {}
+            if data.get("phase"):
+                meta["phase"] = data["phase"]
+            return meta or None
+        if event_type == "ask_human":
             meta = {}
             if data.get("phase"):
                 meta["phase"] = data["phase"]
@@ -269,8 +277,8 @@ class EventPublisher:
             }
             if data.get("approval_id"):
                 meta["approval_id"] = data["approval_id"]
-            if data.get("sub_agent_id"):
-                meta["sub_agent_id"] = data["sub_agent_id"]
+            if data.get("agent_id"):
+                meta["agent_id"] = data["agent_id"]
             return meta
         if event_type == "tool_result":
             meta = {
@@ -284,8 +292,8 @@ class EventPublisher:
                 meta["sources"] = data["sources"]
             if data.get("approval_id"):
                 meta["approval_id"] = data["approval_id"]
-            if data.get("sub_agent_id"):
-                meta["sub_agent_id"] = data["sub_agent_id"]
+            if data.get("agent_id"):
+                meta["agent_id"] = data["agent_id"]
             return meta
         if event_type == "skill_read":
             meta = {
@@ -296,8 +304,8 @@ class EventPublisher:
             }
             if data.get("phase"):
                 meta["phase"] = data["phase"]
-            if data.get("sub_agent_id"):
-                meta["sub_agent_id"] = data["sub_agent_id"]
+            if data.get("agent_id"):
+                meta["agent_id"] = data["agent_id"]
             return meta
         if event_type == "approval_required":
             meta = {
@@ -306,8 +314,8 @@ class EventPublisher:
                 "tool_args": data.get("tool_args", {}),
                 "tool_call_id": data.get("tool_call_id", ""),
             }
-            if data.get("sub_agent_id"):
-                meta["sub_agent_id"] = data["sub_agent_id"]
+            if data.get("agent_id"):
+                meta["agent_id"] = data["agent_id"]
             if data.get("phase"):
                 meta["phase"] = data["phase"]
             return meta
@@ -342,22 +350,22 @@ class EventPublisher:
                 "summary": data.get("summary", ""),
                 "phase": data.get("phase", ""),
             }
-        if event_type == "sub_agent_started":
+        if event_type == "agent_started":
             return {
                 "hypothesis_id": data.get("hypothesis_id", ""),
                 "hypothesis_title": data.get("hypothesis_title", ""),
                 "hypothesis_desc": data.get("hypothesis_desc", ""),
-                "sub_agent_thread_id": data.get("sub_agent_thread_id", ""),
+                "agent_thread_id": data.get("agent_thread_id", ""),
                 "phase": data.get("phase", ""),
             }
-        if event_type == "sub_agent_completed":
+        if event_type == "agent_completed":
             return {
                 "hypothesis_id": data.get("hypothesis_id", ""),
                 "status": data.get("status", ""),
                 "summary": data.get("summary", ""),
                 "phase": data.get("phase", ""),
             }
-        if event_type == "sub_agent_reporting":
+        if event_type == "agent_reporting":
             return {
                 "hypothesis_id": data.get("hypothesis_id", ""),
                 "phase": data.get("phase", ""),

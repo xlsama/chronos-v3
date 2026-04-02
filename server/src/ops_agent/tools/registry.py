@@ -17,9 +17,11 @@ APPROVAL_TOOL_NAMES = frozenset({"ssh_bash", "bash", "service_exec"})
 # Agent 类型 → 工具名列表
 _AGENT_TOOL_MAP = {
     "main": [
-        "launch_investigation",
+        "spawn_agent",
+        "spawn_parallel_agents",
+        "spawn_verification",
         "update_plan",
-        "read_skill",
+        "skill_read",
         "list_servers",
         "list_services",
         "complete",
@@ -29,24 +31,24 @@ _AGENT_TOOL_MAP = {
         "ssh_bash",
         "bash",
         "service_exec",
-        "read_skill",
+        "skill_read",
         "list_servers",
         "list_services",
         "ask_human",
         "conclude",
     ],
-    "qa": [
+    "verification": [
         "ssh_bash",
         "bash",
         "service_exec",
-        "read_skill",
+        "skill_read",
         "list_servers",
         "list_services",
         "ask_human",
-        "complete",
+        "submit_verification",
     ],
     "plan": [
-        "read_skill",
+        "skill_read",
         "list_servers",
         "list_services",
     ],
@@ -58,7 +60,8 @@ _AGENT_TOOL_GUIDE = {
 ## 工具使用原则
 
 - 不直接执行排查命令（ssh_bash/bash/service_exec），由子 Agent 负责
-- 每次只启动一个 launch_investigation，等完成再决定下一步
+- 多个独立假设可并行验证时，用 spawn_parallel_agents 同时启动（最多 3 个）
+- 假设有先后依赖时，用 spawn_agent 逐个执行
 - 收到子 Agent 结果后先 update_plan，再决定下一步
 - 历史事件是线索不是答案：相同症状可能不同根因
 - 信息不足时 ask_human，不追问系统中不存在的资源
@@ -73,11 +76,15 @@ _AGENT_TOOL_GUIDE = {
 - 进程存活 ≠ 服务正常：接口超时时用 service_exec 检查依赖服务
 - 能修的就修（重启/扩容等低风险操作），修完要验证
 - 写操作在 explanation 中说明原因和风险""",
-    "qa": """\
+    "verification": """\
 ## 工具使用原则
 
-- 需要查看实际状态时使用工具，不凭猜测回答
-- 直接回答问题或执行任务，简明扼要""",
+- 你是验证者，不是修复者 — 只验证结论是否正确，不做修复操作
+- 每项验证必须执行实际命令，禁止"看起来没问题"式的纯推理验证
+- 可自验证的优先自验证（curl、ps、tail 等）
+- 无法自验证时用 ask_human 请用户确认
+- 无权限/服务不可达时标记 SKIPPED 并说明原因
+- 写操作在 explanation 中说明原因和风险""",
     "plan": "",
 }
 
@@ -100,13 +107,16 @@ def _ensure_registered() -> dict[str, BaseTool]:
         AskHumanTool,
         CompleteTool,
         ConcludeTool,
-        LaunchInvestigationTool,
+        SpawnAgentTool,
+        SpawnParallelAgentsTool,
+        SpawnVerificationTool,
+        SubmitVerificationTool,
         UpdatePlanTool,
     )
     from src.ops_agent.tools.readonly_tools import (
         ListServersTool,
         ListServicesTool,
-        ReadSkillTool,
+        SkillReadTool,
     )
     from src.ops_agent.tools.service_exec_tool import ServiceExecTool
     from src.ops_agent.tools.ssh_bash_tool import SSHBashTool
@@ -117,15 +127,18 @@ def _ensure_registered() -> dict[str, BaseTool]:
         SSHBashTool(),
         ServiceExecTool(),
         # 共享只读工具
-        ReadSkillTool(),
+        SkillReadTool(),
         ListServersTool(),
         ListServicesTool(),
         # 协调工具
-        LaunchInvestigationTool(),
+        SpawnAgentTool(),
+        SpawnParallelAgentsTool(),
+        SpawnVerificationTool(),
         UpdatePlanTool(),
         CompleteTool(),
         AskHumanTool(),
         ConcludeTool(),
+        SubmitVerificationTool(),
     ]
 
     _ALL_TOOLS = {t.name: t for t in instances}

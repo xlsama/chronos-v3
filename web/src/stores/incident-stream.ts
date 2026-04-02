@@ -7,15 +7,16 @@ export interface PhaseState {
   contextGathering: PhaseStatus;
   planning: PhaseStatus;
   investigation: PhaseStatus;
+  verification: PhaseStatus;
 }
 
-interface SubAgentState {
+interface AgentState {
   events: SSEEvent[];
   thinkingContent: string;
   status: "idle" | "started" | "completed" | "failed";
 }
 
-export interface InvestigationSubAgent {
+export interface InvestigationAgent {
   hypothesisId: string;
   hypothesisTitle: string;
   hypothesisDesc: string;
@@ -35,15 +36,17 @@ interface IncidentStreamState {
   planProgress: string;
   currentRound: number;
   roundSummaries: { round: number; summary: string }[];
-  // Investigation sub-agents (new architecture)
-  investigations: InvestigationSubAgent[];
-  activeInvestigationId: string | null;
+  // Investigation agents (new architecture)
+  investigations: InvestigationAgent[];
+  activeInvestigationIds: Set<string>;
   phaseState: PhaseState;
   isConnected: boolean;
   thinkingContent: string;
   answerContent: string;
   askHumanStreamContent: string;
   askHumanQuestion: string | null;
+  askHumanPhase: string | null;
+  triageEvents: SSEEvent[];
   isWaitingForAgent: boolean;
   resolutionConfirmRequired: boolean;
   resolutionConfirmResolved: boolean;
@@ -69,6 +72,8 @@ interface IncidentStreamState {
   clearAnswer: () => void;
   appendAskHuman: (content: string) => void;
   clearAskHumanStream: () => void;
+  addTriageEvent: (event: SSEEvent) => void;
+  setAskHumanPhase: (phase: string | null) => void;
   appendSubAgentThinking: (agent: string, content: string) => void;
   flushSubAgentThinking: (agent: string, timestamp: string) => void;
   addSubAgentEvent: (agent: string, event: SSEEvent) => void;
@@ -96,6 +101,7 @@ const initialPhaseState = (): PhaseState => ({
   contextGathering: "pending",
   planning: "pending",
   investigation: "pending",
+  verification: "pending",
 });
 
 export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
@@ -108,7 +114,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   currentRound: 1,
   roundSummaries: [],
   investigations: [],
-  activeInvestigationId: null,
+  activeInvestigationIds: new Set<string>(),
   phaseState: initialPhaseState(),
   isConnected: false,
   isWaitingForAgent: false,
@@ -116,6 +122,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   answerContent: "",
   askHumanStreamContent: "",
   askHumanQuestion: null,
+  askHumanPhase: null,
+  triageEvents: [],
   resolutionConfirmRequired: false,
   resolutionConfirmResolved: false,
   decidedApprovals: {},
@@ -156,6 +164,11 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     set((state) => ({ askHumanStreamContent: state.askHumanStreamContent + content })),
 
   clearAskHumanStream: () => set({ askHumanStreamContent: "" }),
+
+  addTriageEvent: (event) =>
+    set((state) => ({ triageEvents: [...state.triageEvents, event] })),
+
+  setAskHumanPhase: (phase) => set({ askHumanPhase: phase }),
 
   appendSubAgentThinking: (agent, content) =>
     set((state) => {
@@ -242,18 +255,19 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
           thinkingContent: "",
         },
       ],
-      activeInvestigationId: hypothesisId,
+      activeInvestigationIds: new Set([...state.activeInvestigationIds, hypothesisId]),
     })),
 
   completeInvestigation: (hypothesisId, status, summary) =>
     set((state) => ({
       investigations: state.investigations.map((inv) =>
         inv.hypothesisId === hypothesisId
-          ? { ...inv, status: status as InvestigationSubAgent["status"], isReporting: false, summary }
+          ? { ...inv, status: status as InvestigationAgent["status"], isReporting: false, summary }
           : inv,
       ),
-      activeInvestigationId:
-        state.activeInvestigationId === hypothesisId ? null : state.activeInvestigationId,
+      activeInvestigationIds: new Set(
+        [...state.activeInvestigationIds].filter((id) => id !== hypothesisId),
+      ),
     })),
 
   setInvestigationReporting: (hypothesisId) =>
@@ -268,7 +282,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       investigations: state.investigations.map((inv) =>
         inv.status === "running" ? { ...inv, status: "cancelled" as const } : inv,
       ),
-      activeInvestigationId: null,
+      activeInvestigationIds: new Set<string>(),
     })),
 
   addInvestigationEvent: (hypothesisId, event) =>
@@ -310,10 +324,14 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
         if (ps.planning === "active") ps.planning = "completed";
         if (ps.investigation === "pending") ps.investigation = "active";
+      } else if (phase === "verification") {
+        if (ps.investigation === "active") ps.investigation = "completed";
+        if (ps.verification === "pending") ps.verification = "active";
       } else if (phase === "summary_complete") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
         if (ps.planning === "active") ps.planning = "completed";
         if (ps.investigation === "active") ps.investigation = "completed";
+        if (ps.verification === "active") ps.verification = "completed";
       }
       return { phaseState: ps };
     }),
@@ -345,10 +363,12 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     const historyEvents: SSEEvent[] = [];
     const kbEvents: SSEEvent[] = [];
     const mainEvents: SSEEvent[] = [];
+    const triageEvts: SSEEvent[] = [];
     const decided: Record<string, { decision: string; supplementText?: string; decidedBy?: string }> = {};
     let askQuestion: string | null = null;
     let lastAskHumanIndex = -1;
     let hasUserMessageAfterAsk = false;
+    let currentAskPhase: string | null = null;
     let historyStatus: "idle" | "started" | "completed" | "failed" = "idle";
     let kbStatus: "idle" | "started" | "completed" | "failed" = "idle";
     let resolutionRequired = false;
@@ -356,8 +376,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
     let loadedPlanMd = "";
     let loadedCurrentRound = 1;
     const loadedRoundSummaries: { round: number; summary: string }[] = [];
-    const loadedInvestigations: InvestigationSubAgent[] = [];
-    let loadedActiveInvestigationId: string | null = null;
+    const loadedInvestigations: InvestigationAgent[] = [];
+    const loadedActiveInvestigationIds = new Set<string>();
     let isStopped = false;
 
     for (let i = 0; i < events.length; i++) {
@@ -409,8 +429,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // sub_agent_started → create investigation entry
-      if (event.event_type === "sub_agent_started") {
+      // agent_started → create investigation entry
+      if (event.event_type === "agent_started") {
         const hId = event.data.hypothesis_id as string;
         const hTitle = event.data.hypothesis_title as string;
         const hDesc = event.data.hypothesis_desc as string;
@@ -422,24 +442,24 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
           events: [],
           thinkingContent: "",
         });
-        loadedActiveInvestigationId = hId;
+        loadedActiveInvestigationIds.add(hId);
         continue;
       }
 
-      // sub_agent_completed → update investigation status
-      if (event.event_type === "sub_agent_completed") {
+      // agent_completed → update investigation status
+      if (event.event_type === "agent_completed") {
         const hId = event.data.hypothesis_id as string;
         const inv = loadedInvestigations.find((i) => i.hypothesisId === hId);
         if (inv) {
-          inv.status = (event.data.status as string) as InvestigationSubAgent["status"];
+          inv.status = (event.data.status as string) as InvestigationAgent["status"];
           inv.summary = event.data.summary as string;
         }
-        if (loadedActiveInvestigationId === hId) loadedActiveInvestigationId = null;
+        loadedActiveInvestigationIds.delete(hId);
         continue;
       }
 
-      // sub_agent_reporting → mark investigation as reporting
-      if (event.event_type === "sub_agent_reporting") {
+      // agent_reporting → mark investigation as reporting
+      if (event.event_type === "agent_reporting") {
         const hId = event.data.hypothesis_id as string;
         const inv = loadedInvestigations.find((i) => i.hypothesisId === hId);
         if (inv) {
@@ -465,7 +485,18 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      if (event.event_type === "user_message" || event.event_type === "agent_interrupted") {
+      if (event.event_type === "user_message") {
+        if (currentAskPhase === "gather_context") {
+          triageEvts.push(event);
+          currentAskPhase = null;
+        } else {
+          if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
+          mainEvents.push(event);
+        }
+        continue;
+      }
+
+      if (event.event_type === "agent_interrupted") {
         if (lastAskHumanIndex >= 0) hasUserMessageAfterAsk = true;
         mainEvents.push(event);
         continue;
@@ -507,8 +538,14 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
           }
         }
         if (event.event_type === "ask_human") {
+          if (phase === "gather_context") {
+            triageEvts.push(event);
+            currentAskPhase = "gather_context";
+            continue;
+          }
           lastAskHumanIndex = i;
           hasUserMessageAfterAsk = false;
+          currentAskPhase = "investigation";
         }
         mainEvents.push(event);
       }
@@ -519,6 +556,13 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       const askEvent = events[lastAskHumanIndex];
       askQuestion = (askEvent.data.question as string) || null;
     }
+    // Also check triage: last event is ask_human with no user reply
+    if (!askQuestion && triageEvts.length > 0) {
+      const lastTriage = triageEvts[triageEvts.length - 1];
+      if (lastTriage.event_type === "ask_human") {
+        askQuestion = (lastTriage.data.question as string) || null;
+      }
+    }
 
     // Cancel running investigations if incident was stopped or interrupted
     const hasInterrupted = mainEvents.some((e) => e.event_type === "agent_interrupted");
@@ -528,32 +572,43 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
           inv.status = "cancelled";
         }
       }
-      loadedActiveInvestigationId = null;
+      loadedActiveInvestigationIds.clear();
     }
 
     // Derive phase state from loaded events
     const hasDone = mainEvents.some((e) => e.event_type === "done");
     const isTerminal = hasDone || isStopped || hasInterrupted;
-    const hasContext = historyEvents.length > 0 || kbEvents.length > 0;
+    const hasContext = historyEvents.length > 0 || kbEvents.length > 0 || triageEvts.length > 0;
     const hasMain = mainEvents.some((e) =>
       e.event_type !== "done" && e.event_type !== "incident_stopped" && e.event_type !== "agent_interrupted",
     );
     const hasPlan = !!loadedPlanMd;
+    // If triage has unanswered ask_human, context gathering should stay active
+    const triageWaiting = triageEvts.length > 0 && triageEvts[triageEvts.length - 1].event_type === "ask_human";
+    const hasVerification = loadedInvestigations.some((i) => i.hypothesisId === "VERIFY");
     const derivedPhase: PhaseState = {
-      contextGathering: hasContext ? (hasPlan || hasMain || isTerminal ? "completed" : "active") : "pending",
+      contextGathering: hasContext
+        ? (triageWaiting ? "active" : (hasPlan || hasMain || isTerminal ? "completed" : "active"))
+        : "pending",
       planning: hasPlan ? (hasMain || isTerminal ? "completed" : "active") : "pending",
-      investigation: hasMain ? (isTerminal ? "completed" : "active") : "pending",
+      investigation: hasMain
+        ? (hasVerification || isTerminal ? "completed" : "active")
+        : "pending",
+      verification: hasVerification
+        ? (isTerminal ? "completed" : "active")
+        : "pending",
     };
 
     set({
       events: mainEvents,
+      triageEvents: triageEvts,
       historyAgentState: { events: historyEvents, thinkingContent: "", status: historyStatus },
       kbAgentState: { events: kbEvents, thinkingContent: "", status: kbStatus },
       planMd: loadedPlanMd,
       currentRound: loadedCurrentRound,
       roundSummaries: loadedRoundSummaries,
       investigations: loadedInvestigations,
-      activeInvestigationId: loadedActiveInvestigationId,
+      activeInvestigationIds: loadedActiveInvestigationIds,
       phaseState: derivedPhase,
       decidedApprovals: decided,
       askHumanQuestion: askQuestion,
@@ -574,7 +629,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       currentRound: 1,
       roundSummaries: [],
       investigations: [],
-      activeInvestigationId: null,
+      activeInvestigationIds: new Set<string>(),
       phaseState: initialPhaseState(),
       isConnected: false,
       isWaitingForAgent: false,
@@ -582,6 +637,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       answerContent: "",
       askHumanStreamContent: "",
       askHumanQuestion: null,
+      askHumanPhase: null,
+      triageEvents: [],
       resolutionConfirmRequired: false,
       resolutionConfirmResolved: false,
       decidedApprovals: {},

@@ -32,9 +32,12 @@ _CROSS_INCIDENT_ANALYSIS_PROMPT = """\
 [
   {{
     "name": "技能名称",
-    "description": "一句话描述 WHAT 和 WHEN",
+    "description": "一句话描述技能做什么",
+    "when_to_use": "什么场景使用此技能。格式：当 X 时使用。不适用于 Y。",
     "pattern": "pipeline|tool-wrapper|inversion",
     "domain": "可选领域标签，如 database/network/docker/kubernetes/jvm",
+    "tags": ["标签1", "标签2"],
+    "related_services": ["服务类型1", "服务类型2"],
     "rationale": "为什么这是一个通用模式（引用了哪些事件）",
     "outline": "排查步骤大纲（简明列出关键步骤）"
   }}
@@ -47,7 +50,7 @@ _CROSS_INCIDENT_ANALYSIS_PROMPT = """\
 {incidents_text}
 
 === 项目架构 ===
-{agents_text}
+{memory_text}
 """
 
 # ── Phase 2: 匹配 & 生成 ──────────────────────────────────
@@ -74,18 +77,32 @@ _GENERATE_SKILL_PROMPT = """\
 模式信息:
 - 名称: {name}
 - 描述: {description}
+- 触发条件: {when_to_use}
 - 类型: {pattern}
 - 领域: {domain}
+- 标签: {tags}
+- 关联服务: {related_services}
 - 依据: {rationale}
 - 步骤大纲: {outline}
 
-根据模式类型，使用对应模板生成完整的 SKILL.md:
+根据模式类型，使用对应模板生成完整的 SKILL.md。
+
+**Frontmatter 必须包含以下字段：**
+- name: 技能名称
+- description: 一句话描述技能做什么（WHAT）
+- when_to_use: 什么场景使用。格式："当 X 时使用。不适用于 Y。"
+- tags: 领域标签列表
+- related_services: 关联的服务类型列表
+- draft: true
 
 ### Pipeline 模式:
 ```
 ---
 name: <技能名称>
-description: <一句话描述 WHAT 和 WHEN>
+description: <一句话描述>
+when_to_use: <触发条件和排除条件>
+tags: [标签列表]
+related_services: [服务类型列表]
 draft: true
 metadata:
   pattern: pipeline
@@ -95,20 +112,30 @@ metadata:
   steps: "<步骤数>"
 ---
 
-按以下步骤严格顺序执行。每步完成后总结发现，再进入下一步。
+## 适用场景
+当 <触发条件> 时使用此技能。
+不适用于 <排除条件>。
 
 ## Step 1 — <步骤标题>
 <命令和判断标准>
+**验证标准**: <如何确认此步完成>
 
 ## Step 2 — <步骤标题>
 <命令和判断标准>
+**验证标准**: <如何确认此步完成>
+
+## 升级条件
+当 <条件> 时需要人工介入。
 ```
 
 ### Tool Wrapper 模式:
 ```
 ---
 name: <技能名称>
-description: <一句话描述 WHAT 和 WHEN>
+description: <一句话描述>
+when_to_use: <触发条件和排除条件>
+tags: [标签列表]
+related_services: [服务类型列表]
 draft: true
 metadata:
   pattern: tool-wrapper
@@ -117,20 +144,26 @@ metadata:
   domain: <技术领域>
 ---
 
-你是 <技术> 专家。应用以下规范排查用户的问题。
+## 适用场景
+当 <触发条件> 时使用此技能。
 
 ## 核心规范
 <关键规则和检查项>
 
-## 排查时
-<按规范检查的步骤>
+## 排查步骤
+### Step 1 — <步骤>
+<操作>
+**验证标准**: <完成标志>
 ```
 
 ### Inversion 模式:
 ```
 ---
 name: <技能名称>
-description: <一句话描述 WHAT 和 WHEN>
+description: <一句话描述>
+when_to_use: <触发条件和排除条件>
+tags: [标签列表]
+related_services: [服务类型列表]
 draft: true
 metadata:
   pattern: inversion
@@ -139,19 +172,25 @@ metadata:
   domain: <领域>
 ---
 
-在开始排查前，你需要收集关键信息。按以下阶段逐一提问，每次只问一个问题。
+## 适用场景
+当 <触发条件> 时使用此技能。
 
-## Phase 1 — <阶段标题>
+## Phase 1 — 信息收集
 - Q1: "<问题>"
 - Q2: "<问题>"
 
 ## Phase 2 — 执行排查
 基于收集的信息选择合适的排查路径。
+
+## 升级条件
+当 <条件> 时需要人工介入。
 ```
 
 注意:
 - draft: true 必须保留
 - metadata.source 必须为 cron
+- 每个步骤必须包含 **验证标准**（借鉴 Claude Code 的 Success Criteria 模式）
+- 包含 **升级条件** 段，明确何时需要人工介入
 - 内容要具体、可操作，包含实际的命令和判断标准
 - 只输出 SKILL.md 内容，不要输出其他说明"""
 
@@ -199,7 +238,7 @@ def _ensure_draft(content: str) -> str:
 
 
 def _build_analysis_input(
-    incidents: list[IncidentHistory], agents_docs: list[dict]
+    incidents: list[IncidentHistory], memory_docs: list[dict]
 ) -> tuple[str, str]:
     """拼接事件和架构文本，直接全量传给 LLM。"""
     incident_parts = []
@@ -209,23 +248,23 @@ def _build_analysis_input(
         )
     incidents_text = "\n\n".join(incident_parts) if incident_parts else "（无近期事件）"
 
-    agents_parts = []
-    for doc in agents_docs:
-        agents_parts.append(f"### 项目: {doc['project_name']}\n{doc['content']}")
-    agents_text = "\n\n".join(agents_parts) if agents_parts else "（无项目架构信息）"
+    memory_parts = []
+    for doc in memory_docs:
+        memory_parts.append(f"### 项目: {doc['project_name']}\n{doc['content']}")
+    memory_text = "\n\n".join(memory_parts) if memory_parts else "（无项目架构信息）"
 
-    return incidents_text, agents_text
+    return incidents_text, memory_text
 
 
 # ── Phase 1: 分析 ──────────────────────────────────────────
 
 
-async def _analyze_patterns(incidents_text: str, agents_text: str) -> list[dict]:
+async def _analyze_patterns(incidents_text: str, memory_text: str) -> list[dict]:
     """Phase 1: LLM 分析跨事件共性模式，返回模式候选列表。"""
     llm = get_mini_llm()
     prompt = _CROSS_INCIDENT_ANALYSIS_PROMPT.format(
         incidents_text=incidents_text,
-        agents_text=agents_text,
+        memory_text=memory_text,
     )
     log.info("Phase 1: analyzing cross-incident patterns", prompt_len=len(prompt))
     t0 = time.monotonic()
@@ -278,8 +317,11 @@ async def _process_pattern_candidates(patterns: list[dict]) -> list[str]:
     for i, pattern in enumerate(patterns):
         name = pattern.get("name", "")
         description = pattern.get("description", "")
+        when_to_use = pattern.get("when_to_use", "")
         pat_type = pattern.get("pattern", "pipeline")
         domain = pattern.get("domain", "")
+        tags = pattern.get("tags", [])
+        related_services = pattern.get("related_services", [])
         rationale = pattern.get("rationale", "")
         outline = pattern.get("outline", "")
 
@@ -296,8 +338,11 @@ async def _process_pattern_candidates(patterns: list[dict]) -> list[str]:
                 skills_list,
                 name,
                 description,
+                when_to_use,
                 pat_type,
                 domain,
+                tags,
+                related_services,
                 rationale,
                 outline,
                 now_iso,
@@ -317,8 +362,11 @@ async def _match_and_apply(
     skills_list: str,
     name: str,
     description: str,
+    when_to_use: str,
     pattern: str,
     domain: str,
+    tags: list[str],
+    related_services: list[str],
     rationale: str,
     outline: str,
     now_iso: str,
@@ -350,8 +398,11 @@ async def _match_and_apply(
             match_result,
             name,
             description,
+            when_to_use,
             pattern,
             domain,
+            tags,
+            related_services,
             rationale,
             outline,
             now_iso,
@@ -414,8 +465,11 @@ async def _create_skill(
     match_result: str,
     name: str,
     description: str,
+    when_to_use: str,
     pattern: str,
     domain: str,
+    tags: list[str],
+    related_services: list[str],
     rationale: str,
     outline: str,
     now_iso: str,
@@ -430,8 +484,11 @@ async def _create_skill(
     gen_prompt = _GENERATE_SKILL_PROMPT.format(
         name=name,
         description=description,
+        when_to_use=when_to_use or f"当涉及{name}相关问题时使用",
         pattern=pattern,
         domain=domain or "通用",
+        tags=", ".join(tags) if tags else domain or "通用",
+        related_services=", ".join(related_services) if related_services else "无",
         rationale=rationale,
         outline=outline,
         generated_at=now_iso,
@@ -470,13 +527,13 @@ async def _create_skill(
 
 async def run_skill_evolution_job(
     incidents: list[IncidentHistory],
-    agents_docs: list[dict],
+    memory_docs: list[dict],
 ) -> None:
     """定时任务入口: 批量分析历史事件，自动进化 skill。
 
     Args:
         incidents: 近 24h 的 IncidentHistory 列表
-        agents_docs: 所有项目的 AGENTS.md，每项含 project_id, project_name, project_slug, content
+        memory_docs: 所有项目的 MEMORY.md，每项含 project_id, project_name, project_slug, content
     """
     log.info("=== Skill Evolution Job Started ===")
     t_start = time.monotonic()
@@ -487,10 +544,10 @@ async def run_skill_evolution_job(
             return
 
         # 1. 构建分析输入
-        incidents_text, agents_text = _build_analysis_input(incidents, agents_docs)
+        incidents_text, memory_text = _build_analysis_input(incidents, memory_docs)
 
         # 2. Phase 1: 跨事件模式分析
-        patterns = await _analyze_patterns(incidents_text, agents_text)
+        patterns = await _analyze_patterns(incidents_text, memory_text)
         if not patterns:
             log.info("No cross-incident patterns identified, done")
             return

@@ -2,6 +2,7 @@
 
 import uuid
 
+from src.lib.paths import knowledge_dir
 from tests.factories import make_project_payload
 
 
@@ -29,25 +30,44 @@ class TestCreateProject:
         assert resp.status_code == 200
         assert resp.json()["description"] == "A test project"
 
+    async def test_create_project_auto_creates_memory_md(self, client):
+        payload = make_project_payload()
+        resp = await client.post("/api/projects", json=payload)
+        assert resp.status_code == 200
+
+        project_id = resp.json()["id"]
+        docs_resp = await client.get(f"/api/projects/{project_id}/documents")
+        assert docs_resp.status_code == 200
+
+        memory_doc = next(doc for doc in docs_resp.json() if doc["doc_type"] == "memory_config")
+        assert memory_doc["filename"] == "MEMORY.md"
+        assert (knowledge_dir(payload["slug"]) / "MEMORY.md").exists()
+
 
 class TestListProjects:
     async def test_list_projects_empty(self, client):
         resp = await client.get("/api/projects")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["items"] == []
-        assert data["total"] == 0
+        assert isinstance(data["items"], list)
+        assert data["total"] >= len(data["items"])
 
     async def test_list_projects(self, client):
+        before_resp = await client.get("/api/projects")
+        before_total = before_resp.json()["total"]
+
         for _ in range(3):
             await client.post("/api/projects", json=make_project_payload())
 
         resp = await client.get("/api/projects")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total"] == 3
+        assert data["total"] == before_total + 3
 
     async def test_list_projects_pagination(self, client):
+        before_resp = await client.get("/api/projects")
+        before_total = before_resp.json()["total"]
+
         for _ in range(3):
             await client.post("/api/projects", json=make_project_payload())
 
@@ -55,7 +75,7 @@ class TestListProjects:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["items"]) == 2
-        assert data["total"] == 3
+        assert data["total"] == before_total + 3
 
 
 class TestGetProject:

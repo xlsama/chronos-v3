@@ -15,6 +15,7 @@ async def bridge_event(
     ask_human_streamed: bool,
     approval_id: str = "",
     approval_tool_name: str = "",
+    phase: str = "investigation",
 ) -> dict:
     """桥接子 Agent 事件到 SSE channel，附加 sub_agent_id。
 
@@ -40,11 +41,11 @@ async def bridge_event(
             chunk = event["data"].get("chunk")
             if chunk and hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                 for tcc in chunk.tool_call_chunks:
-                    if tcc.get("name") == "conclude":
+                    if tcc.get("name") in ("conclude", "submit_verification"):
                         await publisher.publish(
                             channel,
-                            "sub_agent_reporting",
-                            {"hypothesis_id": hypothesis_id, "phase": "investigation"},
+                            "agent_reporting",
+                            {"hypothesis_id": hypothesis_id, "phase": phase},
                         )
             if chunk and chunk.content and not ask_human_active:
                 thinking_buffer += chunk.content
@@ -53,7 +54,7 @@ async def bridge_event(
                     "thinking",
                     {
                         "content": chunk.content,
-                        "phase": "investigation",
+                        "phase": phase,
                         "sub_agent_id": hypothesis_id,
                     },
                 )
@@ -64,12 +65,12 @@ async def bridge_event(
                 await publisher.publish(
                     channel,
                     "thinking_done",
-                    {"phase": "investigation", "sub_agent_id": hypothesis_id},
+                    {"phase": phase, "sub_agent_id": hypothesis_id},
                 )
 
         elif kind == "on_tool_start":
             name = event.get("name", "")
-            if name in ("conclude", "ask_human", "read_skill"):
+            if name in ("conclude", "submit_verification", "ask_human", "skill_read"):
                 pass
             else:
                 run_id = event.get("run_id", "")
@@ -77,7 +78,7 @@ async def bridge_event(
                     "name": name,
                     "args": event["data"].get("input", {}),
                     "tool_call_id": run_id,
-                    "phase": "investigation",
+                    "phase": phase,
                     "sub_agent_id": hypothesis_id,
                 }
                 # 标记已批准的 tool_use 事件
@@ -87,9 +88,9 @@ async def bridge_event(
 
         elif kind == "on_tool_end":
             name = event.get("name", "")
-            if name in ("conclude", "ask_human"):
+            if name in ("conclude", "submit_verification", "ask_human"):
                 pass
-            elif name == "read_skill":
+            elif name == "skill_read":
                 args = event["data"].get("input", {})
                 output, _ = normalize_tool_output(event["data"].get("output", ""))
                 success = not output.startswith("未找到")
@@ -104,7 +105,7 @@ async def bridge_event(
                         "skill_name": file_path or slug,
                         "content": output,
                         "success": success,
-                        "phase": "investigation",
+                        "phase": phase,
                         "sub_agent_id": hypothesis_id,
                     },
                 )
@@ -117,7 +118,7 @@ async def bridge_event(
                     "output": output_str,
                     "tool_call_id": run_id,
                     "status": status,
-                    "phase": "investigation",
+                    "phase": phase,
                     "sub_agent_id": hypothesis_id,
                 }
                 # 标记已批准的 tool_result 事件，并清除 approval 标记

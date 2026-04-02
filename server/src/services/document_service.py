@@ -252,8 +252,8 @@ class DocumentService:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding="utf-8")
 
-        # agents_config documents: only update content, skip chunk + embed
-        if doc.doc_type == "agents_config":
+        # memory_config documents: only update content, skip chunk + embed
+        if doc.doc_type == "memory_config":
             doc.status = "indexed"
         else:
             doc.status = "pending"
@@ -274,8 +274,8 @@ class DocumentService:
         doc = await self.session.get(ProjectDocument, document_id)
         if not doc:
             raise ValueError("Document not found")
-        if doc.doc_type == "agents_config":
-            raise ValueError("Cannot delete agents_config document")
+        if doc.doc_type == "memory_config":
+            raise ValueError("Cannot delete memory_config document")
 
         # Remove file from filesystem if it exists
         if project_slug:

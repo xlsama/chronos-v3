@@ -39,7 +39,7 @@ export const Route = createFileRoute(
 
 const EDITABLE_TYPES = new Set([
   "markdown",
-  "agents_config",
+  "memory_config",
   "text",
   "log",
   "json",
@@ -64,8 +64,8 @@ function DocumentDetailPage() {
 
   const isEditable = doc ? EDITABLE_TYPES.has(doc.doc_type) : false;
   const isMarkdown =
-    doc?.doc_type === "markdown" || doc?.doc_type === "agents_config";
-  const canDelete = doc ? doc.doc_type !== "agents_config" : false;
+    doc?.doc_type === "markdown" || doc?.doc_type === "memory_config";
+  const canDelete = doc ? doc.doc_type !== "memory_config" : false;
 
   function startEditing() {
     if (doc) {
@@ -201,7 +201,7 @@ function DocumentDetailPage() {
                   编辑
                 </Button>
               )}
-              {doc?.doc_type === "agents_config" && (
+              {doc?.doc_type === "memory_config" && (
                 <Button size="sm" variant="outline" onClick={() => setShowHistory(true)}>
                   <History className="mr-1.5 h-3.5 w-3.5" />
                   更新历史
@@ -221,7 +221,7 @@ function DocumentDetailPage() {
           )}
         </div>
       </div>
-      {doc?.doc_type === "agents_config" && (
+      {doc?.doc_type === "memory_config" && (
         <p className="px-6 py-2 text-xs text-muted-foreground">
           此文档会在事件解决后自动更新 ——
           系统从排查对话中提取架构拓扑、服务配置和排查经验等运维知识，增量补充到文档中。
@@ -274,9 +274,9 @@ function DocumentDetailPage() {
       <VersionHistoryDialog
         open={showHistory}
         onOpenChange={setShowHistory}
-        entityType="agents_md"
+        entityType="memory_md"
         entityId={documentId}
-        title="AGENTS.md 更新历史"
+        title="MEMORY.md 更新历史"
       />
     </motion.div>
   );

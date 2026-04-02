@@ -73,7 +73,7 @@ class TestListDocuments:
 
         resp = await client.get(f"/api/projects/{project_id}/documents")
         assert resp.status_code == 200
-        # May contain auto-created AGENTS.md
+        # May contain auto-created MEMORY.md
         assert isinstance(resp.json(), list)
 
     async def test_list_documents(self, client):
@@ -149,18 +149,18 @@ class TestDeleteDocument:
         get_resp = await client.get(f"/api/documents/{doc_id}")
         assert get_resp.status_code == 404
 
-    async def test_delete_agents_config_blocked(self, client):
+    async def test_delete_memory_config_blocked(self, client):
         project_id = await _create_project(client)
-        # Project auto-creates AGENTS.md, find it
+        # Project auto-creates MEMORY.md, find it
         docs_resp = await client.get(f"/api/projects/{project_id}/documents")
-        agents_doc = None
+        memory_doc = None
         for doc in docs_resp.json():
-            if doc["doc_type"] == "agents_config":
-                agents_doc = doc
+            if doc["doc_type"] == "memory_config":
+                memory_doc = doc
                 break
 
-        if agents_doc:
-            resp = await client.delete(f"/api/documents/{agents_doc['id']}")
+        if memory_doc:
+            resp = await client.delete(f"/api/documents/{memory_doc['id']}")
             assert resp.status_code == 400
 
     async def test_delete_document_not_found(self, client):

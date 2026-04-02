@@ -13,10 +13,10 @@ from src.lib.logger import get_logger
 from src.services.post_incident.base import get_mini_llm
 
 # ---------------------------------------------------------------------------
-# AGENTS.md 标准模板（extract 和 update 共享）
+# MEMORY.md 标准模板（extract 和 update 共享）
 # ---------------------------------------------------------------------------
 
-_AGENTS_MD_TEMPLATE = """\
+_MEMORY_MD_TEMPLATE = """\
 # 项目运维手册
 
 ## 架构拓扑
@@ -68,13 +68,13 @@ EXTRACT_KNOWLEDGE_PROMPT = """\
 
 SHOULD_UPDATE_PROMPT = (
     """\
-你是 AGENTS.md 文档维护助手。判断是否需要将新知识更新到 AGENTS.md。
+你是 MEMORY.md 文档维护助手。判断是否需要将新知识更新到 MEMORY.md。
 
-## AGENTS.md 标准结构
+## MEMORY.md 标准结构
 
 ````markdown
 """
-    + _AGENTS_MD_TEMPLATE
+    + _MEMORY_MD_TEMPLATE
     + """
 ````
 
@@ -87,15 +87,15 @@ SHOULD_UPDATE_PROMPT = (
 
 ## 更新规则
 1. 完全重复 → 只输出 "NO_UPDATE"
-2. 有价值补充 → 输出更新后的完整 AGENTS.md
+2. 有价值补充 → 输出更新后的完整 MEMORY.md
 3. 保持现有内容不变，只增量补充
 4. 新 Server/Service → 加表格行 + 架构图节点
-5. AGENTS.md 为空时按标准结构创建
+5. MEMORY.md 为空时按标准结构创建
 6. 不编造信息
 7. 只允许标准章节，禁止新增事件衍生章节
 8. 禁止写入事件特定内容（错误信息、根因、修复步骤）。现有内容中有此类信息应移除
 
-## 当前 AGENTS.md 内容
+## 当前 MEMORY.md 内容
 ```
 {current_content}
 ```
@@ -105,7 +105,7 @@ SHOULD_UPDATE_PROMPT = (
 {knowledge_text}
 ```
 
-如果无需更新只输出 "NO_UPDATE"，否则输出更新后的完整 AGENTS.md 内容（纯 Markdown，不要用代码块包裹）。"""
+如果无需更新只输出 "NO_UPDATE"，否则输出更新后的完整 MEMORY.md 内容（纯 Markdown，不要用代码块包裹）。"""
 )
 
 
@@ -142,7 +142,7 @@ async def _fetch_entity_anchors(session: AsyncSession) -> str:
     return result
 
 
-async def auto_update_agents_md(
+async def auto_update_memory_md(
     incident_id: str,
     summary_md: str,
     conversation_text: str,
@@ -151,7 +151,7 @@ async def auto_update_agents_md(
     """主入口。向量搜索匹配项目，KB Agent 已匹配的项目作为必选候选。"""
     sid = incident_id[:8]
     log = get_logger(component="post_incident", sid=sid)
-    log.info("Starting AGENTS.md auto-update")
+    log.info("Starting MEMORY.md auto-update")
 
     # Step 0: Fetch entity anchors for knowledge extraction
     log.info("Fetching entity anchors from DB")
@@ -196,16 +196,16 @@ async def auto_update_agents_md(
 
     log.info("Found candidate projects", count=len(candidates))
 
-    # Step 3: Update each candidate project's AGENTS.md
+    # Step 3: Update each candidate project's MEMORY.md
     results = {}
     for project_id, distance in candidates:
         t_update = time.monotonic()
         async with get_session_factory()() as session:
-            result = await _update_project_agents_md(session, project_id, knowledge_text)
+            result = await _update_project_memory_md(session, project_id, knowledge_text)
         update_elapsed = time.monotonic() - t_update
         results[str(project_id)] = result
         log.info(
-            "Project AGENTS.md update result",
+            "Project MEMORY.md update result",
             project=str(project_id)[:8],
             result=result,
             elapsed=f"{update_elapsed:.2f}s",
@@ -304,35 +304,35 @@ async def _find_candidate_projects(knowledge_text: str) -> list[tuple[uuid.UUID,
     return candidates
 
 
-async def _update_project_agents_md(
+async def _update_project_memory_md(
     session: AsyncSession,
     project_id: uuid.UUID,
     knowledge_text: str,
 ) -> str:
-    """读取项目 AGENTS.md，LLM 判断并执行更新。
+    """读取项目 MEMORY.md，LLM 判断并执行更新。
     返回 "updated" | "skipped" | "no_doc"
     """
     log = get_logger(component="post_incident")
     pid_short = str(project_id)[:8]
-    log.info("Updating project AGENTS.md", project=pid_short, knowledge_len=len(knowledge_text))
+    log.info("Updating project MEMORY.md", project=pid_short, knowledge_len=len(knowledge_text))
 
-    # Find the AGENTS.md document
+    # Find the MEMORY.md document
     result = await session.execute(
         select(ProjectDocument)
         .where(
             ProjectDocument.project_id == project_id,
-            ProjectDocument.doc_type == "agents_config",
+            ProjectDocument.doc_type == "memory_config",
         )
         .limit(1)
     )
     doc = result.scalar_one_or_none()
     if not doc:
-        log.info("Project has no agents_config doc", project=pid_short)
+        log.info("Project has no memory_config doc", project=pid_short)
         return "no_doc"
 
     current_content = doc.content or ""
     log.info(
-        "Current AGENTS.md content loaded", project=pid_short, content_len=len(current_content)
+        "Current MEMORY.md content loaded", project=pid_short, content_len=len(current_content)
     )
 
     # Ask LLM whether to update
@@ -341,7 +341,7 @@ async def _update_project_agents_md(
         current_content=current_content if current_content.strip() else "(空)",
         knowledge_text=knowledge_text,
     )
-    log.info("Calling LLM for AGENTS.md update decision", prompt_len=len(prompt))
+    log.info("Calling LLM for MEMORY.md update decision", prompt_len=len(prompt))
     try:
         resp = await llm.ainvoke(
             [
@@ -351,12 +351,12 @@ async def _update_project_agents_md(
         resp_len = len(resp.content) if resp.content else 0
         resp_preview = repr(resp.content[:200]) if resp.content else "None"
         log.info(
-            "LLM responded for AGENTS.md update",
+            "LLM responded for MEMORY.md update",
             resp_len=resp_len,
             preview=resp_preview,
         )
     except Exception:
-        log.error("LLM call failed for AGENTS.md update", exc_info=True)
+        log.error("LLM call failed for MEMORY.md update", exc_info=True)
         raise
     result_text = resp.content.strip()
 
@@ -378,7 +378,7 @@ async def _update_project_agents_md(
 
     project = await session.get(Project, project_id)
     if project:
-        file_path = knowledge_dir(project.slug) / "AGENTS.md"
+        file_path = knowledge_dir(project.slug) / "MEMORY.md"
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(result_text, encoding="utf-8")
 
@@ -386,11 +386,11 @@ async def _update_project_agents_md(
 
     vs = VersionService(session)
     await vs.save_version(
-        entity_type="agents_md",
+        entity_type="memory_md",
         entity_id=str(doc.id),
         content=result_text,
         change_source="auto",
     )
     await session.commit()
-    log.info("Project AGENTS.md updated and committed", project=pid_short)
+    log.info("Project MEMORY.md updated and committed", project=pid_short)
     return "updated"

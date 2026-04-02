@@ -10,8 +10,8 @@ from src.env import get_settings
 from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
-from src.ops_agent.nodes.sub_agent_bridge import bridge_event
-from src.ops_agent.sub_agents.investigation_graph import compile_investigation_graph
+from src.ops_agent.nodes.agent_bridge import bridge_event
+from src.ops_agent.agents.investigation_graph import compile_investigation_graph
 from src.ops_agent.state import MainState, HypothesisResult
 from src.ops_agent.tools.registry import APPROVAL_TOOL_NAMES, get_tool
 from src.services.approval_service import ApprovalService
@@ -31,11 +31,11 @@ def _format_prior_findings(results: list[HypothesisResult]) -> str:
 
 
 def _extract_launch_info(state: MainState) -> tuple[str, str, str, str]:
-    """从最近的 launch_investigation tool_call 中提取假设信息和 tool_call_id。"""
+    """从最近的 spawn_agent tool_call 中提取假设信息和 tool_call_id。"""
     for msg in reversed(state["messages"]):
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             for tc in msg.tool_calls:
-                if tc["name"] == "launch_investigation":
+                if tc["name"] == "spawn_agent":
                     args = tc.get("args", {})
                     return (
                         args.get("hypothesis_id", "H1"),
@@ -56,6 +56,7 @@ async def _create_and_publish_approval(
     severity: str,
     hypothesis_id: str,
     log,
+    phase: str = "investigation",
 ) -> str:
     """在子 Agent 上下文中创建 ApprovalRequest 并发布 approval_required 事件。
 
@@ -104,7 +105,7 @@ async def _create_and_publish_approval(
             "tool_args": {**args, "risk_level": risk_level},
             "tool_call_id": pending_tool_call.get("id", ""),
             "sub_agent_id": hypothesis_id,
-            "phase": "investigation",
+            "phase": phase,
         },
     )
 
@@ -150,6 +151,7 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
                         status=args.get("status", "inconclusive"),
                         summary=args.get("summary", ""),
                         detail=args.get("detail", ""),
+                        verification_evidence=args.get("verification_evidence", ""),
                     )
             break
 
@@ -159,6 +161,7 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
         status="inconclusive",
         summary="调查未能得出结论",
         detail="",
+        verification_evidence="",
     )
 
 
@@ -168,7 +171,8 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
 
 
 async def _stream_sub_agent(
-    sub_graph, initial_state, config, channel, publisher, hypothesis_id, log
+    sub_graph, initial_state, config, channel, publisher, hypothesis_id, log,
+    phase: str = "investigation",
 ) -> dict:
     """执行子 Agent 图，桥接 SSE 事件。返回执行结果。"""
     thinking_buffer = ""
@@ -185,6 +189,7 @@ async def _stream_sub_agent(
                 thinking_buffer,
                 ask_human_active,
                 ask_human_streamed,
+                phase=phase,
             )
             thinking_buffer = bridge_result["thinking_buffer"]
             ask_human_active = bridge_result["ask_human_active"]
@@ -198,12 +203,12 @@ async def _stream_sub_agent(
         try:
             await publisher.publish(
                 channel,
-                "sub_agent_completed",
+                "agent_completed",
                 {
                     "hypothesis_id": hypothesis_id,
                     "status": "failed",
                     "summary": f"排查异常: {str(e)[:200]}",
-                    "phase": "investigation",
+                    "phase": phase,
                 },
             )
         except Exception:
@@ -242,6 +247,7 @@ async def _resume_sub_agent(
     hypothesis_id,
     log,
     approval_id: str = "",
+    phase: str = "investigation",
 ) -> dict:
     """恢复子 Agent（传递审批决定或用户输入）。"""
     from langgraph.types import Command
@@ -313,6 +319,7 @@ async def _resume_sub_agent(
                 ask_human_streamed,
                 approval_id=approval_id,
                 approval_tool_name=approval_tool_name,
+                phase=phase,
             )
             thinking_buffer = bridge_result["thinking_buffer"]
             ask_human_active = bridge_result["ask_human_active"]
@@ -329,12 +336,12 @@ async def _resume_sub_agent(
         try:
             await publisher.publish(
                 channel,
-                "sub_agent_completed",
+                "agent_completed",
                 {
                     "hypothesis_id": hypothesis_id,
                     "status": "failed",
                     "summary": f"排查异常: {str(e)[:200]}",
-                    "phase": "investigation",
+                    "phase": phase,
                 },
             )
         except Exception:
@@ -368,14 +375,14 @@ async def _resume_sub_agent(
 # ═══════════════════════════════════════════
 
 
-async def run_sub_agent_node(state: MainState) -> dict:
+async def run_agent_node(state: MainState) -> dict:
     """创建或恢复子 Agent 来验证当前假设。
 
-    由 main_agent 调用 launch_investigation 后触发。
+    由 main_agent 调用 spawn_agent 后触发。
     完成后返回 ToolMessage 给 main_agent。
     """
     sid = state["incident_id"][:8]
-    log = get_logger(component="run_sub_agent", sid=sid)
+    log = get_logger(component="run_agent", sid=sid)
     incident_id = state["incident_id"]
     results = list(state.get("hypothesis_results") or [])
 
@@ -388,11 +395,11 @@ async def run_sub_agent_node(state: MainState) -> dict:
     channel = EventPublisher.channel_for_incident(incident_id)
     publisher = EventPublisher(redis=get_redis(), session_factory=get_session_factory())
 
-    sub_thread_id = state.get("active_sub_agent_thread_id")
+    sub_thread_id = state.get("active_agent_thread_id")
     is_resume = bool(sub_thread_id)
 
     if not is_resume:
-        # 从 launch_investigation tool_call 中提取假设信息
+        # 从 spawn_agent tool_call 中提取假设信息
         hypothesis_id, hypothesis_title, hypothesis_desc, launch_tool_call_id = (
             _extract_launch_info(state)
         )
@@ -429,11 +436,11 @@ async def run_sub_agent_node(state: MainState) -> dict:
             "recursion_limit": get_settings().agent_recursion_limit,
         }
 
-        # 发布 sub_agent_started 事件
+        # 发布 agent_started 事件
         try:
             await publisher.publish(
                 channel,
-                "sub_agent_started",
+                "agent_started",
                 {
                     "hypothesis_id": hypothesis_id,
                     "hypothesis_title": hypothesis_title,
@@ -443,7 +450,7 @@ async def run_sub_agent_node(state: MainState) -> dict:
                 },
             )
         except Exception as e:
-            log.warning("Failed to publish sub_agent_started", error=str(e))
+            log.warning("Failed to publish agent_started", error=str(e))
 
         # 执行子 Agent，桥接事件
         result = await _stream_sub_agent(
@@ -454,7 +461,7 @@ async def run_sub_agent_node(state: MainState) -> dict:
         hypothesis_id = state.get("active_hypothesis_id", "H1")
         hypothesis_title = state.get("active_hypothesis_title", "")
         hypothesis_desc = state.get("active_hypothesis_desc", "")
-        launch_tool_call_id = state.get("pending_launch_tool_call_id", "")
+        launch_tool_call_id = state.get("pending_spawn_tool_call_id", "")
         hypothesis = {"id": hypothesis_id, "title": hypothesis_title, "desc": hypothesis_desc}
 
         log.info("Resuming sub-agent", hypothesis=hypothesis_id, thread_id=sub_thread_id)
@@ -488,12 +495,12 @@ async def run_sub_agent_node(state: MainState) -> dict:
             hypothesis=hypothesis["id"],
         )
         return_state: dict = {
-            "active_sub_agent_thread_id": sub_thread_id,
+            "active_agent_thread_id": sub_thread_id,
             "active_hypothesis_id": hypothesis["id"],
             "active_hypothesis_title": hypothesis["title"],
             "active_hypothesis_desc": hypothesis["desc"],
-            "pending_launch_tool_call_id": launch_tool_call_id,
-            "sub_agent_status": "waiting_for_human",
+            "pending_spawn_tool_call_id": launch_tool_call_id,
+            "agent_status": "waiting_for_human",
         }
         if result["interrupt_type"] == "human_approval":
             pending = result.get("pending_tool_call")
@@ -528,11 +535,11 @@ async def run_sub_agent_node(state: MainState) -> dict:
     finding = await _extract_findings(sub_graph, config, hypothesis)
     log.info("Sub-agent completed", hypothesis=hypothesis["id"], status=finding["status"])
 
-    # 发布 sub_agent_completed 事件
+    # 发布 agent_completed 事件
     try:
         await publisher.publish(
             channel,
-            "sub_agent_completed",
+            "agent_completed",
             {
                 "hypothesis_id": hypothesis["id"],
                 "status": finding["status"],
@@ -541,7 +548,7 @@ async def run_sub_agent_node(state: MainState) -> dict:
             },
         )
     except Exception as e:
-        log.warning("Failed to publish sub_agent_completed", error=str(e))
+        log.warning("Failed to publish agent_completed", error=str(e))
 
     # 构造 ToolMessage 返回给 main_agent
     status_zh = {"confirmed": "已确认", "eliminated": "已排除", "inconclusive": "证据不足"}
@@ -556,12 +563,12 @@ async def run_sub_agent_node(state: MainState) -> dict:
     return {
         "messages": [ToolMessage(content=tool_message_content, tool_call_id=launch_tool_call_id)],
         "hypothesis_results": results,
-        "active_sub_agent_thread_id": None,
+        "active_agent_thread_id": None,
         "active_hypothesis_id": None,
         "active_hypothesis_title": None,
         "active_hypothesis_desc": None,
-        "pending_launch_tool_call_id": None,
-        "sub_agent_status": "completed",
+        "pending_spawn_tool_call_id": None,
+        "agent_status": "completed",
         "needs_approval": False,
         "pending_tool_call": None,
         "pending_approval_id": None,

@@ -258,7 +258,7 @@ def _message_to_event(m: Message) -> dict:
     elif m.event_type == "approval_required":
         data = metadata
     elif m.event_type == "ask_human":
-        data = {"question": m.content}
+        data = {"question": m.content, **metadata}
     elif m.event_type == "done":
         data = {}
     elif m.event_type == "error":
@@ -293,7 +293,7 @@ def _message_to_event(m: Message) -> dict:
         data = metadata or {}
     elif m.event_type in ("round_started", "round_ended"):
         data = metadata or {}
-    elif m.event_type in ("sub_agent_started", "sub_agent_completed", "sub_agent_reporting"):
+    elif m.event_type in ("agent_started", "agent_completed", "agent_reporting"):
         data = metadata
     else:
         data = {"content": m.content}

@@ -135,12 +135,19 @@ class AgentRunner:
             "kb_summary": None,
             "kb_project_ids": [],
             "hypothesis_results": [],
-            "active_sub_agent_thread_id": None,
+            "active_agent_thread_id": None,
             "active_hypothesis_id": None,
             "active_hypothesis_desc": None,
-            "pending_launch_tool_call_id": None,
+            "pending_spawn_tool_call_id": None,
             "pending_approval_id": None,
-            "sub_agent_status": None,
+            "agent_status": None,
+            "parallel_agents": [],
+            "parallel_launch_tool_call_id": None,
+            "parallel_interrupted_agent_id": None,
+            "active_verification_thread_id": None,
+            "verification_status": None,
+            "pending_verify_tool_call_id": None,
+            "verification_report": None,
             "ask_human_count": 0,
             "tool_call_retry_count": 0,
         }
@@ -202,7 +209,10 @@ class AgentRunner:
 
         state = await self.graph.aget_state(config)
         next_nodes = state.next or ()
-        valid_resume_nodes = {"ask_human", "confirm_resolution", "sub_agent_ask_human", "triage"}
+        valid_resume_nodes = {
+            "ask_human", "confirm_resolution", "agent_ask_human",
+            "parallel_agent_ask_human", "verification_ask_human", "triage",
+        }
         if not valid_resume_nodes.intersection(next_nodes):
             return
 
@@ -374,10 +384,18 @@ class AgentRunner:
 
         # Determine which node to resume from based on current interrupt state
         next_nodes = state.next or ()
-        if "sub_agent_ask_human" in next_nodes:
-            as_node = "sub_agent_ask_human"
-        elif "sub_agent_approval" in next_nodes:
-            as_node = "sub_agent_approval"
+        if "agent_ask_human" in next_nodes:
+            as_node = "agent_ask_human"
+        elif "agent_approval" in next_nodes:
+            as_node = "agent_approval"
+        elif "parallel_agent_ask_human" in next_nodes:
+            as_node = "parallel_agent_ask_human"
+        elif "parallel_agent_approval" in next_nodes:
+            as_node = "parallel_agent_approval"
+        elif "verification_ask_human" in next_nodes:
+            as_node = "verification_ask_human"
+        elif "verification_approval" in next_nodes:
+            as_node = "verification_approval"
         else:
             # Fallback: resume from main_agent
             as_node = "main_agent"
@@ -447,25 +465,47 @@ class AgentRunner:
             log.info("triage interrupt")
             question = self._extract_triage_question(state)
             if question:
-                await self.publisher.publish(channel, "ask_human", {"question": question})
-                await self.publisher.publish(channel, "ask_human_done", {})
+                await self.publisher.publish(
+                    channel, "ask_human", {"question": question, "phase": "gather_context"}
+                )
+                await self.publisher.publish(
+                    channel, "ask_human_done", {"phase": "gather_context"}
+                )
 
-        # 子 Agent 审批/ask_human 中断 —— 已由 run_sub_agent_node 处理
-        if "sub_agent_approval" in next_nodes:
-            log.info("sub_agent_approval interrupt (already published by run_sub_agent)")
+        # 子 Agent 审批/ask_human 中断 —— 已由 run_agent_node 处理
+        if "agent_approval" in next_nodes:
+            log.info("agent_approval interrupt (already published by run_agent)")
 
-        if "sub_agent_ask_human" in next_nodes:
-            log.info("sub_agent_ask_human interrupt (already notified by run_sub_agent)")
+        if "agent_ask_human" in next_nodes:
+            log.info("agent_ask_human interrupt (already notified by run_agent)")
+
+        # 并行子 Agent 审批/ask_human 中断
+        if "parallel_agent_approval" in next_nodes:
+            log.info("parallel_agent_approval interrupt (already published)")
+
+        if "parallel_agent_ask_human" in next_nodes:
+            log.info("parallel_agent_ask_human interrupt (already notified)")
+
+        # Verification 审批/ask_human 中断
+        if "verification_approval" in next_nodes:
+            log.info("verification_approval interrupt (already published by run_verification)")
+
+        if "verification_ask_human" in next_nodes:
+            log.info("verification_ask_human interrupt (already notified by run_verification)")
 
         # ask_human 中断 —— main_agent 调用了 ask_human，等待用户回复
         if "ask_human" in next_nodes:
             log.info("ask_human interrupt")
             if not self._ask_human_streamed:
                 # Fallback: 没有流式推送过，一次性发送
-                question = self._extract_ask_human_question(vals)
-                if question:
-                    await self.publisher.publish(channel, "ask_human", {"question": question})
-                    await self.publisher.publish(channel, "ask_human_done", {})
+                ask_data = self._extract_ask_human_data(vals)
+                if ask_data:
+                    await self.publisher.publish(
+                        channel, "ask_human", {**ask_data, "phase": "investigation"}
+                    )
+                    await self.publisher.publish(
+                        channel, "ask_human_done", {"phase": "investigation"}
+                    )
             self._ask_human_streamed = False
 
         # confirm_resolution 中断 —— main_agent 调用了 complete，等待用户确认
@@ -533,11 +573,12 @@ class AgentRunner:
         return None
 
     @staticmethod
-    def _extract_ask_human_question(vals: dict) -> str | None:
-        """Extract the question from the last AI message.
+    def _extract_ask_human_data(vals: dict) -> dict | None:
+        """Extract structured ask_human data from the last AI message.
 
+        Returns dict with question, known_context, assessment (if present).
         Handles two cases:
-        1. Explicit ask_human tool call -> extract question from args
+        1. Explicit ask_human tool call -> extract from args
         2. Plain text response (no tool calls) -> use message content as question
         """
         messages = vals.get("messages", [])
@@ -547,9 +588,15 @@ class AgentRunner:
             if msg.tool_calls:
                 for tc in msg.tool_calls:
                     if tc["name"] == "ask_human":
-                        return tc["args"].get("question", "")
+                        args = tc.get("args", {})
+                        result: dict = {"question": args.get("question", "")}
+                        if args.get("known_context"):
+                            result["known_context"] = args["known_context"]
+                        if args.get("assessment"):
+                            result["assessment"] = args["assessment"]
+                        return result
             elif hasattr(msg, "content") and msg.content:
-                return msg.content
+                return {"question": msg.content}
         return None
 
     def _reset_ask_human_stream_state(self) -> None:
@@ -800,9 +847,9 @@ class AgentRunner:
             name = event.get("name", "")
             skill_log = get_logger(component="skill", sid=sid)
             main_log = get_logger(component="main", sid=sid)
-            if name == "read_skill":
+            if name == "skill_read":
                 path = event["data"].get("input", {}).get("path", "")
-                skill_log.info("read_skill start", path=path)
+                skill_log.info("skill_read start", path=path)
                 return
             if name == "update_plan":
                 main_log.info("Tool start (no SSE)", tool=name)
@@ -825,15 +872,15 @@ class AgentRunner:
             name = event.get("name", "")
             skill_log = get_logger(component="skill", sid=sid)
             main_log = get_logger(component="main", sid=sid)
-            if name == "read_skill":
+            if name == "skill_read":
                 args = event["data"].get("input", {})
                 output, _ = normalize_tool_output(event["data"].get("output", ""))
                 success = not output.startswith("未找到")
                 path = args.get("path", "")
                 skill_log.info(
-                    "read_skill done", path=path, success=success, content_len=len(output)
+                    "skill_read done", path=path, success=success, content_len=len(output)
                 )
-                skill_log.debug("read_skill content", content=output)
+                skill_log.debug("skill_read content", content=output)
                 parts = path.split("/", 1)
                 skill_slug = parts[0]
                 file_path = parts[1] if len(parts) > 1 else None

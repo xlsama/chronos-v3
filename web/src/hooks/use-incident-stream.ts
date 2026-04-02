@@ -29,6 +29,7 @@ export function useIncidentStream(
   const loadedEventsRef = useRef<SSEEvent[] | null>(null);
   const statusRef = useRef(status);
   const hasInvalidatedIncidentRef = useRef(false);
+  const askHumanStructuredRef = useRef<{ known_context?: string; assessment?: string } | null>(null);
 
   const {
     addEvent,
@@ -44,6 +45,8 @@ export function useIncidentStream(
     setSubAgentStatus,
     updatePhase,
     setAskHumanQuestion,
+    setAskHumanPhase,
+    addTriageEvent,
     setResolutionConfirmRequired,
     setResolutionConfirmResolved,
     setWaitingForAgent,
@@ -245,19 +248,19 @@ export function useIncidentStream(
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
                 setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
               }
-            } else if (event.event_type === "sub_agent_started") {
+            } else if (event.event_type === "agent_started") {
               startInvestigation(
                 event.data.hypothesis_id as string,
                 event.data.hypothesis_title as string,
                 event.data.hypothesis_desc as string,
               );
-            } else if (event.event_type === "sub_agent_completed") {
+            } else if (event.event_type === "agent_completed") {
               completeInvestigation(
                 event.data.hypothesis_id as string,
                 event.data.status as string,
                 (event.data.summary as string) || "",
               );
-            } else if (event.event_type === "sub_agent_reporting") {
+            } else if (event.event_type === "agent_reporting") {
               const { setInvestigationReporting } = useIncidentStreamStore.getState();
               setInvestigationReporting(event.data.hypothesis_id as string);
             } else if (
@@ -310,7 +313,13 @@ export function useIncidentStream(
               addSubAgentEvent(agent, event);
             }
           } else if (event.event_type === "user_message") {
-            addEvent(event);
+            const { askHumanPhase: uhPhase } = useIncidentStreamStore.getState();
+            if (uhPhase === "gather_context") {
+              addTriageEvent(event);
+              setAskHumanPhase(null);
+            } else {
+              addEvent(event);
+            }
           } else if (event.event_type === "approval_decided") {
             setApprovalDecided(
               event.data.approval_id as string,
@@ -372,29 +381,53 @@ export function useIncidentStream(
             queryClient.invalidateQueries({ queryKey: ["incident-events", incidentId] });
           } else if (event.event_type === "ask_human") {
             setWaitingForAgent(false);
-            updatePhase("investigation");
-            // Flush residual thinking
-            const { thinkingContent: thk } = useIncidentStreamStore.getState();
-            if (thk) {
-              addEvent({
-                event_type: "thinking",
-                data: { content: thk },
-                timestamp: event.timestamp,
-              });
-              clearThinking();
+            const askPhase = (event.data.phase as string) || "investigation";
+            updatePhase(askPhase);
+            setAskHumanPhase(askPhase);
+            // Flush residual thinking (only for investigation phase)
+            if (askPhase !== "gather_context") {
+              const { thinkingContent: thk } = useIncidentStreamStore.getState();
+              if (thk) {
+                addEvent({
+                  event_type: "thinking",
+                  data: { content: thk },
+                  timestamp: event.timestamp,
+                });
+                clearThinking();
+              }
             }
-            // Accumulate incremental question
+            // Accumulate incremental question; store structured fields from first chunk
             appendAskHuman(event.data.question as string);
+            // Capture structured fields (known_context, assessment) if present
+            if (event.data.known_context || event.data.assessment) {
+              askHumanStructuredRef.current = {
+                known_context: (event.data.known_context as string) || undefined,
+                assessment: (event.data.assessment as string) || undefined,
+              };
+            }
           } else if (event.event_type === "ask_human_done") {
-            const { askHumanStreamContent } = useIncidentStreamStore.getState();
+            const { askHumanStreamContent, askHumanPhase: ahPhase } = useIncidentStreamStore.getState();
             if (askHumanStreamContent) {
-              addEvent({
+              const finalPhase = ahPhase || "investigation";
+              const structuredData = askHumanStructuredRef.current;
+              const finalEvent: SSEEvent = {
                 event_type: "ask_human",
-                data: { question: askHumanStreamContent },
+                data: {
+                  question: askHumanStreamContent,
+                  phase: finalPhase,
+                  ...(structuredData?.known_context && { known_context: structuredData.known_context }),
+                  ...(structuredData?.assessment && { assessment: structuredData.assessment }),
+                },
                 timestamp: event.timestamp,
-              });
+              };
+              if (finalPhase === "gather_context") {
+                addTriageEvent(finalEvent);
+              } else {
+                addEvent(finalEvent);
+              }
               setAskHumanQuestion(askHumanStreamContent);
               clearAskHumanStream();
+              askHumanStructuredRef.current = null;
             }
           } else if (event.event_type === "plan_started") {
             updatePhase("planning");
@@ -496,8 +529,8 @@ export function useIncidentStream(
               addEvent(event);
             }
             updatePhase(phase || "planning");
-          } else if (event.event_type === "sub_agent_started") {
-            updatePhase("investigation");
+          } else if (event.event_type === "agent_started") {
+            updatePhase(phase === "verification" ? "verification" : "investigation");
             // Flush main agent thinking/answer buffers before creating investigation
             const { thinkingContent: thk, answerContent: ans } = useIncidentStreamStore.getState();
             if (thk) {
@@ -521,10 +554,10 @@ export function useIncidentStream(
               event.data.hypothesis_title as string,
               event.data.hypothesis_desc as string,
             );
-          } else if (event.event_type === "sub_agent_reporting") {
+          } else if (event.event_type === "agent_reporting") {
             const { setInvestigationReporting } = useIncidentStreamStore.getState();
             setInvestigationReporting(event.data.hypothesis_id as string);
-          } else if (event.event_type === "sub_agent_completed") {
+          } else if (event.event_type === "agent_completed") {
             completeInvestigation(
               event.data.hypothesis_id as string,
               event.data.status as string,

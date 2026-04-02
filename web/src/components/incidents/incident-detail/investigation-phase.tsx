@@ -3,7 +3,7 @@ import { MessageCircleQuestion, CheckCircle, ListTodo, Check, Loader2, ChevronRi
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Virtuoso } from "react-virtuoso";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
-import type { InvestigationSubAgent } from "@/stores/incident-stream";
+import type { InvestigationAgent } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
 import { getServers } from "@/api/servers";
@@ -15,7 +15,7 @@ import { TextDotsLoader } from "@/components/ui/loader";
 import { ThinkingBubble } from "./thinking-bubble";
 import { ToolCallCard } from "./tool-call-card";
 import { SkillReadCard } from "./skill-read-card";
-import { SubAgentCard } from "./sub-agent-card";
+import { AgentCard } from "./agent-card";
 import { TimelineDivider } from "./timeline-divider";
 import { UserMessageBubble } from "./user-message-bubble";
 import { AnswerCard } from "./answer-card";
@@ -39,7 +39,7 @@ type TimelineItem =
 
 type MergedItem =
   | { kind: "timeline"; item: TimelineItem; idx: number; ts: string }
-  | { kind: "investigation"; inv: InvestigationSubAgent; ts: string };
+  | { kind: "investigation"; inv: InvestigationAgent; ts: string };
 
 // --- Helpers ---
 
@@ -169,6 +169,8 @@ function formatErrorMessage(message: string): string {
 function WaitingIndicator() {
   const showWaiting = useIncidentStreamStore((s) => {
     if (!s.isWaitingForAgent) return false;
+    // Triage 阶段的等待指示器在 ContextGatheringPhase 中渲染
+    if (s.askHumanPhase === "gather_context") return false;
     // 有待处理的审批时不显示（Agent 在等审批，不是在思考）
     return !s.events.some(
       (e) =>
@@ -197,7 +199,9 @@ function LiveThinkingSection() {
 
 function LiveAskHumanSection() {
   const askHumanStreamContent = useIncidentStreamStore((s) => s.askHumanStreamContent);
-  if (!askHumanStreamContent) return null;
+  const askHumanPhase = useIncidentStreamStore((s) => s.askHumanPhase);
+  // Triage ask_human 在 ContextGatheringPhase 中渲染
+  if (!askHumanStreamContent || askHumanPhase === "gather_context") return null;
   return (
     <div className="animate-in fade-in duration-150">
       <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
@@ -355,8 +359,10 @@ export function InvestigationPhase({
   isTransitioning,
 }: InvestigationPhaseProps) {
   const events = useIncidentStreamStore((s) => s.events);
-  const investigations = useIncidentStreamStore((s) => s.investigations);
-  const activeInvestigationId = useIncidentStreamStore((s) => s.activeInvestigationId);
+  const investigations = useIncidentStreamStore((s) =>
+    s.investigations.filter((i) => i.hypothesisId !== "VERIFY"),
+  );
+  const activeInvestigationIds = useIncidentStreamStore((s) => s.activeInvestigationIds);
   const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
   const hasInvestigations = investigations.length > 0;
 
@@ -459,19 +465,19 @@ export function InvestigationPhase({
     return merged;
   }, [timelineItems, investigations, hasInvestigations]);
 
-  const renderInvestigationCard = (inv: InvestigationSubAgent) => (
-    <SubAgentCard
+  const renderInvestigationCard = (inv: InvestigationAgent) => (
+    <AgentCard
       title={inv.hypothesisTitle}
       events={inv.events}
       status={inv.status}
-      isActive={inv.hypothesisId === activeInvestigationId}
+      isActive={activeInvestigationIds.has(inv.hypothesisId)}
       isReporting={inv.isReporting}
       streamingContent={inv.thinkingContent}
       summary={inv.summary}
       serverMap={serverMap}
       serviceMap={serviceMap}
       incidentStatus={incidentStatus}
-      forceExpanded={inv.hypothesisId === activeInvestigationId}
+      forceExpanded={activeInvestigationIds.has(inv.hypothesisId)}
     />
   );
 
@@ -556,22 +562,41 @@ export function InvestigationPhase({
           </div>
         );
       }
-      case "ask_human":
+      case "ask_human": {
+        const askData = item.event.data;
+        const hasStructured = !!(askData.known_context || askData.assessment);
         return (
           <div key={i}>
             <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-800 dark:bg-amber-950/30">
               <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Agent 需要更多信息</p>
+                {hasStructured && (
+                  <div className="mt-2 space-y-2">
+                    {askData.known_context && (
+                      <div className="rounded-md bg-gray-100/80 px-3 py-2 dark:bg-gray-800/50">
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">已有信息</p>
+                        <Markdown content={askData.known_context as string} variant="compact" className="mt-0.5 card-markdown text-xs" />
+                      </div>
+                    )}
+                    {askData.assessment && (
+                      <div className="rounded-md bg-blue-50/80 px-3 py-2 dark:bg-blue-950/30">
+                        <p className="text-xs font-medium text-blue-600 dark:text-blue-400">初步判断</p>
+                        <Markdown content={askData.assessment as string} variant="compact" className="mt-0.5 card-markdown text-xs" />
+                      </div>
+                    )}
+                  </div>
+                )}
                 <Markdown
-                  content={item.event.data.question as string}
+                  content={askData.question as string}
                   variant="compact"
-                  className="mt-1 card-markdown card-markdown--amber"
+                  className="mt-2 card-markdown card-markdown--amber"
                 />
               </div>
             </div>
           </div>
         );
+      }
       case "user_message":
         return (
           <div key={i}>

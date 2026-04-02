@@ -5,18 +5,18 @@ from src.db.models import ProjectDocument
 from src.lib.paths import knowledge_dir
 
 
-async def ensure_agents_md(
+async def ensure_memory_md(
     session: AsyncSession,
     project_id,
     project_name: str,
     project_slug: str,
 ) -> ProjectDocument | None:
-    """Ensure the project has an AGENTS.md document (empty content, not indexed)."""
+    """Ensure the project has a MEMORY.md document (empty content, not indexed)."""
     existing = (
         await session.execute(
             select(ProjectDocument).where(
                 ProjectDocument.project_id == project_id,
-                ProjectDocument.doc_type == "agents_config",
+                ProjectDocument.doc_type == "memory_config",
             )
         )
     ).scalar_one_or_none()
@@ -26,9 +26,9 @@ async def ensure_agents_md(
 
     doc = ProjectDocument(
         project_id=project_id,
-        filename="AGENTS.md",
+        filename="MEMORY.md",
         content="",
-        doc_type="agents_config",
+        doc_type="memory_config",
         status="indexed",
     )
     session.add(doc)
@@ -37,6 +37,6 @@ async def ensure_agents_md(
     # Write empty file to disk
     storage_dir = knowledge_dir(project_slug)
     storage_dir.mkdir(parents=True, exist_ok=True)
-    (storage_dir / "AGENTS.md").write_text("", encoding="utf-8")
+    (storage_dir / "MEMORY.md").write_text("", encoding="utf-8")
 
     return doc

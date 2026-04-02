@@ -60,6 +60,8 @@ _SERVICE_EXEC_PROMPT = """\
 - ES 优先检查 /_cluster/health 判断集群状态
 - Prometheus 查询注意时间范围，避免拉取过多数据
 - 写操作必须在 explanation 中说明原因和风险
+- 每个数据库 service 绑定到特定数据库，不支持跨库 JOIN（如 other_db.table）。需要关联多库数据时，分别查询后合并分析
+- MySQL/Doris 中避免使用保留字（如 rows, rank, groups）作为别名，需要时用反引号转义: COUNT(*) as `rows`
 """
 
 # Registry of service connectors with TTL and capacity management
@@ -327,6 +329,7 @@ async def list_services() -> list[dict]:
                 "service_type": s.service_type,
                 "host": s.host,
                 "port": s.port,
+                "database": (s.config or {}).get("database", ""),
                 "status": s.status,
             }
             for s in services

@@ -3,11 +3,11 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useAuthStore } from "@/stores/auth";
 import { motion } from "motion/react";
 import {
-  Activity,
   BookOpen,
   Cable,
   Check,
   ChevronsUpDown,
+  Inbox,
   LogOut,
   Monitor,
   Moon,
@@ -26,7 +26,10 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   SidebarSeparator,
+  SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -52,7 +55,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getAvatarUrl } from "@/api/auth";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 
-const mainItems = [{ to: "/incidents", label: "事件", icon: Activity }] as const;
+const mainItems = [{ to: "/incidents", label: "事件", icon: Inbox }] as const;
 
 const contextItems = [
   { to: "/connections", label: "连接", icon: Cable },
@@ -91,6 +94,7 @@ function NavItem({
 
 export function AppSidebar() {
   const { location } = useRouterState();
+  const { state, toggleSidebar } = useSidebar();
   const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -118,12 +122,21 @@ export function AppSidebar() {
   );
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
-        <Link to="/incidents" className="flex h-8 items-center gap-3 px-2">
-          <img src="/favicon.png" alt="logo" className="size-5" />
-          <h1 className="text-base font-medium">Enmolar Chronos</h1>
-        </Link>
+        {state === "collapsed" ? (
+          <button onClick={toggleSidebar} className="flex h-8 items-center justify-center">
+            <img src="/favicon.png" alt="logo" className="size-5" />
+          </button>
+        ) : (
+          <div className="flex h-8 items-center gap-1">
+            <Link to="/incidents" className="flex flex-1 items-center gap-3 px-2 overflow-hidden">
+              <img src="/favicon.png" alt="logo" className="size-5 shrink-0" />
+              <h1 className="text-base font-medium truncate">Enmolar Chronos</h1>
+            </Link>
+            <SidebarTrigger className="shrink-0" />
+          </div>
+        )}
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -222,6 +235,7 @@ export function AppSidebar() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <SidebarRail />
     </Sidebar>
   );
 }

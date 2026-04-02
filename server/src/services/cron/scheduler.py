@@ -22,15 +22,15 @@ async def _safe_run(coro, task_name: str) -> str:
 
 
 async def _run_evolution_jobs() -> None:
-    """获取共享数据，并行运行 skill evolution 和 AGENTS.md batch update。"""
-    from src.services.cron.agents_md_evolution_job import run_agents_md_evolution_job
+    """获取共享数据，并行运行 skill evolution 和 MEMORY.md batch update。"""
+    from src.services.cron.memory_md_evolution_job import run_memory_md_evolution_job
     from src.services.cron.shared import fetch_recent_data
     from src.services.cron.skill_evolution_job import run_skill_evolution_job
 
     log.info("=== Evolution Jobs Started ===")
 
     try:
-        incidents, agents_docs = await fetch_recent_data()
+        incidents, memory_docs = await fetch_recent_data()
 
         if not incidents:
             log.info("No recent incidents, skipping all evolution jobs")
@@ -38,12 +38,12 @@ async def _run_evolution_jobs() -> None:
 
         results = await asyncio.gather(
             _safe_run(
-                run_skill_evolution_job(incidents, agents_docs),
+                run_skill_evolution_job(incidents, memory_docs),
                 "skill_evolution",
             ),
             _safe_run(
-                run_agents_md_evolution_job(incidents, agents_docs),
-                "agents_md_evolution",
+                run_memory_md_evolution_job(incidents, memory_docs),
+                "memory_md_evolution",
             ),
         )
         log.info("=== Evolution Jobs Completed ===", results=results)
@@ -60,7 +60,7 @@ def start_scheduler() -> None:
         _run_evolution_jobs,
         trigger=IntervalTrigger(hours=settings.skill_evolution_interval),
         id="evolution_jobs",
-        name="Evolution Jobs (Skill + AGENTS.md)",
+        name="Evolution Jobs (Skill + MEMORY.md)",
         misfire_grace_time=3600,
         max_instances=1,
     )

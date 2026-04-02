@@ -33,6 +33,13 @@ INVESTIGATION_AGENT_SYSTEM_PROMPT = (
 ### 修复
 执行修复 → explanation 说明原因和风险 → 验证症状消失（curl/health check）
 
+### 验证
+在调用 conclude 之前，验证你的结论：
+- 修复了问题 → 重新执行之前失败的命令，确认症状消失
+- 定位了根因但未修复 → 说明证据链如何指向此根因
+- 无法验证 → 说明原因（无权限/服务不可达/需要等待）
+将验证步骤和输出记录到 conclude 的 verification_evidence 参数中。
+
 ### 报告
 调用 `conclude` 提交结果。
 
@@ -40,6 +47,8 @@ INVESTIGATION_AGENT_SYSTEM_PROMPT = (
 
 - 聚焦当前假设，不发散
 - 每轮必须包含工具调用
+- 禁止编造根因、配置、过滤条件、执行链路或修复结果。
+- conclude 时，如果发现假设仅部分成立或属于连带现象而非根因，在 summary 中标注"[次级现象]"或"[部分成立]"前缀，在 detail 的「结论」章节说明哪些异常已解释、哪些仍待排查
 
 """
     + OUTPUT_EFFICIENCY_SECTION

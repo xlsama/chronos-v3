@@ -29,6 +29,9 @@ def _to_response(meta) -> SkillResponse:
         has_references=meta.has_references,
         has_assets=meta.has_assets,
         draft=meta.draft,
+        when_to_use=meta.when_to_use,
+        tags=meta.tags,
+        related_services=meta.related_services,
         created_at=meta.created_at,
         updated_at=meta.updated_at,
     )

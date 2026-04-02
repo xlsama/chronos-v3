@@ -1,9 +1,11 @@
-import { useState, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
+  ChevronsDownUp,
   Search,
   BookOpen,
   FileText,
@@ -37,6 +39,7 @@ import { ToolCallCard } from "./tool-call-card";
 import { SkillReadCard } from "./skill-read-card";
 import { TextDotsLoader } from "@/components/ui/loader";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 
 const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
@@ -51,7 +54,7 @@ interface Source {
   page?: number;
 }
 
-type SubAgentStatus =
+type AgentStatus =
   | "idle" | "started" | "completed" | "failed"
   | "running" | "confirmed" | "eliminated" | "cancelled";
 
@@ -59,10 +62,10 @@ type SubAgentStatus =
 
 const AGENT_CONFIG: Record<
   string,
-  { label: string; icon: typeof Search; subAgentName: string }
+  { label: string; icon: typeof Search; agentName: string }
 > = {
-  history: { label: "历史事件检索", icon: History, subAgentName: "Incident History Subagent" },
-  kb: { label: "知识库检索", icon: BookOpen, subAgentName: "KB Subagent" },
+  history: { label: "历史事件检索", icon: History, agentName: "Incident History Agent" },
+  kb: { label: "知识库检索", icon: BookOpen, agentName: "KB Agent" },
 };
 
 // ─── Investigation status config ─────────────────────────
@@ -122,10 +125,10 @@ interface ThinkingItem {
   type: "thinking";
   event: SSEEvent;
 }
-type SubAgentItem = PairedTool | ThinkingItem;
+type AgentItem = PairedTool | ThinkingItem;
 
-function buildSubAgentItems(events: SSEEvent[]): SubAgentItem[] {
-  const items: SubAgentItem[] = [];
+function buildAgentItems(events: SSEEvent[]): AgentItem[] {
+  const items: AgentItem[] = [];
   const pendingTools = new Map<string, number>();
 
   for (const event of events) {
@@ -147,8 +150,12 @@ function buildSubAgentItems(events: SSEEvent[]): SubAgentItem[] {
   return items;
 }
 
-function SubAgentToolItem({ item }: { item: PairedTool }) {
+function AgentToolItem({ item, expandOverride }: { item: PairedTool; expandOverride?: boolean | null }) {
   const [expanded, setExpanded] = useState(!item.toolResult);
+
+  useEffect(() => {
+    if (expandOverride != null) setExpanded(expandOverride);
+  }, [expandOverride]);
   const name = item.toolCall.data.name as string;
   const args = item.toolCall.data.args as Record<string, unknown> | undefined;
   const output = item.toolResult?.data.output as string | undefined;
@@ -286,11 +293,11 @@ function buildCardItems(events: SSEEvent[]): CardItem[] {
   return items;
 }
 
-// ─── Unified SubAgentCard ────────────────────────────────
+// ─── Unified AgentCard ──────────────────────────────────
 
-interface SubAgentCardProps {
+interface AgentCardProps {
   events: SSEEvent[];
-  status: SubAgentStatus;
+  status: AgentStatus;
   className?: string;
   forceExpanded?: boolean;
   fixedLayout?: boolean;
@@ -309,7 +316,7 @@ interface SubAgentCardProps {
   incidentStatus?: string;
 }
 
-export const SubAgentCard = memo(function SubAgentCard({
+export const AgentCard = memo(function AgentCard({
   events,
   status,
   className,
@@ -324,13 +331,15 @@ export const SubAgentCard = memo(function SubAgentCard({
   serverMap,
   serviceMap,
   incidentStatus,
-}: SubAgentCardProps) {
+}: AgentCardProps) {
   const isContextGathering = !!agentName;
 
   const [userExpanded, setUserExpanded] = useState<boolean | null>(
     forceExpanded ? true : null,
   );
   const expanded = forceExpanded || (userExpanded ?? (isActive || false));
+
+  const [allToolsExpanded, setAllToolsExpanded] = useState<boolean | null>(null);
 
   const { scrollRef: scrollContainerRef } = useAutoScroll({
     enabled: forceExpanded,
@@ -389,8 +398,8 @@ export const SubAgentCard = memo(function SubAgentCard({
   }, [events, isContextGathering]);
 
   // Build items per mode
-  const subAgentItems = useMemo(
-    () => (isContextGathering ? buildSubAgentItems(events) : []),
+  const agentItems = useMemo(
+    () => (isContextGathering ? buildAgentItems(events) : []),
     [events, isContextGathering],
   );
   const cardItems = useMemo(
@@ -426,7 +435,7 @@ export const SubAgentCard = memo(function SubAgentCard({
         fixedLayout && expanded && "flex-1 overflow-hidden",
         className,
       )}
-      data-testid="sub-agent-card"
+      data-testid="agent-card"
     >
       {/* Header */}
       <button
@@ -449,15 +458,15 @@ export const SubAgentCard = memo(function SubAgentCard({
           </span>
         )}
 
-        {/* Badge: subAgentName (context) or investigation badge */}
-        {isContextGathering && agentConfig?.subAgentName && (
+        {/* Badge: agentName (context) or investigation badge */}
+        {isContextGathering && agentConfig?.agentName && (
           <span className="ml-1.5 shrink-0 rounded bg-muted px-1 py-px text-[9px] font-normal text-muted-foreground">
-            {agentConfig.subAgentName}
+            {agentConfig.agentName}
           </span>
         )}
         {!isContextGathering && (
           <span className="ml-1.5 shrink-0 rounded bg-muted px-1 py-px text-[9px] font-normal text-muted-foreground">
-            Investigation Subagent
+            Investigation Agent
           </span>
         )}
         {!isLoading && statusBadge && (
@@ -475,8 +484,32 @@ export const SubAgentCard = memo(function SubAgentCard({
           </span>
         )}
 
-        {/* Right side: loading indicator / sources / stats */}
+        {/* Right side: toggle all / loading indicator / sources / stats */}
         <span className="ml-auto inline-flex shrink-0 items-center gap-4">
+          {expanded && toolCallCount > 0 && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="inline-flex items-center justify-center rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAllToolsExpanded(prev => prev === true ? false : true);
+                    }}
+                  >
+                    {allToolsExpanded === true
+                      ? <ChevronsDownUp className="h-3.5 w-3.5" />
+                      : <ChevronsUpDown className="h-3.5 w-3.5" />}
+                  </span>
+                }
+              />
+              <TooltipContent side="top">
+                {allToolsExpanded === true ? "收起所有调用" : "展开所有调用"}
+              </TooltipContent>
+            </Tooltip>
+          )}
           {isLoading && (
             <span className="inline-flex items-center gap-1.5 text-blue-500">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -547,7 +580,7 @@ export const SubAgentCard = memo(function SubAgentCard({
               <Skeleton className="h-3 w-1/2 bg-muted/50" />
             </div>
           )}
-          {subAgentItems.map((item, i) => {
+          {agentItems.map((item, i) => {
             if (item.type === "thinking") {
               return (
                 <div key={i} className="text-xs opacity-80">
@@ -555,7 +588,7 @@ export const SubAgentCard = memo(function SubAgentCard({
                 </div>
               );
             }
-            return <SubAgentToolItem key={i} item={item} />;
+            return <AgentToolItem key={i} item={item} expandOverride={allToolsExpanded} />;
           })}
 
           {status === "started" && streamingContent && (
@@ -611,6 +644,7 @@ export const SubAgentCard = memo(function SubAgentCard({
                       relativeTime={relTime}
                       serverInfo={serverInfo}
                       serviceInfo={serviceInfo}
+                      expandOverride={allToolsExpanded}
                     />
                   </div>
                 );
@@ -637,24 +671,44 @@ export const SubAgentCard = memo(function SubAgentCard({
                       riskLevel={aa?.risk_level as string | undefined}
                       explanation={aa?.explanation as string | undefined}
                       incidentStatus={incidentStatus}
+                      expandOverride={allToolsExpanded}
                     />
                   </div>
                 );
               }
-              case "ask_human":
+              case "ask_human": {
+                const askD = item.event.data;
+                const hasCtx = !!(askD.known_context || askD.assessment);
                 return (
                   <div key={i} className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
                     <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-amber-800">需要更多信息</p>
+                      {hasCtx && (
+                        <div className="mt-1.5 space-y-1.5">
+                          {askD.known_context && (
+                            <div className="rounded bg-gray-100/80 px-2 py-1 dark:bg-gray-800/50">
+                              <p className="text-[10px] font-medium text-gray-500">已有信息</p>
+                              <Markdown content={askD.known_context as string} variant="compact" className="card-markdown text-xs" />
+                            </div>
+                          )}
+                          {askD.assessment && (
+                            <div className="rounded bg-blue-50/80 px-2 py-1 dark:bg-blue-950/30">
+                              <p className="text-[10px] font-medium text-blue-600">初步判断</p>
+                              <Markdown content={askD.assessment as string} variant="compact" className="card-markdown text-xs" />
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <Markdown
-                        content={item.event.data.question as string}
+                        content={askD.question as string}
                         variant="compact"
                         className="mt-1 card-markdown card-markdown--amber"
                       />
                     </div>
                   </div>
                 );
+              }
               case "error":
                 return (
                   <div key={i} className="rounded-md border border-destructive bg-destructive/10 p-3">

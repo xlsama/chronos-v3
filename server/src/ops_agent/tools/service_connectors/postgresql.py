@@ -65,7 +65,10 @@ class PostgreSQLConnector(ServiceConnector):
                     return ServiceResult(success=True, output=f"执行成功: {result}")
         except Exception as e:
             log.error("Execute failed", error=str(e))
-            return ServiceResult(success=False, output="", error=f"{type(e).__name__}: {e}")
+            from .sql_helpers import enhance_pg_error
+
+            enhanced = enhance_pg_error(e, cmd, self._database)
+            return ServiceResult(success=False, output="", error=enhanced)
 
     async def close(self) -> None:
         if self._pool:

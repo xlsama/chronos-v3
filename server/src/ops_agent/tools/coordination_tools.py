@@ -1,4 +1,4 @@
-"""协调工具 —— launch_investigation, update_plan, complete, ask_human, conclude。"""
+"""协调工具 —— spawn_agent, update_plan, complete, ask_human, conclude。"""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from langgraph.prebuilt import InjectedState
 from src.ops_agent.tools.base_tool import BaseTool, PermissionBehavior, PermissionResult
 
 
-class LaunchInvestigationTool(BaseTool):
+class SpawnAgentTool(BaseTool):
     """启动子 Agent 验证假设。"""
 
     @property
     def name(self) -> str:
-        return "launch_investigation"
+        return "spawn_agent"
 
     @property
     def summary(self) -> str:
@@ -51,6 +51,57 @@ class LaunchInvestigationTool(BaseTool):
     def _build_langchain_tool(self):
         def _execute(hypothesis_id: str, hypothesis_title: str, hypothesis_desc: str) -> str:
             return f"子 Agent 已启动，正在验证假设 {hypothesis_id}: {hypothesis_title}"
+
+        return StructuredTool.from_function(
+            func=_execute,
+            name=self.name,
+            description=self.prompt,
+        )
+
+
+class SpawnParallelAgentsTool(BaseTool):
+    """并行启动多个子 Agent 同时验证多个假设。"""
+
+    @property
+    def name(self) -> str:
+        return "spawn_parallel_agents"
+
+    @property
+    def summary(self) -> str:
+        return "并行启动多个子 Agent 同时验证假设"
+
+    @property
+    def prompt(self) -> str:
+        return """\
+并行启动多个子 Agent 同时验证多个假设。所有子 Agent 独立执行排查，互不干扰，完成后一次性返回所有结果。
+
+## 参数
+- hypotheses（必填）：假设列表，每个假设包含：
+  - hypothesis_id：假设编号（如 "H1"）
+  - hypothesis_title：假设短标题（15字以内）
+  - hypothesis_desc：假设详细描述，包含排查方向和步骤
+
+## 使用原则
+- 适用于多个独立假设可以同时排查的场景（如检查不同服务、不同维度）
+- 假设之间应无强依赖关系
+- 如果假设有先后顺序（如需要前一个结论指导后续方向），使用 spawn_agent 串行执行
+- 最多并行 3 个子 Agent"""
+
+    def is_read_only(self, **kw) -> bool:
+        return False
+
+    async def check_permissions(self, **kw) -> PermissionResult:
+        return PermissionResult(PermissionBehavior.ALLOW)
+
+    async def execute(self, **kw) -> str:
+        hypotheses = kw.get("hypotheses", [])
+        ids = ", ".join(h.get("hypothesis_id", "?") for h in hypotheses)
+        return f"并行子 Agent 已启动，正在同时验证: {ids}"
+
+    def _build_langchain_tool(self):
+        def _execute(hypotheses: list[dict]) -> str:
+            ids = ", ".join(h.get("hypothesis_id", "?") for h in hypotheses)
+            return f"并行子 Agent 已启动，正在同时验证: {ids}"
 
         return StructuredTool.from_function(
             func=_execute,
@@ -198,10 +249,11 @@ class AskHumanTool(BaseTool):
 当缺少关键信息无法继续排查时，向用户提问。
 
 ## 参数
-- question（必填）：简短精练的问题（1-3行），只写需要用户回答的关键问题
+- known_context（必填）：已有信息摘要（1-3行）— 从日志/监控/工具输出中已收集到的关键事实
+- assessment（必填）：初步判断（1-2行）— 基于已有信息的推测和分析方向
+- question（必填）：需要用户提供的具体信息（1-3行）
 
 ## 使用原则
-- 分析推理直接写在回复中，不要放进 question
 - 不要追问系统中不存在的资源（如未注册的服务器）
 - 谨慎使用，每次会话最多 5 次
 - 只在真正缺少信息时使用，不用于确认或汇报"""
@@ -219,7 +271,7 @@ class AskHumanTool(BaseTool):
         return kw.get("question", "")
 
     def _build_langchain_tool(self):
-        def _execute(question: str) -> str:
+        def _execute(known_context: str, assessment: str, question: str) -> str:
             return question
 
         return StructuredTool.from_function(
@@ -249,10 +301,11 @@ class ConcludeTool(BaseTool):
 - status（必填）："confirmed"（假设成立）/ "eliminated"（假设排除）/ "inconclusive"（证据不足）
 - summary（必填）：一句话结论摘要
 - detail（必填）：结构化排查报告（Markdown），包含以下章节：
-  - ## 结论 — 假设是否成立及核心发现
+  - ## 结论 — 假设是否成立及核心发现；注明该假设能解释哪些异常、不能解释哪些异常
   - ## 排查链路 — 关键步骤：`命令` → 发现（只保留有价值的步骤）
-  - ## 根因 — 根本原因 + 关键证据
-  - ## 修复操作 — 执行的命令 + 验证结果（或"无需修复"）"""
+  - ## 根因 — 根本原因 + 关键证据（如仅为次级现象/连带问题，标注"次级现象"而非根因）
+  - ## 修复操作 — 执行的命令 + 验证结果（或"无需修复"）
+- verification_evidence（选填）：验证证据 — 你执行了什么命令来验证结论？输出是什么？如果无法验证，说明原因"""
 
     def is_read_only(self, **kw) -> bool:
         return False
@@ -266,8 +319,108 @@ class ConcludeTool(BaseTool):
         return f"调查结果已记录: status={status}, summary={summary}"
 
     def _build_langchain_tool(self):
-        def _execute(status: str, summary: str, detail: str) -> str:
+        def _execute(
+            status: str, summary: str, detail: str, verification_evidence: str = ""
+        ) -> str:
             return f"调查结果已记录: status={status}, summary={summary}"
+
+        return StructuredTool.from_function(
+            func=_execute,
+            name=self.name,
+            description=self.prompt,
+        )
+
+
+class SpawnVerificationTool(BaseTool):
+    """启动 Verification Sub-Agent 验证排查结论。"""
+
+    @property
+    def name(self) -> str:
+        return "spawn_verification"
+
+    @property
+    def summary(self) -> str:
+        return "启动验证子 Agent 验证排查结论"
+
+    @property
+    def prompt(self) -> str:
+        return """\
+启动 Verification Sub-Agent 验证排查结论是否正确、修复是否生效。
+
+## 参数
+- answer_md（必填）：你准备提交的最终排查结论（Markdown）
+- verification_plan（必填）：验证计划 — 要检查哪些项、用什么命令验证
+
+## 使用原则
+- 在调用 complete 给出最终结论之前调用
+- 验证 PASS 后再调用 complete
+- 验证 FAIL 时根据反馈继续排查
+- 以下场景可跳过验证，直接 complete：问候/闲聊、纯信息查询、所有假设已排除的排查总结"""
+
+    def is_read_only(self, **kw) -> bool:
+        return False
+
+    async def check_permissions(self, **kw) -> PermissionResult:
+        return PermissionResult(PermissionBehavior.ALLOW)
+
+    async def execute(self, **kw) -> str:
+        return "Verification Sub-Agent 已启动"
+
+    def _build_langchain_tool(self):
+        def _execute(answer_md: str, verification_plan: str) -> str:
+            return "Verification Sub-Agent 已启动"
+
+        return StructuredTool.from_function(
+            func=_execute,
+            name=self.name,
+            description=self.prompt,
+        )
+
+
+class SubmitVerificationTool(BaseTool):
+    """Verification Sub-Agent 提交验证报告。"""
+
+    @property
+    def name(self) -> str:
+        return "submit_verification"
+
+    @property
+    def summary(self) -> str:
+        return "提交验证报告"
+
+    @property
+    def prompt(self) -> str:
+        return """\
+验证完成后调用，提交验证报告。仅 Verification Sub-Agent 使用。
+
+## 参数
+- verdict（必填）："PASS"（全部验证通过）/ "FAIL"（有验证项失败）/ "PARTIAL"（部分因环境限制无法验证）
+- items（必填）：JSON 数组字符串，每项包含：
+  - check: 验证项描述
+  - method: "self"（自验证）/ "user"（用户验证）/ "unverifiable"（无法验证）
+  - command: 执行的命令（自验证时填写，否则 null）
+  - output: 命令输出（自验证时填写，否则 null）
+  - result: "PASS" / "FAIL" / "PARTIAL" / "SKIPPED"
+  - reason: 非 PASS 时的原因（PASS 时 null）
+- summary（必填）：一句话验证总结
+
+## 使用原则
+- PARTIAL 仅限环境限制（无权限/服务不可达/需观察期），不用于"不确定"
+- 每项检查必须包含实际执行的命令和输出，禁止纯推理验证"""
+
+    def is_read_only(self, **kw) -> bool:
+        return False
+
+    async def check_permissions(self, **kw) -> PermissionResult:
+        return PermissionResult(PermissionBehavior.ALLOW)
+
+    async def execute(self, **kw) -> str:
+        verdict = kw.get("verdict", "PARTIAL")
+        return f"验证报告已提交: verdict={verdict}"
+
+    def _build_langchain_tool(self):
+        def _execute(verdict: str, items: str, summary: str) -> str:
+            return f"验证报告已提交: verdict={verdict}"
 
         return StructuredTool.from_function(
             func=_execute,

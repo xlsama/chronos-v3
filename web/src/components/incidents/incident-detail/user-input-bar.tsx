@@ -176,7 +176,7 @@ export function UserInputBar({ incidentId, incidentStatus }: UserInputBarProps) 
                   : "向 Agent 发送消息...";
 
   return (
-    <div className="border-t px-14 py-4">
+    <div className="px-14 py-4">
       {isSupplementMode && (
         <div className="mb-2 flex items-center justify-between rounded-md bg-blue-50 px-3 py-1.5 text-xs text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
           <span>为操作审批补充说明</span>

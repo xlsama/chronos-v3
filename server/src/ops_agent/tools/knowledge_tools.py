@@ -55,7 +55,7 @@ def _format_source(filename: str, metadata: dict) -> str:
 
 
 async def list_projects_for_matching() -> str:
-    """List all projects as JSON with descriptions and AGENTS.md preview for matching."""
+    """List all projects as JSON with descriptions and MEMORY.md preview for matching."""
     async with get_session_ctx() as session:
         result = await session.execute(select(Project).order_by(Project.created_at.desc()))
         projects = list(result.scalars().all())
@@ -65,25 +65,25 @@ async def list_projects_for_matching() -> str:
 
         items = []
         for project in projects:
-            agents_result = await session.execute(
+            memory_result = await session.execute(
                 select(ProjectDocument)
                 .where(
                     ProjectDocument.project_id == project.id,
-                    ProjectDocument.doc_type == "agents_config",
+                    ProjectDocument.doc_type == "memory_config",
                 )
                 .limit(1)
             )
-            agents_doc = agents_result.scalar_one_or_none()
-            has_agents_md = bool(agents_doc and agents_doc.content.strip())
+            memory_doc = memory_result.scalar_one_or_none()
+            has_memory_md = bool(memory_doc and memory_doc.content.strip())
 
             items.append(
                 {
                     "project_id": str(project.id),
                     "project_name": project.name,
                     "description": project.description or "",
-                    "has_agents_md": has_agents_md,
-                    "agents_md_preview": (agents_doc.content[:300] + "...")
-                    if has_agents_md
+                    "has_memory_md": has_memory_md,
+                    "memory_md_preview": (memory_doc.content[:300] + "...")
+                    if has_memory_md
                     else "",
                 }
             )
@@ -222,16 +222,16 @@ async def search_knowledge_base(query: str) -> tuple[str, list[dict]]:
         return (formatted_text, sources)
 
 
-async def get_agents_md(project_ids: list[str]) -> str:
-    """Batch read AGENTS.md for multiple projects.
+async def memory_read(project_ids: list[str]) -> str:
+    """Batch read MEMORY.md for multiple projects.
 
     Args:
-        project_ids: List of project UUIDs to read AGENTS.md from.
+        project_ids: List of project UUIDs to read MEMORY.md from.
 
     Returns:
-        Formatted text with AGENTS.md content per project.
+        Formatted text with MEMORY.md content per project.
     """
-    log.info("get_agents_md", project_ids=project_ids)
+    log.info("memory_read", project_ids=project_ids)
     if not project_ids:
         return "未提供项目 ID。"
 
@@ -241,14 +241,14 @@ async def get_agents_md(project_ids: list[str]) -> str:
         project_result = await session.execute(select(Project).where(Project.id.in_(uuids)))
         projects = {p.id: p for p in project_result.scalars().all()}
 
-        # Fetch AGENTS.md documents
-        agents_result = await session.execute(
+        # Fetch MEMORY.md documents
+        memory_result = await session.execute(
             select(ProjectDocument).where(
                 ProjectDocument.project_id.in_(uuids),
-                ProjectDocument.doc_type == "agents_config",
+                ProjectDocument.doc_type == "memory_config",
             )
         )
-        agents_docs = {doc.project_id: doc for doc in agents_result.scalars().all()}
+        memory_docs = {doc.project_id: doc for doc in memory_result.scalars().all()}
 
         sections = []
         for pid_uuid in uuids:
@@ -256,7 +256,7 @@ async def get_agents_md(project_ids: list[str]) -> str:
             if not project:
                 sections.append(f"## 项目: 未找到 (ID: {pid_uuid})\n[项目不存在]")
                 log.info(
-                    "get_agents_md project",
+                    "memory_read project",
                     project_id=str(pid_uuid),
                     project_name="NOT_FOUND",
                     content_len=0,
@@ -264,16 +264,16 @@ async def get_agents_md(project_ids: list[str]) -> str:
                 )
                 continue
 
-            doc = agents_docs.get(pid_uuid)
+            doc = memory_docs.get(pid_uuid)
             content = doc.content.strip() if doc and doc.content else ""
             is_empty = not content
             header = f"## 项目: {project.name} (ID: {pid_uuid})"
             if not is_empty:
-                sections.append(f"{header}\n\n### AGENTS.md\n{doc.content}")
+                sections.append(f"{header}\n\n### MEMORY.md\n{doc.content}")
             else:
-                sections.append(f"{header}\n\n### AGENTS.md\n[空 - 未配置服务信息]")
+                sections.append(f"{header}\n\n### MEMORY.md\n[空 - 未配置服务信息]")
             log.info(
-                "get_agents_md project",
+                "memory_read project",
                 project_id=str(pid_uuid),
                 project_name=project.name,
                 content_len=len(content),
@@ -281,6 +281,6 @@ async def get_agents_md(project_ids: list[str]) -> str:
             )
 
         formatted_text = "\n\n---\n\n".join(sections)
-        log.info("get_agents_md completed", project_count=len(sections))
-        log.debug("get_agents_md formatted_text", formatted_text=formatted_text)
+        log.info("memory_read completed", project_count=len(sections))
+        log.debug("memory_read formatted_text", formatted_text=formatted_text)
         return formatted_text

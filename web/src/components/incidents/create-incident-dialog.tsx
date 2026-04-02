@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { Activity } from "lucide-react";
 import { toast } from "sonner";
 import { uploadFiles } from "@/api/attachments";
 import { createIncident } from "@/api/incidents";
@@ -60,8 +61,9 @@ export function CreateIncidentDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        render={<Button size="sm" data-testid="create-incident-btn" />}
+        render={<Button size="sm" className="gap-1.5" data-testid="create-incident-btn" />}
       >
+        <Activity data-icon="inline-start" className="size-3" />
         新建事件
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">

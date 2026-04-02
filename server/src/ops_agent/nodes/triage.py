@@ -3,33 +3,42 @@
 在 gather_context 和 plan 之间运行。如果描述足够详细则直接跳过。
 """
 
+import orjson
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.types import interrupt
 
 from src.env import get_settings
 from src.lib.logger import get_logger
-from src.ops_agent.prompts.triage import TRIAGE_QUESTION_PROMPT
+from src.ops_agent.prompts.triage import SUFFICIENCY_ASSESSMENT_PROMPT, TRIAGE_QUESTION_PROMPT
 from src.ops_agent.state import MainState
 
-# 低于此字符数的描述被认为信息不足
-_MIN_DESCRIPTION_CHARS = 50
 
+async def _assess_info_sufficiency(state: MainState) -> tuple[bool, list[str]]:
+    """用 mini_model 评估事件描述信息是否充分。
 
-def _needs_interview(state: MainState) -> bool:
-    """启发式判断描述是否足够充分。"""
-    description = state.get("description", "")
-    severity = state.get("severity", "")
+    返回 (sufficient, missing_list)。
+    """
+    s = get_settings()
+    llm = ChatOpenAI(
+        model=s.mini_model,
+        base_url=s.llm_base_url,
+        api_key=s.dashscope_api_key,
+        streaming=False,
+        extra_body={"enable_thinking": False},
+    )
 
-    # 描述太短
-    if len(description) < _MIN_DESCRIPTION_CHARS:
-        return True
+    prompt = SUFFICIENCY_ASSESSMENT_PROMPT.format(description=state.get("description", ""))
+    response = await llm.ainvoke([SystemMessage(content=prompt)])
+    content = response.content if hasattr(response, "content") else ""
 
-    # 低优先级且描述偏短
-    if severity in ("P3", "P4") and len(description) < 80:
-        return True
-
-    return False
+    try:
+        result = orjson.loads(content)
+        return result.get("sufficient", True), result.get("missing", [])
+    except Exception:
+        # JSON 解析失败时，用字符数兜底
+        desc = state.get("description", "")
+        return len(desc) >= 50, []
 
 
 async def triage_node(state: MainState) -> dict:
@@ -37,11 +46,17 @@ async def triage_node(state: MainState) -> dict:
     sid = state["incident_id"][:8]
     log = get_logger(component="triage", sid=sid)
 
-    if not _needs_interview(state):
+    try:
+        sufficient, missing = await _assess_info_sufficiency(state)
+    except Exception as e:
+        log.warning("Sufficiency assessment failed, skipping triage", error=str(e))
+        return {}
+
+    if sufficient:
         log.info("Description sufficient, skipping triage")
         return {}
 
-    log.info("Description insufficient, generating triage question")
+    log.info("Description insufficient", missing=missing)
 
     s = get_settings()
     llm = ChatOpenAI(
@@ -52,8 +67,14 @@ async def triage_node(state: MainState) -> dict:
         extra_body={"enable_thinking": False},
     )
 
+    missing_text = ", ".join(missing) if missing else "具体症状、影响范围、时间线"
     messages = [
-        SystemMessage(content=TRIAGE_QUESTION_PROMPT.format(description=state["description"])),
+        SystemMessage(
+            content=TRIAGE_QUESTION_PROMPT.format(
+                description=state["description"],
+                missing=missing_text,
+            )
+        ),
     ]
 
     try:

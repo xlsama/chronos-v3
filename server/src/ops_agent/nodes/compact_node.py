@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage, RemoveMessage
 
 from src.lib.logger import get_logger
 from src.ops_agent.context import compact_investigation_agent, compact_main_agent
-from src.ops_agent.state import InvestigationState, MainState
+from src.ops_agent.state import InvestigationState, MainState, VerificationState
 
 
 async def main_compact_node(state: MainState) -> dict:
@@ -64,6 +64,34 @@ async def investigation_compact_node(state: InvestigationState) -> dict:
 
     removals = [RemoveMessage(id=m.id) for m in state["messages"] if m.id]
     new_msg = HumanMessage(content="上下文已压缩，请根据排查进展摘要继续验证当前假设。")
+
+    return {
+        "messages": removals + [new_msg],
+        "compact_md": summary,
+        "needs_compact": False,
+        "tool_call_retry_count": 0,
+    }
+
+
+async def verification_compact_node(state: VerificationState) -> dict:
+    """Verification Agent 上下文压缩节点。"""
+    sid = state["incident_id"][:8]
+    log = get_logger(component="compact", sid=sid)
+    log.info("===== Verification compact started =====", messages=len(state["messages"]))
+
+    summary = await compact_investigation_agent(
+        incident_id=state["incident_id"],
+        description=state["description"],
+        severity=state["severity"],
+        hypothesis_id="VERIFY",
+        hypothesis_desc="验证排查结论",
+        messages=state["messages"],
+    )
+
+    log.info("===== Verification compact completed =====", summary_chars=len(summary))
+
+    removals = [RemoveMessage(id=m.id) for m in state["messages"] if m.id]
+    new_msg = HumanMessage(content="上下文已压缩，请根据验证进展摘要继续验证结论。")
 
     return {
         "messages": removals + [new_msg],

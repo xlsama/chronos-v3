@@ -13,7 +13,7 @@ from src.ops_agent.prompts.kb_agent import KB_AGENT_SYSTEM_PROMPT
 from src.env import get_settings
 from src.lib.logger import get_logger
 from src.ops_agent.tools.knowledge_tools import (
-    get_agents_md as _get_agents_md,
+    memory_read as _memory_read,
     list_projects_for_matching as _list_projects,
     search_knowledge_base as _search_knowledge_base,
 )
@@ -25,8 +25,8 @@ class KBProjectInfo(BaseModel):
     project_id: str = Field(default="", description="项目 UUID")
     project_name: str = Field(default="", description="项目名称")
     project_description: str = Field(default="", description="项目描述")
-    agents_md_content: str = Field(default="", description="AGENTS.md 完整原文")
-    agents_md_empty: bool = Field(default=False, description="AGENTS.md 是否为空")
+    memory_md_content: str = Field(default="", description="MEMORY.md 完整原文")
+    memory_md_empty: bool = Field(default=False, description="MEMORY.md 是否为空")
     business_context: str = Field(default="", description="该项目下检索到的相关文档片段")
     match_confidence: str = Field(default="low", description="目标匹配置信度：high / medium / low")
     source_categories: list[str] = Field(default_factory=list, description="命中的资料类型")
@@ -81,7 +81,7 @@ def _unique_keep_order(items: list[str]) -> list[str]:
 
 def _categorize_source(filename: str) -> str:
     lower = filename.lower()
-    if "agent" in lower or lower == "service.md":
+    if lower == "memory.md" or "agent" in lower or lower == "service.md":
         return "架构/资产说明"
     if any(marker in lower for marker in ("api", "openapi", "swagger", "postman")):
         return "接口文档"
@@ -158,12 +158,12 @@ def _extract_entrypoint_hints(text: str) -> list[str]:
     return _unique_keep_order(urls + method_paths + common_paths + ports)[:10]
 
 
-def _compute_match_confidence(search_info: dict, agents_info: dict) -> str:
+def _compute_match_confidence(search_info: dict, memory_info: dict) -> str:
     has_search = bool(search_info)
-    has_agents = bool(agents_info) and not agents_info.get("agents_md_empty", True)
-    if has_search and has_agents:
+    has_memory = bool(memory_info) and not memory_info.get("memory_md_empty", True)
+    if has_search and has_memory:
         return "high"
-    if has_search or has_agents:
+    if has_search or has_memory:
         return "medium"
     return "low"
 
@@ -174,7 +174,7 @@ def _build_tools():
 
     @tool
     async def list_projects() -> str:
-        """List all available projects with descriptions and AGENTS.md preview. Returns JSON array."""
+        """List all available projects with descriptions and MEMORY.md preview. Returns JSON array."""
         return await _list_projects()
 
     @tool
@@ -190,15 +190,15 @@ def _build_tools():
         return text
 
     @tool
-    async def get_agents_md(project_ids: list[str]) -> str:
-        """Batch read AGENTS.md for multiple projects.
+    async def memory_read(project_ids: list[str]) -> str:
+        """Batch read MEMORY.md for multiple projects.
 
         Args:
-            project_ids: List of project UUIDs to read AGENTS.md from.
+            project_ids: List of project UUIDs to read MEMORY.md from.
         """
-        return await _get_agents_md(project_ids=project_ids)
+        return await _memory_read(project_ids=project_ids)
 
-    return [list_projects, search_knowledge_base, get_agents_md], _last_sources
+    return [list_projects, search_knowledge_base, memory_read], _last_sources
 
 
 def _parse_search_results_by_project(search_result: str) -> dict[str, dict]:
@@ -244,13 +244,13 @@ def _parse_search_results_by_project(search_result: str) -> dict[str, dict]:
     return result
 
 
-def _parse_agents_md_result(agents_md_text: str) -> dict[str, dict]:
-    """Parse get_agents_md result into per-project info.
+def _parse_memory_md_result(memory_md_text: str) -> dict[str, dict]:
+    """Parse memory_read result into per-project info.
 
-    Returns dict: project_id -> {"project_name": ..., "agents_md_content": ..., "agents_md_empty": bool}
+    Returns dict: project_id -> {"project_name": ..., "memory_md_content": ..., "memory_md_empty": bool}
     """
     result: dict[str, dict] = {}
-    parts = re.split(r"\n*---\n*", agents_md_text)
+    parts = re.split(r"\n*---\n*", memory_md_text)
     for part in parts:
         match = re.match(
             r"## 项目:\s*(.+?)\s*\(ID:\s*([0-9a-f-]+)\)",
@@ -261,15 +261,15 @@ def _parse_agents_md_result(agents_md_text: str) -> dict[str, dict]:
         project_name = match.group(1)
         project_id = match.group(2)
 
-        # Extract AGENTS.md content (after ### AGENTS.md header)
-        md_match = re.search(r"### AGENTS\.md\n(.*)", part, re.DOTALL)
-        agents_md_content = md_match.group(1).strip() if md_match else ""
-        agents_md_empty = not agents_md_content or "[空" in agents_md_content
+        # Extract MEMORY.md content (after ### MEMORY.md header)
+        md_match = re.search(r"### MEMORY\.md\n(.*)", part, re.DOTALL)
+        memory_md_content = md_match.group(1).strip() if md_match else ""
+        memory_md_empty = not memory_md_content or "[空" in memory_md_content
 
         result[project_id] = {
             "project_name": project_name,
-            "agents_md_content": agents_md_content,
-            "agents_md_empty": agents_md_empty,
+            "memory_md_content": memory_md_content,
+            "memory_md_empty": memory_md_empty,
         }
     return result
 
@@ -302,7 +302,7 @@ async def run_kb_agent(
         HumanMessage(content=f"当前事件描述: {description}"),
     ]
 
-    agents_md_results: dict[str, dict] = {}  # project_id -> parsed agents_md info
+    memory_md_results: dict[str, dict] = {}  # project_id -> parsed memory_md info
     search_results_by_project: dict[str, dict] = {}  # project_id -> parsed search info
 
     max_iterations = 10
@@ -383,19 +383,19 @@ async def run_kb_agent(
                 except Exception:
                     iter_log.info("list_projects result (non-JSON)", chars=len(result_str))
 
-            elif tool_name == "get_agents_md":
-                agents_md_results = _parse_agents_md_result(result_str)
+            elif tool_name == "memory_read":
+                memory_md_results = _parse_memory_md_result(result_str)
                 iter_log.info(
-                    "get_agents_md parsed",
-                    project_count=len(agents_md_results),
+                    "memory_read parsed",
+                    project_count=len(memory_md_results),
                     projects=[
                         {
                             "project_id": pid,
                             "project_name": info.get("project_name"),
-                            "agents_md_len": len(info.get("agents_md_content", "")),
-                            "agents_md_empty": info.get("agents_md_empty"),
+                            "memory_md_len": len(info.get("memory_md_content", "")),
+                            "memory_md_empty": info.get("memory_md_empty"),
                         }
-                        for pid, info in agents_md_results.items()
+                        for pid, info in memory_md_results.items()
                     ],
                 )
 
@@ -408,9 +408,9 @@ async def run_kb_agent(
                 await event_callback("thinking", {"content": chunk.content})
         await event_callback("thinking_done", {})
 
-    # Build output: merge search results and agents_md results while preserving candidate order.
+    # Build output: merge search results and memory_md results while preserving candidate order.
     ordered_project_ids = list(search_results_by_project.keys())
-    for pid in agents_md_results.keys():
+    for pid in memory_md_results.keys():
         if pid not in ordered_project_ids:
             ordered_project_ids.append(pid)
 
@@ -418,15 +418,15 @@ async def run_kb_agent(
 
     for pid in ordered_project_ids:
         search_info = search_results_by_project.get(pid, {})
-        agents_info = agents_md_results.get(pid, {})
+        memory_info = memory_md_results.get(pid, {})
 
-        project_name = agents_info.get("project_name") or search_info.get("project_name", "")
-        agents_md_content = agents_info.get("agents_md_content", "")
-        agents_md_empty = agents_info.get("agents_md_empty", True)
+        project_name = memory_info.get("project_name") or search_info.get("project_name", "")
+        memory_md_content = memory_info.get("memory_md_content", "")
+        memory_md_empty = memory_info.get("memory_md_empty", True)
         business_context = search_info.get("business_context", "")
         project_description = search_info.get("project_description", "")
-        combined_text = "\n".join(part for part in (agents_md_content, business_context) if part)
-        match_confidence = _compute_match_confidence(search_info, agents_info)
+        combined_text = "\n".join(part for part in (memory_md_content, business_context) if part)
+        match_confidence = _compute_match_confidence(search_info, memory_info)
         source_categories = _extract_source_categories(business_context)
         service_keywords = _extract_service_keywords(combined_text)
         server_keywords = _extract_server_keywords(combined_text)
@@ -437,8 +437,8 @@ async def run_kb_agent(
                 project_id=pid,
                 project_name=project_name,
                 project_description=project_description,
-                agents_md_content=agents_md_content,
-                agents_md_empty=agents_md_empty,
+                memory_md_content=memory_md_content,
+                memory_md_empty=memory_md_empty,
                 business_context=business_context,
                 match_confidence=match_confidence,
                 source_categories=source_categories,
@@ -455,8 +455,8 @@ async def run_kb_agent(
             "KBProjectInfo",
             project_id=p.project_id,
             project_name=p.project_name,
-            agents_md_len=len(p.agents_md_content),
-            agents_md_empty=p.agents_md_empty,
+            memory_md_len=len(p.memory_md_content),
+            memory_md_empty=p.memory_md_empty,
             business_context_len=len(p.business_context),
             match_confidence=p.match_confidence,
             source_categories=p.source_categories,

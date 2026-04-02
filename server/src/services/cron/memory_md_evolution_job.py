@@ -1,4 +1,4 @@
-"""定时任务: 批量分析历史事件，更新所有项目的 AGENTS.md。"""
+"""定时任务: 批量分析历史事件，更新所有项目的 MEMORY.md。"""
 
 import time
 
@@ -7,9 +7,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.db.connection import get_session_factory
 from src.db.models import IncidentHistory
 from src.lib.logger import get_logger
-from src.services.post_incident.agents_md_task import (
+from src.services.post_incident.memory_md_task import (
     _fetch_entity_anchors,
-    _update_project_agents_md,
+    _update_project_memory_md,
 )
 from src.services.post_incident.base import get_mini_llm
 
@@ -22,9 +22,9 @@ _BATCH_EXTRACT_KNOWLEDGE_PROMPT = """\
 
 目标项目: {project_name}
 
-项目当前 AGENTS.md 内容:
+项目当前 MEMORY.md 内容:
 ```
-{current_agents_md}
+{current_memory_md}
 ```
 
 {entity_anchors}
@@ -46,7 +46,7 @@ _BATCH_EXTRACT_KNOWLEDGE_PROMPT = """\
 - 综合多个事件交叉验证，提取单个事件可能遗漏的关联信息
 - 不要一次性信息（时间戳、临时文件名）
 - **严禁提取事件特定信息**: 错误信息、异常日志特征、排查关键词、根因分析、故障恢复步骤
-- 不要提取 AGENTS.md 中已有的信息（避免重复）
+- 不要提取 MEMORY.md 中已有的信息（避免重复）
 - Server/Service 名称与系统中已配置的保持一致
 - 无可提取知识则只输出 "NO_KNOWLEDGE"
 """
@@ -66,7 +66,7 @@ def _build_incidents_text(incidents: list[IncidentHistory]) -> str:
 async def _extract_batch_knowledge(
     incidents_text: str,
     project_name: str,
-    current_agents_md: str,
+    current_memory_md: str,
     entity_anchors: str,
 ) -> str | None:
     """LLM 从多个历史事件中提取与指定项目相关的基础设施知识。
@@ -76,7 +76,7 @@ async def _extract_batch_knowledge(
     """
     prompt = _BATCH_EXTRACT_KNOWLEDGE_PROMPT.format(
         project_name=project_name,
-        current_agents_md=current_agents_md if current_agents_md.strip() else "(空)",
+        current_memory_md=current_memory_md if current_memory_md.strip() else "(空)",
         entity_anchors=entity_anchors,
         incidents_text=incidents_text,
     )
@@ -100,25 +100,25 @@ async def _extract_batch_knowledge(
 # ── 入口 ────────────────────────────────────────────────────
 
 
-async def run_agents_md_evolution_job(
+async def run_memory_md_evolution_job(
     incidents: list[IncidentHistory],
-    agents_docs: list[dict],
+    memory_docs: list[dict],
 ) -> None:
-    """定时任务入口: 批量更新所有项目的 AGENTS.md。
+    """定时任务入口: 批量更新所有项目的 MEMORY.md。
 
     Args:
         incidents: 近 24h 的 IncidentHistory 列表
-        agents_docs: 所有项目的 AGENTS.md，每项含 project_id, project_name, project_slug, content
+        memory_docs: 所有项目的 MEMORY.md，每项含 project_id, project_name, project_slug, content
     """
-    log.info("=== AGENTS.md Evolution Job Started ===")
+    log.info("=== MEMORY.md Evolution Job Started ===")
     t_start = time.monotonic()
 
     if not incidents:
-        log.info("No recent incidents, skipping AGENTS.md evolution")
+        log.info("No recent incidents, skipping MEMORY.md evolution")
         return
 
-    if not agents_docs:
-        log.info("No projects with AGENTS.md, skipping")
+    if not memory_docs:
+        log.info("No projects with MEMORY.md, skipping")
         return
 
     # 1. 获取 entity anchors
@@ -130,7 +130,7 @@ async def run_agents_md_evolution_job(
 
     # 3. 遍历每个项目，提取知识并更新
     results: dict[str, str] = {}
-    for doc in agents_docs:
+    for doc in memory_docs:
         project_id = doc["project_id"]
         project_name = doc["project_name"]
         current_content = doc["content"] or ""
@@ -157,9 +157,9 @@ async def run_agents_md_evolution_job(
             chars=len(knowledge_text),
         )
 
-        # 3b. 更新 AGENTS.md（复用 post_incident 的更新逻辑）
+        # 3b. 更新 MEMORY.md（复用 post_incident 的更新逻辑）
         async with get_session_factory()() as session:
-            result = await _update_project_agents_md(session, project_id, knowledge_text)
+            result = await _update_project_memory_md(session, project_id, knowledge_text)
 
         results[project_name] = result
         proj_elapsed = time.monotonic() - t_proj
@@ -172,7 +172,7 @@ async def run_agents_md_evolution_job(
 
     elapsed = time.monotonic() - t_start
     log.info(
-        "=== AGENTS.md Evolution Job Completed ===",
+        "=== MEMORY.md Evolution Job Completed ===",
         elapsed=f"{elapsed:.2f}s",
         projects_processed=len(results),
         results=results,

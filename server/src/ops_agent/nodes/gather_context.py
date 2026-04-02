@@ -6,8 +6,8 @@ from typing import Any
 from src.db.connection import get_session_factory
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.state import MainState
-from src.ops_agent.sub_agents.history_agent import run_history_agent
-from src.ops_agent.sub_agents.kb_agent import KBAgentOutput, run_kb_agent
+from src.ops_agent.agents.history_agent import run_history_agent
+from src.ops_agent.agents.kb_agent import KBAgentOutput, run_kb_agent
 from src.lib.logger import get_logger
 from src.lib.redis import get_redis
 
@@ -120,17 +120,17 @@ async def gather_context_node(state: MainState) -> dict:
                     targeting_lines.append(f"- 入口线索: {', '.join(p.entrypoint_hints)}")
                 if len(targeting_lines) > 1:
                     project_parts.append("### 目标锁定提示\n" + "\n".join(targeting_lines))
-                if p.agents_md_content and not p.agents_md_empty:
-                    project_parts.append(f"### AGENTS.md\n{p.agents_md_content}")
-                elif p.agents_md_empty:
-                    project_parts.append("### AGENTS.md\n[空 - 未配置服务信息]")
+                if p.memory_md_content and not p.memory_md_empty:
+                    project_parts.append(f"### MEMORY.md\n{p.memory_md_content}")
+                elif p.memory_md_empty:
+                    project_parts.append("### MEMORY.md\n[空 - 未配置服务信息]")
                 if p.business_context:
                     project_parts.append(f"### 业务背景\n{p.business_context}")
                 parts.append("\n\n".join(project_parts))
 
             kb_summary = "\n\n---\n\n".join(parts)
-            # If any project has empty agents_md, append hint
-            if any(p.agents_md_empty for p in kb_result.projects):
+            # If any project has empty memory_md, append hint
+            if any(p.memory_md_empty for p in kb_result.projects):
                 kb_summary += "\n\n[需要补充]"
     elif isinstance(kb_result, str):
         kb_summary = kb_result

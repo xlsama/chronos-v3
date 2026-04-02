@@ -4,7 +4,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from src.ops_agent.nodes.compact_node import investigation_compact_node
-from src.ops_agent.sub_agents.investigation_agent import (
+from src.ops_agent.agents.investigation_agent import (
     investigation_agent_node,
     route_investigation_decision,
 )
@@ -26,9 +26,10 @@ def build_investigation_graph():
     graph = StateGraph(InvestigationState)
 
     # 复用主图的 human_approval 和 ask_human 节点逻辑，但适配 InvestigationState
-    from src.ops_agent.sub_agents.investigation_nodes import (
+    from src.ops_agent.agents.investigation_nodes import (
         investigation_ask_human_node,
         investigation_human_approval_node,
+        investigation_missing_explanation_node,
         investigation_retry_tool_call_node,
     )
 
@@ -37,6 +38,7 @@ def build_investigation_graph():
     graph.add_node("human_approval", investigation_human_approval_node)
     graph.add_node("ask_human", investigation_ask_human_node)
     graph.add_node("retry_tool_call", investigation_retry_tool_call_node)
+    graph.add_node("missing_explanation", investigation_missing_explanation_node)
     graph.add_node("compact", investigation_compact_node)
 
     graph.set_entry_point("investigation_agent")
@@ -47,6 +49,7 @@ def build_investigation_graph():
         {
             "continue": "tools",
             "need_approval": "human_approval",
+            "missing_explanation": "missing_explanation",
             "ask_human": "ask_human",
             "retry_tool_call": "retry_tool_call",
             "compact": "compact",
@@ -64,6 +67,7 @@ def build_investigation_graph():
     )
     graph.add_edge("ask_human", "investigation_agent")
     graph.add_edge("retry_tool_call", "investigation_agent")
+    graph.add_edge("missing_explanation", "investigation_agent")
     graph.add_edge("compact", "investigation_agent")
 
     return graph

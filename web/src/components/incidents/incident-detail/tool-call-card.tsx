@@ -1,4 +1,4 @@
-import { useState, memo } from "react";
+import { useState, useEffect, memo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -34,6 +34,8 @@ interface ToolCallCardProps {
   riskLevel?: string;
   explanation?: string;
   incidentStatus?: string;
+  // Parent-driven expand/collapse override
+  expandOverride?: boolean | null;
 }
 
 const COMMAND_TOOLS = new Set(["ssh_bash", "bash", "service_exec"]);
@@ -51,11 +53,16 @@ export const ToolCallCard = memo(function ToolCallCard({
   riskLevel,
   explanation,
   incidentStatus,
+  expandOverride,
 }: ToolCallCardProps) {
   const isApproval = !!approvalId;
   const isHigh = riskLevel === "HIGH";
 
   const [expanded, setExpanded] = useState(isApproval ? true : (isExecuting ?? false));
+
+  useEffect(() => {
+    if (expandOverride != null) setExpanded(expandOverride);
+  }, [expandOverride]);
 
   // Approval state from store
   const decidedApprovals = useIncidentStreamStore((s) => s.decidedApprovals);

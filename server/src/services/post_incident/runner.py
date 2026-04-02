@@ -8,7 +8,7 @@ from src.db.connection import get_session_factory
 from src.db.models import Incident, Message, Server, Service
 from src.lib.logger import get_logger
 from src.ops_agent.prompts.post_incident import SUMMARIZE_SYSTEM_PROMPT
-from src.services.post_incident.agents_md_task import auto_update_agents_md
+from src.services.post_incident.memory_md_task import auto_update_memory_md
 from src.services.post_incident.base import format_db_messages, get_mini_llm
 from src.services.post_incident.history_task import auto_save_history
 
@@ -176,19 +176,19 @@ async def run_post_incident_tasks(
         step4_elapsed = time.monotonic() - t_step
         log.info("Step 4: notification sent", elapsed=f"{step4_elapsed:.2f}s")
 
-        # ⑤ 两个子任务并行: history / agents_md
+        # ⑤ 两个子任务并行: history / memory_md
         t_step = time.monotonic()
         log.info("Step 5: starting parallel sub-tasks")
         await asyncio.gather(
             _safe_run(auto_save_history(incident_id, summary_md), "history", sid),
             _safe_run(
-                auto_update_agents_md(
+                auto_update_memory_md(
                     incident_id=incident_id,
                     summary_md=summary_md,
                     conversation_text=conversation_text_topo,
                     kb_project_ids=kb_project_ids,
                 ),
-                "agents_md",
+                "memory_md",
                 sid,
             ),
         )

@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export type FileType =
   | "markdown"
-  | "agents_config"
+  | "memory_config"
   | "text"
   | "log"
   | "json"
@@ -30,7 +30,7 @@ export interface FilePreviewProps {
 /** 以 markdown 渲染的类型 */
 const MARKDOWN_TYPES = new Set<FileType>([
   "markdown",
-  "agents_config",
+  "memory_config",
   "word",
   "excel",
   "pptx",

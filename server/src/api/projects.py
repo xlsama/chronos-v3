@@ -17,7 +17,7 @@ from src.db.models import Project
 from src.lib.errors import NotFoundError
 from src.lib.paths import knowledge_dir
 from src.services.project_service import ProjectService
-from src.services.agents_md import ensure_agents_md
+from src.services.memory_md import ensure_memory_md
 from src.services.import_connections_service import ImportConnectionsService
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -30,7 +30,7 @@ async def create_project(
 ):
     service = ProjectService(session=session)
     project = await service.create(**body.model_dump())
-    await ensure_agents_md(session, project.id, project.name, project.slug)
+    await ensure_memory_md(session, project.id, project.name, project.slug)
     await session.commit()
     return project
 

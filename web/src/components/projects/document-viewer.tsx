@@ -31,7 +31,7 @@ interface DocumentViewerProps {
 
 const EDITABLE_TYPES = new Set([
   "markdown",
-  "agents_config",
+  "memory_config",
   "text",
   "log",
   "json",
@@ -63,7 +63,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
   });
 
   const isMarkdown =
-    doc?.doc_type === "markdown" || doc?.doc_type === "agents_config";
+    doc?.doc_type === "markdown" || doc?.doc_type === "memory_config";
   const isEditable = doc ? EDITABLE_TYPES.has(doc.doc_type) : false;
 
   function startEditing() {
@@ -125,7 +125,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
             {doc?.filename ?? "文档预览"}
           </DialogTitle>
           <div className="mr-6 flex items-center gap-2">
-            {doc?.doc_type === "agents_config" && (
+            {doc?.doc_type === "memory_config" && (
               <Button variant="outline" size="sm" onClick={() => setShowHistory(true)}>
                 <History className="mr-1.5 h-3.5 w-3.5" />
                 更新历史
@@ -187,9 +187,9 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
         <VersionHistoryDialog
           open={showHistory}
           onOpenChange={setShowHistory}
-          entityType="agents_md"
+          entityType="memory_md"
           entityId={doc.id}
-          title="AGENTS.md 更新历史"
+          title="MEMORY.md 更新历史"
         />
       )}
     </Dialog>

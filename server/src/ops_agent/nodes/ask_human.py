@@ -23,14 +23,22 @@ async def ask_human_node(state: MainState) -> dict:
     if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
         for tc in last_msg.tool_calls:
             if tc["name"] == "ask_human":
-                question = tc["args"].get("question", "")
+                args = tc.get("args", {})
+                known_context = args.get("known_context", "")
+                assessment = args.get("assessment", "")
+                question = args.get("question", "")
                 log.info(
                     "Interrupt (explicit ask_human tool call)",
                     question=question[:200],
                     ask_human_count=current_count + 1,
                     tool_call_retry_count=state.get("tool_call_retry_count", 0),
                 )
-                user_response = interrupt({"question": question})
+                interrupt_payload = {"question": question}
+                if known_context:
+                    interrupt_payload["known_context"] = known_context
+                if assessment:
+                    interrupt_payload["assessment"] = assessment
+                user_response = interrupt(interrupt_payload)
                 log.info("Resume", response_len=len(str(user_response)))
                 log.info(
                     "Resetting tool_call_retry_count",

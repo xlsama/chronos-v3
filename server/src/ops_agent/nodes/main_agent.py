@@ -99,12 +99,18 @@ async def main_agent_node(state: MainState) -> dict:
 
     safe_response = sanitize_response(response, set(tool_names), component="main")
 
-    # 如果 LLM 调用了 launch_investigation，保存 tool_call_id 用于 ToolMessage 回复
+    # 保存 tool_call_id 用于 ToolMessage 回复
     result: dict = {"messages": [safe_response]}
     if hasattr(safe_response, "tool_calls") and safe_response.tool_calls:
         for tc in safe_response.tool_calls:
-            if tc["name"] == "launch_investigation":
-                result["pending_launch_tool_call_id"] = tc["id"]
+            if tc["name"] == "spawn_agent":
+                result["pending_spawn_tool_call_id"] = tc["id"]
+                break
+            if tc["name"] == "spawn_verification":
+                result["pending_verify_tool_call_id"] = tc["id"]
+                break
+            if tc["name"] == "spawn_parallel_agents":
+                result["parallel_launch_tool_call_id"] = tc["id"]
                 break
 
     return result
@@ -149,9 +155,16 @@ async def route_main_decision(state: MainState) -> str:
                 return "complete"
             log.info("-> ask_human")
             return "ask_human"
-        if name == "launch_investigation":
+        if name == "spawn_agent":
             log.info("-> run_sub_agent", hypothesis=tc["args"].get("hypothesis_id"))
-            return "launch_investigation"
+            return "spawn_agent"
+        if name == "spawn_verification":
+            log.info("-> run_verification")
+            return "spawn_verification"
+        if name == "spawn_parallel_agents":
+            hypotheses = tc["args"].get("hypotheses", [])
+            log.info("-> run_parallel_sub_agents", count=len(hypotheses))
+            return "spawn_parallel"
 
     # update_plan 等其他工具 → tools (ToolNode)
     log.info("-> tools (continue)")

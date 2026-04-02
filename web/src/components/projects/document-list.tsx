@@ -123,8 +123,8 @@ export function DocumentList({ projectId }: DocumentListProps) {
       >
         {(documents) => {
           const sortedDocuments = [...documents].sort((a, b) => {
-            if (a.doc_type === "agents_config" && b.doc_type !== "agents_config") return -1;
-            if (a.doc_type !== "agents_config" && b.doc_type === "agents_config") return 1;
+            if (a.doc_type === "memory_config" && b.doc_type !== "memory_config") return -1;
+            if (a.doc_type !== "memory_config" && b.doc_type === "memory_config") return 1;
             return 0;
           });
 
@@ -149,12 +149,12 @@ export function DocumentList({ projectId }: DocumentListProps) {
                       {dayjs(doc.updated_at).fromNow()}
                     </p>
                   </div>
-                  {doc.doc_type === "agents_config" && (
+                  {doc.doc_type === "memory_config" && (
                     <Badge className="bg-slate-50 text-slate-600 border-transparent dark:bg-slate-800/40 dark:text-slate-400">
                       概要
                     </Badge>
                   )}
-                  {doc.doc_type !== "agents_config" &&
+                  {doc.doc_type !== "memory_config" &&
                     (doc.status === "index_failed" && doc.error_message ? (
                       <Tooltip>
                         <TooltipTrigger render={<Badge className={statusColors.index_failed} />}>
@@ -174,7 +174,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
                         {statusLabels[doc.status] ?? doc.status}
                       </Badge>
                     ))}
-                  {doc.doc_type !== "agents_config" && (
+                  {doc.doc_type !== "memory_config" && (
                     <Button
                       variant="ghost"
                       size="sm"

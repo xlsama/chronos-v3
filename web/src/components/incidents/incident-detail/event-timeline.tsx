@@ -3,6 +3,7 @@ import { PhaseSection } from "./phase-section";
 import { PlanContent } from "./plan-phase-section";
 import { ContextGatheringPhase } from "./context-gathering-phase";
 import { InvestigationPhase } from "./investigation-phase";
+import { VerificationPhase } from "./verification-phase";
 
 interface EventTimelineProps {
   incidentId: string;
@@ -24,7 +25,8 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
   const hasContextKB = useIncidentStreamStore(
     (s) => s.kbAgentState.events.length > 0 || !!s.kbAgentState.thinkingContent || s.kbAgentState.status !== "idle",
   );
-  const bothSubAgentsDone = useIncidentStreamStore((s) => {
+  const hasTriageContent = useIncidentStreamStore((s) => s.triageEvents.length > 0);
+  const bothAgentsDone = useIncidentStreamStore((s) => {
     const h = s.historyAgentState.status;
     const k = s.kbAgentState.status;
     const hDone = h === "completed" || h === "failed" || h === "idle";
@@ -45,7 +47,7 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
     isActiveIncident &&
     phaseState.contextGathering === "active" &&
     phaseState.investigation === "pending" &&
-    bothSubAgentsDone;
+    bothAgentsDone;
 
   const isTransitioningFromPlanning =
     isActiveIncident &&
@@ -53,12 +55,17 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
     phaseState.investigation === "pending" &&
     !!planMd;
 
+  const hasVerification = useIncidentStreamStore(
+    (s) => s.investigations.some((i) => i.hypothesisId === "VERIFY"),
+  );
+
   // Phase visibility
   const showContextGathering =
-    hasGatherContext || phaseState.contextGathering !== "pending" || isActiveIncident;
+    hasGatherContext || hasTriageContent || phaseState.contextGathering !== "pending" || isActiveIncident;
   const showPlanning = !!planMd || phaseState.planning !== "pending";
   const showInvestigation =
     hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation || isTransitioningFromPlanning;
+  const showVerification = hasVerification || phaseState.verification !== "pending";
 
   return (
     <div className="px-8 py-4" data-testid="event-timeline">
@@ -87,7 +94,7 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
           title="排查处置"
           status={(isTransitioningToInvestigation || isTransitioningFromPlanning) ? "active" : phaseState.investigation}
           defaultExpanded
-          isLast
+          isLast={!showVerification}
         >
           <InvestigationPhase
             incidentId={incidentId}
@@ -95,6 +102,18 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
             scrollParent={scrollParent}
             isTransitioning={isTransitioningToInvestigation || isTransitioningFromPlanning}
           />
+        </PhaseSection>
+      )}
+
+      {/* Phase 4: Verification */}
+      {showVerification && (
+        <PhaseSection
+          title="验证修复"
+          status={phaseState.verification}
+          defaultExpanded
+          isLast
+        >
+          <VerificationPhase incidentId={incidentId} incidentStatus={incidentStatus} />
         </PhaseSection>
       )}
     </div>

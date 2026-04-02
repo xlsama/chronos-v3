@@ -57,13 +57,13 @@ async def upload_document(
             segments=None,
         )
 
-    # Save init version for agents_config documents
-    if doc.doc_type == "agents_config":
+    # Save init version for memory_config documents
+    if doc.doc_type == "memory_config":
         from src.services.version_service import VersionService
 
         vs = VersionService(session)
         await vs.save_version(
-            entity_type="agents_md",
+            entity_type="memory_md",
             entity_id=str(doc.id),
             content=body.content or "",
             change_source="init",
@@ -175,10 +175,10 @@ async def delete_document(
     doc = await service.get(document_id)
     if not doc:
         raise NotFoundError("Document not found")
-    if doc.doc_type == "agents_config":
+    if doc.doc_type == "memory_config":
         from src.lib.errors import AppError
 
-        raise AppError("AGENTS.md 文档不可删除", status_code=400)
+        raise AppError("MEMORY.md 文档不可删除", status_code=400)
     try:
         await service.delete(document_id)
     except ValueError as e:
@@ -272,20 +272,20 @@ async def update_document(
         project_slug=doc.project.slug,
     )
 
-    if doc.doc_type == "agents_config":
+    if doc.doc_type == "memory_config":
         from src.services.version_service import VersionService
 
         vs = VersionService(session)
         await vs.save_version(
-            entity_type="agents_md",
+            entity_type="memory_md",
             entity_id=str(doc.id),
             content=body.content,
             change_source="manual",
         )
         await session.commit()
 
-    # Trigger background indexing for non-agents_config documents
-    if doc.doc_type != "agents_config":
+    # Trigger background indexing for non-memory_config documents
+    if doc.doc_type != "memory_config":
         background_tasks.add_task(
             _index_document_background,
             document_id=document_id,

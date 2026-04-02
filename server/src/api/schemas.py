@@ -472,6 +472,9 @@ class SkillResponse(BaseModel):
     has_references: bool = False
     has_assets: bool = False
     draft: bool = False
+    when_to_use: str = ""
+    tags: list[str] = Field(default_factory=list)
+    related_services: list[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
 

@@ -1,6 +1,21 @@
 ---
 name: 数据库排查
-description: 数据库与数据存储排查指南，覆盖 PostgreSQL、MySQL、Redis、MongoDB、Elasticsearch、Prometheus 六种服务类型。当事件涉及数据库连接异常、慢查询、锁等待、死锁、主从延迟、复制异常、内存溢出、缓存穿透、缓存击穿、缓存雪崩、索引失效、表空间、磁盘占用、连接耗尽、QPS 异常、集群健康、分片异常、查询超时、数据一致性等数据库相关问题时使用。
+description: 数据库与数据存储排查指南，覆盖 PostgreSQL、MySQL、Redis、MongoDB、Elasticsearch、Prometheus 六种服务类型。
+when_to_use: >-
+  当事件涉及数据库连接异常、慢查询、锁等待、死锁、主从延迟、复制异常、内存溢出、
+  缓存穿透/击穿/雪崩、索引失效、表空间、磁盘占用、连接耗尽、QPS 异常、集群健康、
+  分片异常、查询超时、数据一致性等数据库相关问题时使用。
+  不适用于：纯应用层逻辑错误、网络不通（应先排查网络）。
+tags:
+  - database
+  - storage
+related_services:
+  - postgresql
+  - mysql
+  - redis
+  - mongodb
+  - elasticsearch
+  - prometheus
 metadata:
   pattern: pipeline
   domain: database
