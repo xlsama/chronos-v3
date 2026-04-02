@@ -156,14 +156,14 @@ async def route_main_decision(state: MainState) -> str:
             log.info("-> ask_human")
             return "ask_human"
         if name == "spawn_agent":
-            log.info("-> run_sub_agent", hypothesis=tc["args"].get("hypothesis_id"))
+            log.info("-> run_agent", hypothesis=tc["args"].get("hypothesis_id"))
             return "spawn_agent"
         if name == "spawn_verification":
             log.info("-> run_verification")
             return "spawn_verification"
         if name == "spawn_parallel_agents":
             hypotheses = tc["args"].get("hypotheses", [])
-            log.info("-> run_parallel_sub_agents", count=len(hypotheses))
+            log.info("-> run_parallel_agents", count=len(hypotheses))
             return "spawn_parallel"
 
     # update_plan 等其他工具 → tools (ToolNode)

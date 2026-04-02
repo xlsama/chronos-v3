@@ -380,6 +380,7 @@ class IncidentHistoryService:
             query=query,
             documents=[c["summary_md"] for c in candidates],
             top_n=limit,
+            score_threshold=0.1,
         )
 
         results = []

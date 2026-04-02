@@ -64,10 +64,10 @@ def route_after_resolution(state: MainState) -> str:
 
 
 async def agent_approval_node(state: MainState) -> dict:
-    """透传节点 — interrupt_before 已暂停图，resume 后直接通过，路由回 run_sub_agent。"""
+    """透传节点 — interrupt_before 已暂停图，resume 后直接通过，路由回 run_agent。"""
     log = get_logger(component="agent_approval", sid=state["incident_id"][:8])
     log.info(
-        "Sub-agent approval resumed",
+        "Agent approval resumed",
         decision=state.get("approval_decision"),
     )
     return {}
@@ -76,9 +76,9 @@ async def agent_approval_node(state: MainState) -> dict:
 async def agent_ask_human_node(state: MainState) -> dict:
     """透传节点 — 仅用于触发 interrupt，让 AgentRunner 发布 ask_human 事件。"""
     log = get_logger(component="agent_ask_human", sid=state["incident_id"][:8])
-    log.info("Sub-agent ask_human interrupt")
+    log.info("Agent ask_human interrupt")
     user_response = interrupt({"type": "agent_ask_human"})
-    log.info("Sub-agent ask_human resumed")
+    log.info("Agent ask_human resumed")
 
     if isinstance(user_response, dict) and "text" in user_response:
         text = user_response["text"]
@@ -100,7 +100,7 @@ async def agent_ask_human_node(state: MainState) -> dict:
 
 
 def route_after_agent(state: MainState) -> str:
-    """run_sub_agent 之后的路由：子 Agent 完成→main_agent，中断→透传节点。"""
+    """run_agent 之后的路由：Agent 完成→main_agent，中断→透传节点。"""
     log = get_logger(component="route_after_agent", sid=state["incident_id"][:8])
     sub_status = state.get("agent_status")
     if sub_status == "waiting_for_human":
@@ -109,12 +109,12 @@ def route_after_agent(state: MainState) -> str:
             return "agent_approval"
         log.info("-> agent_ask_human")
         return "agent_ask_human"
-    log.info("-> main_agent (sub-agent completed)")
+    log.info("-> main_agent (agent completed)")
     return "main_agent"
 
 
 # ═══════════════════════════════════════════
-# 并行子 Agent 审批/ask_human 透传节点
+# 并行 Agent 审批/ask_human 透传节点
 # ═══════════════════════════════════════════
 
 
@@ -122,7 +122,7 @@ async def parallel_agent_approval_node(state: MainState) -> dict:
     """并行模式审批透传节点 — interrupt_before 暂停图，resume 后直接通过。"""
     log = get_logger(component="parallel_agent_approval", sid=state["incident_id"][:8])
     log.info(
-        "Parallel sub-agent approval resumed",
+        "Parallel agent approval resumed",
         decision=state.get("approval_decision"),
         agent_id=state.get("parallel_interrupted_agent_id"),
     )
@@ -132,9 +132,9 @@ async def parallel_agent_approval_node(state: MainState) -> dict:
 async def parallel_agent_ask_human_node(state: MainState) -> dict:
     """并行模式 ask_human 透传节点。"""
     log = get_logger(component="parallel_agent_ask_human", sid=state["incident_id"][:8])
-    log.info("Parallel sub-agent ask_human interrupt")
+    log.info("Parallel agent ask_human interrupt")
     user_response = interrupt({"type": "parallel_agent_ask_human"})
-    log.info("Parallel sub-agent ask_human resumed")
+    log.info("Parallel agent ask_human resumed")
 
     if isinstance(user_response, dict) and "text" in user_response:
         text = user_response["text"]
@@ -156,13 +156,13 @@ async def parallel_agent_ask_human_node(state: MainState) -> dict:
 
 
 def route_after_parallel_agents(state: MainState) -> str:
-    """run_parallel_sub_agents 之后的路由。"""
+    """run_parallel_agents 之后的路由。"""
     log = get_logger(
         component="route_after_parallel_agents", sid=state["incident_id"][:8]
     )
     interrupted_id = state.get("parallel_interrupted_agent_id")
     if not interrupted_id:
-        log.info("-> main_agent (all parallel sub-agents completed)")
+        log.info("-> main_agent (all parallel agents completed)")
         return "main_agent"
 
     parallel_agents = state.get("parallel_agents") or []

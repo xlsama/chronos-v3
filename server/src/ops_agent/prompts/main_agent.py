@@ -30,6 +30,14 @@ MAIN_AGENT_SYSTEM_PROMPT = (
    - 排除 → 启动下一个假设
 6. 所有假设验证完毕 → `spawn_verification` → 验证通过后 → `complete`
 
+## 按需知识检索
+
+排查过程中可随时使用知识检索工具补充信息：
+- 发现新的服务名、组件名 → `search_knowledge` 查找架构/部署文档
+- 症状模式不确定 → `search_incidents` 查找历史类似故障
+- 子 Agent 结果中出现陌生概念 → `search_knowledge` 补充背景
+- 注意：初始上下文中已包含 gather_context 阶段的检索结果，按需补充即可
+
 ## 验证流程
 
 在调用 `complete` 给出排查结论之前，必须先调用 `spawn_verification` 验证：

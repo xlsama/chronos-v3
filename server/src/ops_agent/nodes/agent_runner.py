@@ -1,4 +1,4 @@
-"""子 Agent 生命周期管理节点 —— 创建/恢复子 Agent。"""
+"""Agent 运行节点 —— 创建/恢复 Agent。"""
 
 import uuid
 
@@ -95,7 +95,7 @@ async def _create_and_publish_approval(
     approval_id = str(approval.id)
     log.info("Approval created", approval_id=approval_id)
 
-    # 发布 approval_required 事件（带 sub_agent_id）
+    # 发布 approval_required 事件（带 agent_id）
     await publisher.publish(
         channel,
         "approval_required",
@@ -104,7 +104,7 @@ async def _create_and_publish_approval(
             "tool_name": tool_name,
             "tool_args": {**args, "risk_level": risk_level},
             "tool_call_id": pending_tool_call.get("id", ""),
-            "sub_agent_id": hypothesis_id,
+            "agent_id": hypothesis_id,
             "phase": phase,
         },
     )
@@ -123,7 +123,7 @@ async def _create_and_publish_approval(
     return approval_id
 
 
-def _extract_sub_agent_pending_tool(vals: dict) -> dict | None:
+def _extract_agent_pending_tool(vals: dict) -> dict | None:
     """从子 Agent 状态中提取待审批的工具调用。"""
     messages = vals.get("messages", [])
     for msg in reversed(messages):
@@ -170,7 +170,7 @@ async def _extract_findings(sub_graph, config, hypothesis) -> HypothesisResult:
 # ═══════════════════════════════════════════
 
 
-async def _stream_sub_agent(
+async def _stream_agent(
     sub_graph, initial_state, config, channel, publisher, hypothesis_id, log,
     phase: str = "investigation",
 ) -> dict:
@@ -222,7 +222,7 @@ async def _stream_sub_agent(
     next_nodes = graph_state.next or ()
 
     if "human_approval" in next_nodes:
-        pending = _extract_sub_agent_pending_tool(graph_state.values)
+        pending = _extract_agent_pending_tool(graph_state.values)
         return {
             "needs_interrupt": True,
             "interrupt_type": "human_approval",
@@ -238,7 +238,7 @@ async def _stream_sub_agent(
     return {"needs_interrupt": False}
 
 
-async def _resume_sub_agent(
+async def _resume_agent(
     sub_graph,
     config,
     coordinator_state,
@@ -270,7 +270,7 @@ async def _resume_sub_agent(
         log.info("Resuming sub-agent (approval)", decision=decision)
         # 仅在 approved 时传递 approval_id 标记
         if decision == "approved" and approval_id:
-            pending = _extract_sub_agent_pending_tool(graph_state.values)
+            pending = _extract_agent_pending_tool(graph_state.values)
             if pending:
                 approval_tool_name = pending["name"]
     elif "ask_human" in next_nodes:
@@ -354,7 +354,7 @@ async def _resume_sub_agent(
     next_nodes = graph_state.next or ()
 
     if "human_approval" in next_nodes:
-        pending = _extract_sub_agent_pending_tool(graph_state.values)
+        pending = _extract_agent_pending_tool(graph_state.values)
         return {
             "needs_interrupt": True,
             "interrupt_type": "human_approval",
@@ -445,7 +445,7 @@ async def run_agent_node(state: MainState) -> dict:
                     "hypothesis_id": hypothesis_id,
                     "hypothesis_title": hypothesis_title,
                     "hypothesis_desc": hypothesis_desc,
-                    "sub_agent_thread_id": sub_thread_id,
+                    "agent_thread_id": sub_thread_id,
                     "phase": "investigation",
                 },
             )
@@ -453,7 +453,7 @@ async def run_agent_node(state: MainState) -> dict:
             log.warning("Failed to publish agent_started", error=str(e))
 
         # 执行子 Agent，桥接事件
-        result = await _stream_sub_agent(
+        result = await _stream_agent(
             sub_graph, initial_state, config, channel, publisher, hypothesis_id, log
         )
     else:
@@ -476,7 +476,7 @@ async def run_agent_node(state: MainState) -> dict:
         if state.get("approval_decision") == "approved" and state.get("pending_approval_id"):
             approval_id_for_resume = state["pending_approval_id"]
 
-        result = await _resume_sub_agent(
+        result = await _resume_agent(
             sub_graph,
             config,
             state,

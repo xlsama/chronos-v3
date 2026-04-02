@@ -21,6 +21,9 @@ INVESTIGATION_AGENT_SYSTEM_PROMPT = (
 
 ### 诊断（只读）
 根据假设选择工具 → 执行只读命令 → 收集证据 → 判断假设是否成立
+- 遇到不熟悉的服务/组件 → 用 `search_knowledge` 查找架构文档和配置说明
+- 假设方向不确定 → 用 `search_incidents` 参考历史同类问题的排查路径
+- 知识检索是辅助手段，核心证据靠 ssh_bash/service_exec 实际执行获取
 
 ### 恢复判断
 假设确认后，同时满足三个条件时**必须立即执行恢复**：

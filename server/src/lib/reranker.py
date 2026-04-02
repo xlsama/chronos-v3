@@ -18,7 +18,13 @@ class Reranker:
         self.base_url = s.rerank_base_url
         self.model = s.rerank_model
 
-    async def rerank(self, query: str, documents: list[str], top_n: int = 5) -> list[RerankResult]:
+    async def rerank(
+        self,
+        query: str,
+        documents: list[str],
+        top_n: int = 5,
+        score_threshold: float = 0.1,
+    ) -> list[RerankResult]:
         if not documents or len(documents) <= top_n:
             return [RerankResult(index=i, relevance_score=1.0) for i in range(len(documents))]
 
@@ -42,4 +48,5 @@ class Reranker:
         return [
             RerankResult(index=r["index"], relevance_score=r["relevance_score"])
             for r in data["results"]
+            if r["relevance_score"] >= score_threshold
         ]

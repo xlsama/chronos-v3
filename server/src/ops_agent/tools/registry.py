@@ -21,6 +21,8 @@ _AGENT_TOOL_MAP = {
         "spawn_parallel_agents",
         "spawn_verification",
         "update_plan",
+        "search_knowledge",
+        "search_incidents",
         "skill_read",
         "list_servers",
         "list_services",
@@ -31,6 +33,8 @@ _AGENT_TOOL_MAP = {
         "ssh_bash",
         "bash",
         "service_exec",
+        "search_knowledge",
+        "search_incidents",
         "skill_read",
         "list_servers",
         "list_services",
@@ -48,6 +52,8 @@ _AGENT_TOOL_MAP = {
         "submit_verification",
     ],
     "plan": [
+        "search_knowledge",
+        "search_incidents",
         "skill_read",
         "list_servers",
         "list_services",
@@ -63,6 +69,9 @@ _AGENT_TOOL_GUIDE = {
 - 多个独立假设可并行验证时，用 spawn_parallel_agents 同时启动（最多 3 个）
 - 假设有先后依赖时，用 spawn_agent 逐个执行
 - 收到子 Agent 结果后先 update_plan，再决定下一步
+- 排查中发现新线索（服务名、组件名、错误模式），用 search_knowledge 查找相关文档
+- 症状模式不确定时，用 search_incidents 查找历史类似故障作参考
+- 知识检索结果是参考，不是结论——需要子 Agent 实际验证
 - 历史事件是线索不是答案：相同症状可能不同根因
 - 信息不足时 ask_human，不追问系统中不存在的资源
 - 有匹配技能时在 hypothesis_desc 中提示子 Agent 参考""",
@@ -74,6 +83,9 @@ _AGENT_TOOL_GUIDE = {
 - 不要用 2>/dev/null 吞错误
 - 优先检查 Docker 容器状态和日志
 - 进程存活 ≠ 服务正常：接口超时时用 service_exec 检查依赖服务
+- 遇到不熟悉的服务/组件时，用 search_knowledge 查找架构文档
+- 假设方向不确定时，用 search_incidents 参考历史同类问题
+- 知识检索是辅助手段，核心证据靠 ssh_bash/service_exec 实际执行
 - 能修的就修（重启/扩容等低风险操作），修完要验证
 - 写操作在 explanation 中说明原因和风险""",
     "verification": """\
@@ -113,6 +125,10 @@ def _ensure_registered() -> dict[str, BaseTool]:
         SubmitVerificationTool,
         UpdatePlanTool,
     )
+    from src.ops_agent.tools.knowledge_retrieval_tools import (
+        SearchIncidentsTool,
+        SearchKnowledgeTool,
+    )
     from src.ops_agent.tools.readonly_tools import (
         ListServersTool,
         ListServicesTool,
@@ -130,6 +146,9 @@ def _ensure_registered() -> dict[str, BaseTool]:
         SkillReadTool(),
         ListServersTool(),
         ListServicesTool(),
+        # 按需知识检索工具
+        SearchKnowledgeTool(),
+        SearchIncidentsTool(),
         # 协调工具
         SpawnAgentTool(),
         SpawnParallelAgentsTool(),

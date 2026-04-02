@@ -1,4 +1,4 @@
-"""并行子 Agent 生命周期管理节点 —— asyncio.TaskGroup 并发执行多个 investigation 子 Agent。"""
+"""并行 Agent 运行节点 —— asyncio.TaskGroup 并发执行多个 investigation Agent。"""
 
 import asyncio
 import uuid
@@ -14,8 +14,8 @@ from src.ops_agent.nodes.agent_runner import (
     _create_and_publish_approval,
     _extract_findings,
     _format_prior_findings,
-    _resume_sub_agent,
-    _stream_sub_agent,
+    _resume_agent,
+    _stream_agent,
 )
 from src.ops_agent.state import ActiveAgent, HypothesisResult, MainState
 from src.ops_agent.agents.investigation_graph import compile_investigation_graph
@@ -46,7 +46,7 @@ def _extract_parallel_launch_info(state: MainState) -> tuple[list[dict], str]:
 # ═══════════════════════════════════════════
 
 
-async def _run_single_sub_agent(
+async def _run_single_agent(
     hypothesis: dict,
     state: MainState,
     prior_findings: str,
@@ -99,7 +99,7 @@ async def _run_single_sub_agent(
                 "hypothesis_id": hypothesis_id,
                 "hypothesis_title": hypothesis_title,
                 "hypothesis_desc": hypothesis_desc,
-                "sub_agent_thread_id": sub_thread_id,
+                "agent_thread_id": sub_thread_id,
                 "phase": "investigation",
             },
         )
@@ -108,7 +108,7 @@ async def _run_single_sub_agent(
 
     # 执行子 Agent
     try:
-        result = await _stream_sub_agent(
+        result = await _stream_agent(
             sub_graph, initial_state, config, channel, publisher, hypothesis_id, log
         )
     except Exception as e:
@@ -283,7 +283,7 @@ async def _handle_first_run(
     errors: list[Exception] = []
 
     async def _safe_run(h: dict) -> ActiveAgent:
-        return await _run_single_sub_agent(
+        return await _run_single_agent(
             h, state, prior_findings, checkpointer, channel, publisher, log,
         )
 
@@ -391,7 +391,7 @@ async def _handle_resume(
         approval_id_for_resume = state["pending_approval_id"]
 
     try:
-        result = await _resume_sub_agent(
+        result = await _resume_agent(
             sub_graph, config, state, channel, publisher,
             hypothesis_id, log, approval_id=approval_id_for_resume,
         )

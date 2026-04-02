@@ -1,4 +1,4 @@
-"""Verification Sub-Agent 生命周期管理节点 —— 创建/恢复 Verification Sub-Agent。"""
+"""Verification Agent 运行节点 —— 创建/恢复 Verification Agent。"""
 
 import uuid
 
@@ -12,8 +12,8 @@ from src.lib.redis import get_redis
 from src.ops_agent.event_publisher import EventPublisher
 from src.ops_agent.nodes.agent_runner import (
     _create_and_publish_approval,
-    _resume_sub_agent,
-    _stream_sub_agent,
+    _resume_agent,
+    _stream_agent,
 )
 from src.ops_agent.state import MainState
 from src.ops_agent.agents.verification_graph import compile_verification_graph
@@ -139,14 +139,14 @@ async def run_verification_node(state: MainState) -> dict:
                     "hypothesis_id": "VERIFY",
                     "hypothesis_title": "验证结论",
                     "hypothesis_desc": "验证排查结论和修复效果",
-                    "sub_agent_thread_id": sub_thread_id,
+                    "agent_thread_id": sub_thread_id,
                     "phase": "verification",
                 },
             )
         except Exception as e:
             log.warning("Failed to publish agent_started", error=str(e))
 
-        result = await _stream_sub_agent(
+        result = await _stream_agent(
             sub_graph, initial_state, config, channel, publisher,
             "VERIFY", log, phase="verification",
         )
@@ -164,7 +164,7 @@ async def run_verification_node(state: MainState) -> dict:
         if state.get("approval_decision") == "approved" and state.get("pending_approval_id"):
             approval_id_for_resume = state["pending_approval_id"]
 
-        result = await _resume_sub_agent(
+        result = await _resume_agent(
             sub_graph, config, state, channel, publisher,
             "VERIFY", log,
             approval_id=approval_id_for_resume,

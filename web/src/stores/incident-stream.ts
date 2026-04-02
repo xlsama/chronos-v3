@@ -7,7 +7,7 @@ export interface PhaseState {
   contextGathering: PhaseStatus;
   planning: PhaseStatus;
   investigation: PhaseStatus;
-  verification: PhaseStatus;
+  summary: PhaseStatus;
 }
 
 interface AgentState {
@@ -29,8 +29,8 @@ export interface InvestigationAgent {
 
 interface IncidentStreamState {
   events: SSEEvent[];
-  historyAgentState: SubAgentState;
-  kbAgentState: SubAgentState;
+  historyAgentState: AgentState;
+  kbAgentState: AgentState;
   planMd: string;
   planThinkingContent: string;
   planProgress: string;
@@ -74,10 +74,10 @@ interface IncidentStreamState {
   clearAskHumanStream: () => void;
   addTriageEvent: (event: SSEEvent) => void;
   setAskHumanPhase: (phase: string | null) => void;
-  appendSubAgentThinking: (agent: string, content: string) => void;
-  flushSubAgentThinking: (agent: string, timestamp: string) => void;
-  addSubAgentEvent: (agent: string, event: SSEEvent) => void;
-  setSubAgentStatus: (agent: string, status: "idle" | "started" | "completed" | "failed") => void;
+  appendAgentThinking: (agent: string, content: string) => void;
+  flushAgentThinking: (agent: string, timestamp: string) => void;
+  addAgentEvent: (agent: string, event: SSEEvent) => void;
+  setAgentStatus: (agent: string, status: "idle" | "started" | "completed" | "failed") => void;
   updatePhase: (phase: string) => void;
   setAskHumanQuestion: (question: string | null) => void;
   setResolutionConfirmRequired: (required: boolean) => void;
@@ -91,7 +91,7 @@ interface IncidentStreamState {
   reset: () => void;
 }
 
-const emptySubAgent = (): SubAgentState => ({
+const emptyAgent = (): AgentState => ({
   events: [],
   thinkingContent: "",
   status: "idle",
@@ -101,13 +101,13 @@ const initialPhaseState = (): PhaseState => ({
   contextGathering: "pending",
   planning: "pending",
   investigation: "pending",
-  verification: "pending",
+  summary: "pending",
 });
 
 export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   events: [],
-  historyAgentState: emptySubAgent(),
-  kbAgentState: emptySubAgent(),
+  historyAgentState: emptyAgent(),
+  kbAgentState: emptyAgent(),
   planMd: "",
   planThinkingContent: "",
   planProgress: "",
@@ -170,7 +170,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
 
   setAskHumanPhase: (phase) => set({ askHumanPhase: phase }),
 
-  appendSubAgentThinking: (agent, content) =>
+  appendAgentThinking: (agent, content) =>
     set((state) => {
       const key = agent === "kb" ? "kbAgentState" : "historyAgentState";
       return {
@@ -181,7 +181,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       };
     }),
 
-  flushSubAgentThinking: (agent, timestamp) =>
+  flushAgentThinking: (agent, timestamp) =>
     set((state) => {
       const key = agent === "kb" ? "kbAgentState" : "historyAgentState";
       const agentState = state[key];
@@ -205,7 +205,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       };
     }),
 
-  addSubAgentEvent: (agent, event) =>
+  addAgentEvent: (agent, event) =>
     set((state) => {
       const key = agent === "kb" ? "kbAgentState" : "historyAgentState";
       return {
@@ -216,7 +216,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       };
     }),
 
-  setSubAgentStatus: (agent, status) =>
+  setAgentStatus: (agent, status) =>
     set((state) => {
       const key = agent === "kb" ? "kbAgentState" : "historyAgentState";
       return {
@@ -326,12 +326,12 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         if (ps.investigation === "pending") ps.investigation = "active";
       } else if (phase === "verification") {
         if (ps.investigation === "active") ps.investigation = "completed";
-        if (ps.verification === "pending") ps.verification = "active";
+        if (ps.summary === "pending") ps.summary = "active";
       } else if (phase === "summary_complete") {
         if (ps.contextGathering === "active") ps.contextGathering = "completed";
         if (ps.planning === "active") ps.planning = "completed";
         if (ps.investigation === "active") ps.investigation = "completed";
-        if (ps.verification === "active") ps.verification = "completed";
+        if (ps.summary === "active") ps.summary = "completed";
       }
       return { phaseState: ps };
     }),
@@ -394,7 +394,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
         continue;
       }
 
-      // agent_status → update sub-agent status, don't add to any event list
+      // agent_status → update agent status, don't add to any event list
       if (event.event_type === "agent_status") {
         const status = event.data.status as "started" | "completed" | "failed";
         if (agent === "history") historyStatus = status;
@@ -528,10 +528,10 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
           mainEvents.push(event);
         }
       } else {
-        // Check if this event belongs to an investigation sub-agent
-        const subAgentId = event.data.sub_agent_id as string | undefined;
-        if (subAgentId) {
-          const inv = loadedInvestigations.find((i) => i.hypothesisId === subAgentId);
+        // Check if this event belongs to an investigation agent
+        const agentId = event.data.agent_id as string | undefined;
+        if (agentId) {
+          const inv = loadedInvestigations.find((i) => i.hypothesisId === agentId);
           if (inv) {
             inv.events.push(event);
             continue;
@@ -594,7 +594,7 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
       investigation: hasMain
         ? (hasVerification || isTerminal ? "completed" : "active")
         : "pending",
-      verification: hasVerification
+      summary: hasVerification
         ? (isTerminal ? "completed" : "active")
         : "pending",
     };
@@ -621,8 +621,8 @@ export const useIncidentStreamStore = create<IncidentStreamState>((set) => ({
   reset: () =>
     set({
       events: [],
-      historyAgentState: emptySubAgent(),
-      kbAgentState: emptySubAgent(),
+      historyAgentState: emptyAgent(),
+      kbAgentState: emptyAgent(),
       planMd: "",
       planThinkingContent: "",
       planProgress: "",

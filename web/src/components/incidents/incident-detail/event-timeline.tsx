@@ -65,7 +65,7 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
   const showPlanning = !!planMd || phaseState.planning !== "pending";
   const showInvestigation =
     hasInvestigation || phaseState.investigation !== "pending" || isTransitioningToInvestigation || isTransitioningFromPlanning;
-  const showVerification = hasVerification || phaseState.verification !== "pending";
+  const showVerification = hasVerification || phaseState.summary !== "pending";
 
   return (
     <div className="px-8 py-4" data-testid="event-timeline">
@@ -108,8 +108,8 @@ export function EventTimeline({ incidentId, incidentStatus, scrollParent }: Even
       {/* Phase 4: Verification */}
       {showVerification && (
         <PhaseSection
-          title="验证修复"
-          status={phaseState.verification}
+          title="总结"
+          status={phaseState.summary}
           defaultExpanded
           isLast
         >

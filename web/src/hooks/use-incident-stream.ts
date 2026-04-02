@@ -39,10 +39,10 @@ export function useIncidentStream(
     clearAnswer,
     appendAskHuman,
     clearAskHumanStream,
-    appendSubAgentThinking,
-    flushSubAgentThinking,
-    addSubAgentEvent,
-    setSubAgentStatus,
+    appendAgentThinking,
+    flushAgentThinking,
+    addAgentEvent,
+    setAgentStatus,
     updatePhase,
     setAskHumanQuestion,
     setAskHumanPhase,
@@ -246,7 +246,7 @@ export function useIncidentStream(
               // skip — phase update handled below
             } else if (event.event_type === "agent_status") {
               if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
-                setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
+                setAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
               }
             } else if (event.event_type === "agent_started") {
               startInvestigation(
@@ -267,9 +267,9 @@ export function useIncidentStream(
               phase === "gather_context" &&
               (agent === "history" || agent === "kb")
             ) {
-              addSubAgentEvent(agent, event);
-            } else if (event.data.sub_agent_id) {
-              addInvestigationEvent(event.data.sub_agent_id as string, event);
+              addAgentEvent(agent, event);
+            } else if (event.data.agent_id) {
+              addInvestigationEvent(event.data.agent_id as string, event);
             } else {
               addEvent(event);
             }
@@ -303,14 +303,14 @@ export function useIncidentStream(
 
           if (phase === "gather_context" && (agent === "history" || agent === "kb")) {
             if (event.event_type === "agent_status") {
-              setSubAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
+              setAgentStatus(agent, event.data.status as "started" | "completed" | "failed");
             } else if (event.event_type === "thinking_done") {
-              flushSubAgentThinking(agent, event.timestamp);
+              flushAgentThinking(agent, event.timestamp);
             } else if (event.event_type === "thinking") {
-              appendSubAgentThinking(agent, event.data.content as string);
+              appendAgentThinking(agent, event.data.content as string);
             } else {
-              flushSubAgentThinking(agent, event.timestamp);
-              addSubAgentEvent(agent, event);
+              flushAgentThinking(agent, event.timestamp);
+              addAgentEvent(agent, event);
             }
           } else if (event.event_type === "user_message") {
             const { askHumanPhase: uhPhase } = useIncidentStreamStore.getState();
@@ -434,14 +434,14 @@ export function useIncidentStream(
           } else if (event.event_type === "plan_progress") {
             setPlanProgress(event.data.status as string);
             updatePhase("planning");
-          } else if (event.event_type === "thinking" && event.data.sub_agent_id) {
-            // Route thinking to investigation sub-agent
+          } else if (event.event_type === "thinking" && event.data.agent_id) {
+            // Route thinking to investigation agent
             setWaitingForAgent(false);
             updatePhase("investigation");
-            appendInvestigationThinking(event.data.sub_agent_id as string, event.data.content as string);
-          } else if (event.event_type === "thinking_done" && event.data.sub_agent_id) {
+            appendInvestigationThinking(event.data.agent_id as string, event.data.content as string);
+          } else if (event.event_type === "thinking_done" && event.data.agent_id) {
             // Flush investigation thinking buffer
-            const subId = event.data.sub_agent_id as string;
+            const subId = event.data.agent_id as string;
             const { investigations } = useIncidentStreamStore.getState();
             const inv = investigations.find((i) => i.hypothesisId === subId);
             if (inv && inv.thinkingContent) {
@@ -452,12 +452,12 @@ export function useIncidentStream(
               });
               clearInvestigationThinking(subId);
             }
-          } else if (event.data.sub_agent_id && (
+          } else if (event.data.agent_id && (
             event.event_type === "tool_use" || event.event_type === "tool_result" ||
             event.event_type === "skill_read" || event.event_type === "approval_required"
           )) {
-            // Route tool events to investigation sub-agent
-            const subId = event.data.sub_agent_id as string;
+            // Route tool events to investigation agent
+            const subId = event.data.agent_id as string;
             setWaitingForAgent(event.event_type === "tool_result");
             updatePhase("investigation");
             // Flush any pending thinking first

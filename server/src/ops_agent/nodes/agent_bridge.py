@@ -1,4 +1,4 @@
-"""子 Agent SSE 事件桥接 —— 将子 Agent 事件转发到前端 SSE channel。"""
+"""Agent SSE 事件桥接 —— 将 Agent 事件转发到前端 SSE channel。"""
 
 from src.lib.logger import get_logger
 from src.ops_agent.event_publisher import EventPublisher
@@ -17,7 +17,7 @@ async def bridge_event(
     approval_tool_name: str = "",
     phase: str = "investigation",
 ) -> dict:
-    """桥接子 Agent 事件到 SSE channel，附加 sub_agent_id。
+    """桥接子 Agent 事件到 SSE channel，附加 agent_id。
 
     返回更新后的状态 dict (thinking_buffer, ask_human_active, ask_human_streamed,
     approval_id, approval_tool_name)。
@@ -55,7 +55,7 @@ async def bridge_event(
                     {
                         "content": chunk.content,
                         "phase": phase,
-                        "sub_agent_id": hypothesis_id,
+                        "agent_id": hypothesis_id,
                     },
                 )
 
@@ -65,7 +65,7 @@ async def bridge_event(
                 await publisher.publish(
                     channel,
                     "thinking_done",
-                    {"phase": phase, "sub_agent_id": hypothesis_id},
+                    {"phase": phase, "agent_id": hypothesis_id},
                 )
 
         elif kind == "on_tool_start":
@@ -79,7 +79,7 @@ async def bridge_event(
                     "args": event["data"].get("input", {}),
                     "tool_call_id": run_id,
                     "phase": phase,
-                    "sub_agent_id": hypothesis_id,
+                    "agent_id": hypothesis_id,
                 }
                 # 标记已批准的 tool_use 事件
                 if approval_id and name == approval_tool_name:
@@ -106,7 +106,7 @@ async def bridge_event(
                         "content": output,
                         "success": success,
                         "phase": phase,
-                        "sub_agent_id": hypothesis_id,
+                        "agent_id": hypothesis_id,
                     },
                 )
             else:
@@ -119,7 +119,7 @@ async def bridge_event(
                     "tool_call_id": run_id,
                     "status": status,
                     "phase": phase,
-                    "sub_agent_id": hypothesis_id,
+                    "agent_id": hypothesis_id,
                 }
                 # 标记已批准的 tool_result 事件，并清除 approval 标记
                 if approval_id and name == approval_tool_name:
@@ -129,7 +129,7 @@ async def bridge_event(
                 await publisher.publish(channel, "tool_result", tool_result_data)
     except Exception as e:
         log.warning(
-            "Failed to bridge sub-agent event",
+            "Failed to bridge agent event",
             kind=kind,
             hypothesis=hypothesis_id,
             error=str(e),

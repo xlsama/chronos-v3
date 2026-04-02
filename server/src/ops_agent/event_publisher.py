@@ -65,7 +65,7 @@ class EventPublisher:
                 buf_key, {"content": "", "phase": phase, "agent": agent}
             )
             buf["content"] += data.get("content", "")
-            # Preserve agent_id for investigation sub-agents
+            # Preserve agent_id for investigation agents
             if data.get("agent_id"):
                 buf["agent_id"] = data["agent_id"]
             await self._publish_sse(channel, event_type, data, ts)
