@@ -359,11 +359,13 @@ export function InvestigationPhase({
   isTransitioning,
 }: InvestigationPhaseProps) {
   const events = useIncidentStreamStore((s) => s.events);
-  const investigations = useIncidentStreamStore((s) =>
-    s.investigations.filter((i) => i.hypothesisId !== "VERIFY"),
-  );
+  const allInvestigations = useIncidentStreamStore((s) => s.investigations);
   const activeInvestigationIds = useIncidentStreamStore((s) => s.activeInvestigationIds);
   const hasThinking = useIncidentStreamStore((s) => !!s.thinkingContent);
+  const investigations = useMemo(
+    () => allInvestigations.filter((i) => i.hypothesisId !== "VERIFY"),
+    [allInvestigations],
+  );
   const hasInvestigations = investigations.length > 0;
 
   const { data: serversData } = useQuery({
