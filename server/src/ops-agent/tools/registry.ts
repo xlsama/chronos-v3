@@ -1,14 +1,18 @@
 import type { ToolDefinition } from "../types";
 import { serviceExecTool } from "./service-exec";
+import { bashTool } from "./bash";
 import { askUserQuestionTool } from "./ask-user-question";
-
-// MVP: 只注册核心 2 个 Tool
-// Phase 1+: list_servers, list_services, search_knowledge, search_incidents
-// Phase 2+: update_plan, ssh_bash, bash
+import { updatePlanTool } from "./update-plan";
+import { searchKnowledgeTool } from "./search-knowledge";
+import { searchIncidentsTool } from "./search-incidents";
 
 const ALL_TOOLS: ToolDefinition[] = [
   serviceExecTool as ToolDefinition,
+  bashTool as ToolDefinition,
   askUserQuestionTool as ToolDefinition,
+  updatePlanTool as ToolDefinition,
+  searchKnowledgeTool as ToolDefinition,
+  searchIncidentsTool as ToolDefinition,
 ];
 
 export function buildToolRegistry(): ToolDefinition[] {

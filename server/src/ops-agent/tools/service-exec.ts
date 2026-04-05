@@ -1,18 +1,11 @@
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import type { ToolDefinition, PermissionResult } from "../types";
 import { executeService } from "../executors/registry";
-
-const DANGEROUS_OPS = [
-  "delete",
-  "remove",
-  "drop",
-  "kill",
-  "restart",
-  "stop",
-  "truncate",
-  "prune",
-  "drain",
-];
+import { classifyServiceOperation } from "../safety/service-classifier";
+import { toPermissionResult } from "../safety/permissions";
+import { db } from "../../db/connection";
+import { services } from "../../db/schema";
 
 const schema = z.object({
   serviceId: z.string().describe("预注册的 Service ID"),
@@ -41,15 +34,15 @@ export const serviceExecTool: ToolDefinition<ServiceExecArgs> = {
   maxResultChars: 30_000,
 
   async checkPermission(args): Promise<PermissionResult> {
-    const op = args.operation.toLowerCase();
-    if (DANGEROUS_OPS.some((d) => op.includes(d))) {
-      return {
-        behavior: "ask",
-        reason: `高风险操作: ${args.operation}`,
-        riskLevel: "HIGH",
-      };
-    }
-    return { behavior: "allow", reason: "", riskLevel: "" };
+    const [service] = await db
+      .select({ serviceType: services.serviceType })
+      .from(services)
+      .where(eq(services.id, args.serviceId))
+      .limit(1);
+
+    const serviceType = service?.serviceType ?? "unknown";
+    const commandType = classifyServiceOperation(serviceType, args.operation, args.parameters);
+    return toPermissionResult(commandType, `Service 操作: ${args.operation}`);
   },
 
   async execute(args) {

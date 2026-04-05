@@ -4,14 +4,21 @@ import type { ToolSet } from "ai";
 import { z } from "zod";
 import { env } from "../env";
 import { logger } from "../lib/logger";
-import type { AgentEvent, Message, ToolCall, ToolDefinition } from "./types";
+import type { AgentEvent, Message, TerminalReason, ToolCall, ToolDefinition } from "./types";
 import { buildToolRegistry } from "./tools/registry";
 import { getSystemPrompt } from "./context/system-prompt";
 import { truncateOutput } from "./context/truncation";
+import {
+  shouldCompact,
+  isContextLengthError,
+  compactMessages,
+  rebuildAfterCompact,
+} from "./context/compact";
 import { AgentEventPublisher } from "./events/publisher";
 import { saveSession, loadOrCreateSession, createApproval } from "./session";
 
 const log = logger.child({ component: "agent" });
+const MAX_COMPACT_FAILURES = 3;
 
 const openai = createOpenAI({
   baseURL: env.LLM_BASE_URL,
@@ -29,14 +36,7 @@ function toolDefinitionsToAISDK(tools: ToolDefinition[]): ToolSet {
   return result;
 }
 
-/**
- * 将自定义 Message[] 转为 AI SDK UIMessage[] 格式，再通过 convertToModelMessages 转换。
- * 这样能保证 messages 格式始终与 AI SDK 兼容。
- */
 function agentMessagesToPrompt(msgs: Message[]) {
-  // 构建简化的 UIMessage 格式让 convertToModelMessages 处理
-  // 但 convertToModelMessages 需要 UIMessage 格式，太复杂
-  // 直接构建 ModelMessage 格式
   return msgs.map((m) => {
     switch (m.role) {
       case "system":
@@ -93,6 +93,9 @@ export async function* runAgent(
   const tools = buildToolRegistry();
   const aiTools = toolDefinitionsToAISDK(tools);
 
+  let compactFailures = 0;
+  let terminalReason: TerminalReason = "completed";
+
   yield pub.sessionStarted();
 
   while (true) {
@@ -104,10 +107,33 @@ export async function* runAgent(
       log.error(`[AGENT] MAX TURNS REACHED: ${session.maxTurns}, aborting`);
       yield pub.error("达到最大循环次数，任务终止", true);
       session.status = "failed";
+      terminalReason = "max_turns";
       break;
     }
 
-    // 2. 调用 LLM
+    // 2. 主动 compact 检查
+    if (shouldCompact(session.agentMessages)) {
+      log.info(`[AGENT] PROACTIVE COMPACT: messages too long, compacting...`);
+      try {
+        const compactMd = await compactMessages(session);
+        session.compactMd = compactMd;
+        session.agentMessages = rebuildAfterCompact(session, compactMd);
+        compactFailures = 0;
+        yield pub.compactDone(compactMd);
+        log.info(`[AGENT] COMPACT DONE: rebuilt ${session.agentMessages.length} messages`);
+      } catch (err) {
+        compactFailures++;
+        log.error(`[AGENT] COMPACT FAILED (${compactFailures}/${MAX_COMPACT_FAILURES}): ${(err as Error).message}`);
+        if (compactFailures >= MAX_COMPACT_FAILURES) {
+          yield pub.error("上下文压缩连续失败，任务终止", true);
+          session.status = "failed";
+          terminalReason = "context_too_long";
+          break;
+        }
+      }
+    }
+
+    // 3. 调用 LLM
     const systemPrompt = await getSystemPrompt(session);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const promptMessages = agentMessagesToPrompt(session.agentMessages) as any;
@@ -116,7 +142,6 @@ export async function* runAgent(
       `[AGENT] CALLING LLM: model=${env.MAIN_MODEL}, messages=${session.agentMessages.length}`,
     );
     log.debug(`[AGENT] SYSTEM PROMPT: "${systemPrompt.slice(0, 200)}..."`);
-    log.debug(`[AGENT] MESSAGES DUMP: ${JSON.stringify(promptMessages).slice(0, 1000)}`);
 
     let result;
     try {
@@ -127,13 +152,33 @@ export async function* runAgent(
         tools: aiTools,
       });
     } catch (err) {
+      // 被动 compact：context_length_exceeded → compact → 重试
+      if (isContextLengthError(err) && compactFailures < MAX_COMPACT_FAILURES) {
+        compactFailures++;
+        log.warn(
+          `[AGENT] CONTEXT LENGTH EXCEEDED, attempting compact (${compactFailures}/${MAX_COMPACT_FAILURES})`,
+        );
+        try {
+          const compactMd = await compactMessages(session);
+          session.compactMd = compactMd;
+          session.agentMessages = rebuildAfterCompact(session, compactMd);
+          yield pub.compactDone(compactMd);
+          log.info(`[AGENT] REACTIVE COMPACT DONE: rebuilt ${session.agentMessages.length} messages`);
+          session.turnCount--; // 这轮不算，重试
+          continue;
+        } catch (compactErr) {
+          log.error(`[AGENT] REACTIVE COMPACT FAILED: ${(compactErr as Error).message}`);
+        }
+      }
+
       log.error(`[AGENT] LLM ERROR: ${(err as Error).message}`);
       yield pub.error(`LLM 调用失败: ${(err as Error).message}`, true);
       session.status = "failed";
+      terminalReason = isContextLengthError(err) ? "context_too_long" : "failed";
       break;
     }
 
-    // 3. 收集 assistant 回复
+    // 4. 收集 assistant 回复
     const assistantText = result.text || "";
     const toolCalls: ToolCall[] = result.toolCalls.map((tc) => {
       const input =
@@ -141,7 +186,10 @@ export async function* runAgent(
       return {
         id: tc.toolCallId,
         name: tc.toolName,
-        args: (typeof input === "object" && input !== null ? input : {}) as Record<string, unknown>,
+        args: (typeof input === "object" && input !== null ? input : {}) as Record<
+          string,
+          unknown
+        >,
       };
     });
 
@@ -163,10 +211,11 @@ export async function* runAgent(
       yield pub.thinking(assistantText);
     }
 
-    // 4. 没有 tool call → 完成
+    // 5. 没有 tool call → 完成
     if (toolCalls.length === 0) {
       session.status = "completed";
       session.summary = assistantText;
+      terminalReason = "completed";
       log.info(
         `[AGENT] ========== COMPLETED ========== turns=${session.turnCount}, summary=${assistantText.length} chars`,
       );
@@ -174,11 +223,13 @@ export async function* runAgent(
       break;
     }
 
-    // 5. 执行工具
+    // 6. 执行工具
     const events: AgentEvent[] = [];
 
     for (const tc of toolCalls) {
-      log.info(`[AGENT] TOOL CALL: name=${tc.name}, args=${JSON.stringify(tc.args).slice(0, 200)}`);
+      log.info(
+        `[AGENT] TOOL CALL: name=${tc.name}, args=${JSON.stringify(tc.args).slice(0, 200)}`,
+      );
 
       const toolDef = tools.find((t) => t.name === tc.name);
       if (!toolDef) {
@@ -215,7 +266,7 @@ export async function* runAgent(
         log.info(
           `[AGENT] SESSION SAVED: turn=${session.turnCount}, status=interrupted, messages=${session.agentMessages.length}`,
         );
-        return;
+        return; // terminalReason = "interrupted"
       }
 
       // 权限检查
@@ -261,7 +312,7 @@ export async function* runAgent(
           log.info(
             `[AGENT] SESSION SAVED: turn=${session.turnCount}, status=interrupted, messages=${session.agentMessages.length}`,
           );
-          return;
+          return; // terminalReason = "interrupted"
         }
       }
 
@@ -286,6 +337,17 @@ export async function* runAgent(
         log.info(`[AGENT] TOOL RESULT: ${tc.name} → ${output.length} chars`);
         log.debug(`[AGENT] TOOL OUTPUT: "${output.slice(0, 300)}..."`);
 
+        // update_plan 特殊处理
+        if (tc.name === "update_plan") {
+          session.planMd = (tc.args as { planMd: string }).planMd;
+          const planEv = pub.planUpdated(
+            (tc.args as { planMd: string }).planMd,
+            (tc.args as { intent?: string }).intent,
+          );
+          yield planEv;
+          events.push(planEv);
+        }
+
         const resultEv = pub.toolResult(tc.name, output);
         yield resultEv;
         events.push(resultEv);
@@ -304,7 +366,7 @@ export async function* runAgent(
       }
     }
 
-    // 6. 每轮双写持久化
+    // 7. 每轮双写持久化
     await saveSession(session, events);
     log.info(
       `[AGENT] SESSION SAVED: turn=${session.turnCount}, status=${session.status}, messages=${session.agentMessages.length}`,
@@ -313,6 +375,6 @@ export async function* runAgent(
 
   await saveSession(session);
   log.info(
-    `[AGENT] ========== SESSION END ========== status=${session.status}, turns=${session.turnCount}`,
+    `[AGENT] ========== SESSION END ========== status=${session.status}, reason=${terminalReason}, turns=${session.turnCount}`,
   );
 }

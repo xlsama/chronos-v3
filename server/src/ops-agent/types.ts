@@ -40,6 +40,15 @@ export interface ToolDefinition<TArgs = unknown> {
   execute: (args: TArgs) => Promise<unknown>;
 }
 
+// ─── Terminal Reason ────────────────────────────────────
+
+export type TerminalReason =
+  | "completed"         // LLM 主动结束（无 toolCalls）
+  | "failed"            // 不可恢复的错误
+  | "max_turns"         // 达到最大轮次
+  | "interrupted"       // 审批/用户提问中断
+  | "context_too_long"; // compact 后仍超限
+
 // ─── Agent Session ──────────────────────────────────────
 
 export type SessionStatus = "running" | "interrupted" | "completed" | "failed";

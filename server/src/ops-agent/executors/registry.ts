@@ -6,12 +6,13 @@ import type { Executor } from "../types";
 import { dockerExecutor } from "./docker";
 import { k8sExecutor } from "./kubernetes";
 import { sqlExecutor } from "./sql";
+import { mysqlExecutor } from "./mysql";
 import { mongoExecutor } from "./mongodb";
 
 const executors: Record<string, Executor> = {
   docker: dockerExecutor,
   kubernetes: k8sExecutor,
-  mysql: sqlExecutor,
+  mysql: mysqlExecutor,
   postgresql: sqlExecutor,
   mongodb: mongoExecutor,
 };

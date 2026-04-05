@@ -54,7 +54,7 @@ export const sqlExecutor: Executor = async (conn, operation, params) => {
     const handler = handlers[operation];
     if (!handler) {
       throw new Error(
-        `SQL: unsupported operation "${operation}". Available: ${Object.keys(handlers).join(", ")}`,
+        `PostgreSQL: unsupported operation "${operation}". Available: ${Object.keys(handlers).join(", ")}`,
       );
     }
 

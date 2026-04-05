@@ -51,6 +51,10 @@ export class AgentEventPublisher {
     return { type: "approval_result", data: { approvalId, decision } };
   }
 
+  compactDone(compactMd: string): AgentEvent {
+    return { type: "compact_done", data: { compactMd } };
+  }
+
   planUpdated(planMd: string, intent?: string): AgentEvent {
     return { type: "plan_updated", data: { planMd, intent } };
   }
