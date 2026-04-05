@@ -10,7 +10,7 @@ import { ConnectionList } from "@/components/connections/connection-list";
 import { AddConnectionDialog } from "@/components/connections/add-connection-dialog";
 import { Database, Server, Zap } from "lucide-react";
 import { pageVariants, pageTransition } from "@/lib/motion";
-import { testAllConnections } from "@/api/connections";
+import { client, orpc } from "@/lib/orpc";
 
 export const Route = createFileRoute("/_app/connections/")({
   component: ConnectionsPage,
@@ -20,17 +20,17 @@ function ConnectionsPage() {
   const queryClient = useQueryClient();
 
   const batchTestMutation = useMutation({
-    mutationFn: testAllConnections,
+    mutationFn: () => client.connection.testAll({}),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["servers"] });
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: orpc.server.list.key() });
+      queryClient.invalidateQueries({ queryKey: orpc.service.list.key() });
 
       if (data.total === 0) {
         toast.info("没有可测试的连接");
         return;
       }
 
-      if (data.failure_count === 0) {
+      if (data.failureCount === 0) {
         toast.success(`全部 ${data.total} 个连接测试通过`);
       } else {
         const failedNames = data.results
@@ -38,7 +38,7 @@ function ConnectionsPage() {
           .map((r) => r.name)
           .join("、");
         toast.error(
-          `${data.success_count} 个成功，${data.failure_count} 个失败`,
+          `${data.successCount} 个成功，${data.failureCount} 个失败`,
           { description: `失败: ${failedNames}` },
         );
       }

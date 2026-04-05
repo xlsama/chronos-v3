@@ -5,12 +5,8 @@ import { motion } from "motion/react";
 import { ArrowLeft, History, Loader2, Pencil, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { pageVariants, pageTransition } from "@/lib/motion";
-import {
-  deleteDocument,
-  getDocument,
-  getDocumentFileUrl,
-  updateDocument,
-} from "@/api/documents";
+import { getDocumentFileUrl } from "@/api/documents";
+import { client, orpc } from "@/lib/orpc";
 import { VersionHistoryDialog } from "@/components/version-history/version-history-dialog";
 import {
   AlertDialog,
@@ -57,15 +53,14 @@ function DocumentDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  const { data: doc, isLoading } = useQuery({
-    queryKey: ["document", documentId],
-    queryFn: () => getDocument(documentId),
-  });
+  const { data: doc, isLoading } = useQuery(orpc.document.get.queryOptions({
+    input: { id: documentId },
+  }));
 
-  const isEditable = doc ? EDITABLE_TYPES.has(doc.doc_type) : false;
+  const isEditable = doc ? EDITABLE_TYPES.has(doc.docType) : false;
   const isMarkdown =
-    doc?.doc_type === "markdown" || doc?.doc_type === "memory_config";
-  const canDelete = doc ? doc.doc_type !== "memory_config" : false;
+    doc?.docType === "markdown" || doc?.docType === "memory_config";
+  const canDelete = doc ? doc.docType !== "memory_config" : false;
 
   function startEditing() {
     if (doc) {
@@ -80,27 +75,26 @@ function DocumentDetailPage() {
   }
 
   const saveMutation = useMutation({
-    mutationFn: () => updateDocument(documentId, draft!),
+    mutationFn: () => client.document.update({ id: documentId, content: draft! }),
     onSuccess: () => {
       toast.success("文档已保存");
       setEditing(false);
       setDraft(null);
-      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: orpc.document.get.key({ input: { id: documentId } }) });
+      queryClient.invalidateQueries({ queryKey: orpc.document.listByProject.key({ input: { projectId } }) });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteDocument(documentId),
+    mutationFn: () => client.document.remove({ id: documentId }),
     onSuccess: () => {
       toast.success("文档已删除");
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: orpc.document.listByProject.key({ input: { projectId } }) });
       navigate({ to: "/projects/$projectId", params: { projectId } });
     },
   });
 
   function renderDocContent(doc: NonNullable<typeof doc>) {
-    // Editing mode
     if (editing && draft !== null) {
       if (isMarkdown) {
         return (
@@ -122,7 +116,6 @@ function DocumentDetailPage() {
       );
     }
 
-    // View mode: markdown preview
     if (isMarkdown) {
       return (
         <ScrollArea className="h-full" scrollToTop>
@@ -133,7 +126,6 @@ function DocumentDetailPage() {
       );
     }
 
-    // View mode: editable text types (read-only display)
     if (isEditable) {
       return (
         <ScrollArea className="h-full" scrollToTop>
@@ -144,11 +136,10 @@ function DocumentDetailPage() {
       );
     }
 
-    // Non-editable: file preview
     return (
       <FilePreview
         content={doc.content}
-        fileType={doc.doc_type as FileType}
+        fileType={doc.docType as FileType}
         fileUrl={getDocumentFileUrl(doc.id)}
         filename={doc.filename}
       />
@@ -201,7 +192,7 @@ function DocumentDetailPage() {
                   编辑
                 </Button>
               )}
-              {doc?.doc_type === "memory_config" && (
+              {doc?.docType === "memory_config" && (
                 <Button size="sm" variant="outline" onClick={() => setShowHistory(true)}>
                   <History className="mr-1.5 h-3.5 w-3.5" />
                   更新历史
@@ -221,7 +212,7 @@ function DocumentDetailPage() {
           )}
         </div>
       </div>
-      {doc?.doc_type === "memory_config" && (
+      {doc?.docType === "memory_config" && (
         <p className="px-6 py-2 text-xs text-muted-foreground">
           此文档会在事件解决后自动更新 ——
           系统从排查对话中提取架构拓扑、服务配置和排查经验等运维知识，增量补充到文档中。

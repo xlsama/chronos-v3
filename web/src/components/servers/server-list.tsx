@@ -4,11 +4,7 @@ import { motion } from "motion/react";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, EllipsisVertical, KeyRound, Pencil, Server, Trash2, Wifi, WifiOff } from "lucide-react";
 import { listVariants, listItemVariants } from "@/lib/motion";
-import {
-  deleteServer,
-  getServers,
-  testServer,
-} from "@/api/servers";
+import { client, orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
 import type { Server as ServerType } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -63,23 +59,23 @@ export function ServerItem({ server }: { server: ServerType }) {
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const testMutation = useMutation({
-    mutationFn: testServer,
+    mutationFn: (id: string) => client.server.test({ id }),
     onSuccess: (data) => {
       if (data.success) {
         toast.success("SSH 连接测试成功");
       } else {
         toast.error("SSH 连接测试失败", { description: data.message });
       }
-      queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: orpc.server.list.key() });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteServer,
+    mutationFn: (id: string) => client.server.remove({ id }),
     onSuccess: () => {
       toast.success("服务器已删除");
       setShowDeleteDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: orpc.server.list.key() });
     },
   });
 
@@ -96,7 +92,7 @@ export function ServerItem({ server }: { server: ServerType }) {
             <p className="font-medium">{server.name}</p>
             <p className="text-sm text-muted-foreground">
               {`${server.username}@${server.host}:${server.port}`}
-              {server.auth_method === "private_key" && (
+              {server.authMethod === "private_key" && (
                 <KeyRound className="ml-1 inline h-3 w-3 text-muted-foreground" />
               )}
             </p>
@@ -107,7 +103,7 @@ export function ServerItem({ server }: { server: ServerType }) {
           <Badge variant="outline" className="text-xs">
             SSH
           </Badge>
-          {server.has_bastion && (
+          {server.hasBastion && (
             <Badge variant="outline" className="text-xs">
               通过跳板机
             </Badge>
@@ -183,11 +179,10 @@ export function ServerList() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const { data, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ["servers", page],
-    queryFn: () => getServers({ page, page_size: pageSize }),
+  const { data, isLoading, isPlaceholderData } = useQuery(orpc.server.list.queryOptions({
+    input: { page, pageSize },
     placeholderData: keepPreviousData,
-  });
+  }));
 
   const servers = data?.items;
   const total = data?.total ?? 0;

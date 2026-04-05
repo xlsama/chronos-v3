@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
-import { getVersion, getVersions } from "@/api/versions";
+import { orpc } from "@/lib/orpc";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -19,10 +19,9 @@ export function VersionHistoryContent({
 }: VersionHistoryContentProps) {
   const [selected, setSelected] = useState<string | null>(null);
 
-  const { data: versions, isLoading } = useQuery({
-    queryKey: ["versions", entityType, entityId],
-    queryFn: () => getVersions(entityType, entityId),
-  });
+  const { data: versions, isLoading } = useQuery(orpc.version.list.queryOptions({
+    input: { entityType, entityId },
+  }));
 
   // 当版本列表变化时，自动选中最新版本
   const latestId = versions?.[0]?.id ?? null;
@@ -38,17 +37,15 @@ export function VersionHistoryContent({
       ? versions[selectedIndex + 1].id
       : null;
 
-  const { data: newVersion, isLoading: newLoading } = useQuery({
-    queryKey: ["version", selected],
-    queryFn: () => getVersion(selected!),
+  const { data: newVersion, isLoading: newLoading } = useQuery(orpc.version.get.queryOptions({
+    input: { id: selected! },
     enabled: !!selected,
-  });
+  }));
 
-  const { data: oldVersion, isLoading: oldLoading } = useQuery({
-    queryKey: ["version", prevId],
-    queryFn: () => getVersion(prevId!),
+  const { data: oldVersion, isLoading: oldLoading } = useQuery(orpc.version.get.queryOptions({
+    input: { id: prevId! },
     enabled: !!prevId,
-  });
+  }));
 
   const contentLoading = oldLoading || newLoading;
 
@@ -83,7 +80,7 @@ export function VersionHistoryContent({
                     >
                       <div className="flex items-center gap-2">
                         <span className="font-medium">
-                          v{v.version_number}
+                          v{v.versionNumber}
                         </span>
                         {v.id === versions?.[0]?.id && (
                           <Badge className="h-4 px-1 text-[10px] bg-green-100 text-green-700 border-green-200">
@@ -94,11 +91,11 @@ export function VersionHistoryContent({
                           variant="outline"
                           className="ml-auto h-4 px-1 text-[10px]"
                         >
-                          {{ init: "初始", seed: "内置", seed_update: "内置更新", manual: "手动", auto: "自动" }[v.change_source] ?? v.change_source}
+                          {{ init: "初始", seed: "内置", seed_update: "内置更新", manual: "手动", auto: "自动" }[v.changeSource] ?? v.changeSource}
                         </Badge>
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {dayjs(v.created_at).format("YYYY-MM-DD HH:mm")}
+                        {dayjs(v.createdAt).format("YYYY-MM-DD HH:mm")}
                       </span>
                     </button>
                   );
@@ -119,8 +116,8 @@ export function VersionHistoryContent({
           <VersionDiffViewer
             oldValue={oldVersion.content}
             newValue={newVersion.content}
-            oldTitle={`v${oldVersion.version_number}`}
-            newTitle={`v${newVersion.version_number}`}
+            oldTitle={`v${oldVersion.versionNumber}`}
+            newTitle={`v${newVersion.versionNumber}`}
           />
         ) : newVersion && !oldVersion ? (
           <div className="flex h-full items-center justify-center">

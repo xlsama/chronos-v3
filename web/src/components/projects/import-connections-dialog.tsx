@@ -18,8 +18,7 @@ import {
   type ExtractedService,
   type ExtractedServer,
 } from "@/api/projects";
-import { batchCreateServices, testServiceInline } from "@/api/services";
-import { batchCreateServers, testServerInline } from "@/api/servers";
+import { client, orpc } from "@/lib/orpc";
 import { ServiceIcon } from "@/lib/service-icons";
 import { ServiceForm } from "@/components/connections/service-form";
 import { ServerForm } from "@/components/servers/create-server-dialog";
@@ -183,7 +182,7 @@ export function ImportConnectionsButton({
         return {
           name: s.name,
           description: s.description ?? undefined,
-          service_type: s.service_type!,
+          serviceType: s.service_type!,
           host: s.host!,
           port: s.port!,
           password: s.password ?? undefined,
@@ -204,10 +203,10 @@ export function ImportConnectionsButton({
 
       const results = await Promise.all([
         serviceItems.length > 0
-          ? batchCreateServices(serviceItems)
+          ? client.service.batchCreate({ items: serviceItems })
           : Promise.resolve(null),
         serverItems.length > 0
-          ? batchCreateServers(serverItems)
+          ? client.server.batchCreate({ items: serverItems })
           : Promise.resolve(null),
       ]);
       return results;
@@ -234,8 +233,8 @@ export function ImportConnectionsButton({
         toast.success(`成功导入 ${created} 个连接`);
       }
 
-      queryClient.invalidateQueries({ queryKey: ["services"] });
-      queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: orpc.service.list.key() });
+      queryClient.invalidateQueries({ queryKey: orpc.server.list.key() });
       handleClose();
     },
   });
@@ -270,10 +269,10 @@ export function ImportConnectionsButton({
       const key = `service-${index}`;
       setTestingItems((prev) => new Set([...prev, key]));
       try {
-        const result = await testServiceInline({
-          service_type: svc.service_type,
-          host: svc.host,
-          port: svc.port,
+        const result = await client.service.testInline({
+          serviceType: svc.service_type!,
+          host: svc.host!,
+          port: svc.port!,
           password: svc.password,
           config: svc.config ?? {},
         });
@@ -306,7 +305,7 @@ export function ImportConnectionsButton({
       const key = `server-${index}`;
       setTestingItems((prev) => new Set([...prev, key]));
       try {
-        const result = await testServerInline({
+        const result = await client.server.testInline({
           host: srv.host,
           port: srv.port ?? 22,
           username: srv.username ?? "root",
@@ -348,7 +347,7 @@ export function ImportConnectionsButton({
     (data: {
       name: string;
       description?: string;
-      service_type: string;
+      serviceType: string;
       host: string;
       port: number;
       password?: string;
@@ -361,7 +360,7 @@ export function ImportConnectionsButton({
         ...updated.services[editTarget.index],
         name: data.name,
         description: data.description ?? null,
-        service_type: data.service_type,
+        service_type: data.serviceType,
         host: data.host,
         port: data.port,
         password: data.password ?? null,
@@ -840,7 +839,7 @@ function EditServiceView({
   onSubmit: (data: {
     name: string;
     description?: string;
-    service_type: string;
+    serviceType: string;
     host: string;
     port: number;
     password?: string;
@@ -853,14 +852,14 @@ function EditServiceView({
     id: "",
     name: service.name ?? "",
     description: service.description ?? null,
-    service_type: service.service_type ?? "mysql",
+    serviceType: service.service_type ?? "mysql",
     host: service.host ?? "",
     port: service.port ?? 3306,
     config: service.config ?? {},
-    has_password: !!service.password,
+    hasPassword: !!service.password,
     status: "unknown",
-    created_at: "",
-    updated_at: "",
+    createdAt: "",
+    updatedAt: "",
   };
 
   return (
@@ -901,11 +900,11 @@ function EditServerView({
     port: server.port ?? 22,
     username: server.username ?? "root",
     status: "unknown",
-    auth_method: "password" as const,
-    has_bastion: false,
-    bastion_host: null,
-    created_at: "",
-    updated_at: "",
+    authMethod: "password" as const,
+    hasBastion: false,
+    bastionHost: null,
+    createdAt: "",
+    updatedAt: "",
   };
 
   return (

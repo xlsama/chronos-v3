@@ -3,8 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle, AlertCircle, ShieldCheck } from "lucide-react";
 import { useIncidentStreamStore } from "@/stores/incident-stream";
 import { AgentCard } from "./agent-card";
-import { getServers } from "@/api/servers";
-import { getServices } from "@/api/services";
+import { orpc } from "@/lib/orpc";
 
 interface VerificationPhaseProps {
   incidentId: string;
@@ -38,16 +37,14 @@ export function VerificationPhase({ incidentId: _incidentId, incidentStatus }: V
   );
   const activeIds = useIncidentStreamStore((s) => s.activeInvestigationIds);
 
-  const { data: serversData } = useQuery({
-    queryKey: ["servers", "all"],
-    queryFn: () => getServers({ page_size: 200 }),
+  const { data: serversData } = useQuery(orpc.server.list.queryOptions({
+    input: { pageSize: 200 },
     staleTime: 5 * 60 * 1000,
-  });
-  const { data: servicesData } = useQuery({
-    queryKey: ["services", "all"],
-    queryFn: () => getServices({ page_size: 200 }),
+  }));
+  const { data: servicesData } = useQuery(orpc.service.list.queryOptions({
+    input: { pageSize: 200 },
     staleTime: 5 * 60 * 1000,
-  });
+  }));
 
   const serverMap = useMemo(() => {
     const map = new Map<string, string>();

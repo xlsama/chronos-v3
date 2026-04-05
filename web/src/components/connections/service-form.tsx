@@ -4,7 +4,7 @@ import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 import { ServiceIcon } from "@/lib/service-icons";
-import { createService, updateService } from "@/api/services";
+import { client, orpc } from "@/lib/orpc";
 import { serviceSchema } from "@/lib/schemas";
 import type { Service } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -87,7 +87,7 @@ export function ServiceForm({
   onSubmitOverride?: (data: {
     name: string;
     description?: string;
-    service_type: string;
+    serviceType: string;
     host: string;
     port: number;
     password?: string;
@@ -100,20 +100,20 @@ export function ServiceForm({
   const [showPassword, setShowPassword] = useState(false);
 
   const createMutation = useMutation({
-    mutationFn: createService,
+    mutationFn: (data: Parameters<typeof client.service.create>[0]) => client.service.create(data),
     onSuccess: () => {
       toast.success("服务已添加");
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: orpc.service.list.key() });
       onSuccess();
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: Parameters<typeof updateService>[1]) =>
-      updateService(service!.id, data),
+    mutationFn: (data: Partial<Parameters<typeof client.service.create>[0]>) =>
+      client.service.update({ id: service!.id, ...data }),
     onSuccess: () => {
       toast.success("服务已更新");
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: orpc.service.list.key() });
       onSuccess();
     },
   });
@@ -125,7 +125,7 @@ export function ServiceForm({
       ? {
           name: service.name,
           description: service.description ?? "",
-          service_type: service.service_type,
+          service_type: service.serviceType,
           host: service.host,
           port: String(service.port),
           password: initialPassword ?? "",
@@ -161,7 +161,7 @@ export function ServiceForm({
         const payload = {
           name: value.name,
           description: value.description || undefined,
-          service_type: value.service_type,
+          serviceType: value.service_type,
           host: value.host,
           port: parseInt(value.port),
           password: value.password || undefined,
@@ -187,7 +187,7 @@ export function ServiceForm({
           onSuccess();
           return;
         }
-        updateMutation.mutate(data as Parameters<typeof updateService>[1]);
+        updateMutation.mutate(data as Partial<Parameters<typeof client.service.create>[0]>);
         return;
       }
 
@@ -195,7 +195,7 @@ export function ServiceForm({
       const payload = {
         name: value.name,
         description: value.description || undefined,
-        service_type: value.service_type,
+        serviceType: value.service_type,
         host: value.host,
         port: parseInt(value.port),
         password: value.password || undefined,

@@ -5,8 +5,7 @@ import { motion } from "motion/react";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Copy, EllipsisVertical, FolderOpen, Pencil, Trash2 } from "lucide-react";
 import dayjs from "@/lib/dayjs";
-import { deleteProject, getProjects } from "@/api/projects";
-import type { Project } from "@/lib/types";
+import { client, orpc } from "@/lib/orpc";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -70,17 +69,19 @@ function getInitial(name: string) {
   return name.charAt(0).toUpperCase();
 }
 
+type Project = Awaited<ReturnType<typeof client.project.list>>["items"][number];
+
 function ProjectCard({ project }: { project: Project }) {
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteProject(project.id),
+    mutationFn: () => client.project.remove({ id: project.id }),
     onSuccess: () => {
       toast.success("知识库已删除");
       setShowDeleteDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: orpc.project.list.key() });
     },
   });
 
@@ -155,7 +156,7 @@ function ProjectCard({ project }: { project: Project }) {
           </CardHeader>
           <CardFooter>
             <span className="text-xs text-muted-foreground">
-              {dayjs(project.created_at).fromNow()}
+              {dayjs(project.createdAt).fromNow()}
             </span>
           </CardFooter>
         </Card>
@@ -195,11 +196,10 @@ export function ProjectList() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const { data, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ["projects", page],
-    queryFn: () => getProjects({ page, page_size: pageSize }),
+  const { data, isLoading, isPlaceholderData } = useQuery(orpc.project.list.queryOptions({
+    input: { page, pageSize },
     placeholderData: keepPreviousData,
-  });
+  }));
 
   const projects = data?.items;
   const total = data?.total ?? 0;

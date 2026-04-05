@@ -1,0 +1,19 @@
+{
+  "cluster": "prod-cn-east",
+  "version": "1.28.4",
+  "nodes": [
+    { "name": "master-01", "role": "master", "cpu": "8C", "memory": "32Gi" },
+    { "name": "worker-01", "role": "worker", "cpu": "16C", "memory": "64Gi" },
+    { "name": "worker-02", "role": "worker", "cpu": "16C", "memory": "64Gi" }
+  ],
+  "network": {
+    "cni": "calico",
+    "podCIDR": "10.244.0.0/16",
+    "serviceCIDR": "10.96.0.0/12"
+  },
+  "monitoring": {
+    "prometheus": true,
+    "grafana": true,
+    "alertmanager": true
+  }
+}

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { changePassword, getAvatarUrl, uploadAvatar } from "@/api/auth";
+import { getAvatarUrl, uploadAvatar } from "@/api/auth";
+import { client } from "@/lib/orpc";
 import { useAuthStore } from "@/stores/auth";
 
 export function ProfileSettings() {
@@ -31,7 +32,7 @@ export function ProfileSettings() {
   });
 
   const passwordMutation = useMutation({
-    mutationFn: changePassword,
+    mutationFn: (data: { oldPassword: string; newPassword: string }) => client.auth.changePassword(data),
     onSuccess: () => {
       toast.success("密码修改成功");
       setPasswords({ oldPassword: "", newPassword: "", confirmPassword: "" });
@@ -59,8 +60,8 @@ export function ProfileSettings() {
       return;
     }
     passwordMutation.mutate({
-      old_password: passwords.oldPassword,
-      new_password: passwords.newPassword,
+      oldPassword: passwords.oldPassword,
+      newPassword: passwords.newPassword,
     });
   };
 

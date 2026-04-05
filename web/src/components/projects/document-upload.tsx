@@ -4,7 +4,8 @@ import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { FilePlus, Upload } from "lucide-react";
-import { uploadDocument, uploadDocumentFile } from "@/api/documents";
+import { uploadDocumentFile } from "@/api/documents";
+import { client, orpc } from "@/lib/orpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
@@ -17,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const ACCEPTED_EXTENSIONS = ".pdf,.docx,.xlsx,.xls,.csv,.md,.txt";
+const ACCEPTED_EXTENSIONS = ".pdf,.docx,.xlsx,.xls,.csv,.md,.txt,.pptx,.html,.json,.yaml,.yml,.log,.png,.jpg,.jpeg,.webp";
 
 interface DocumentUploadProps {
   projectId: string;
@@ -30,7 +31,7 @@ export function UploadDocumentButton({ projectId }: DocumentUploadProps) {
   const fileMutation = useMutation({
     mutationFn: (file: File) => uploadDocumentFile(projectId, file),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
+      queryClient.invalidateQueries({ queryKey: orpc.document.listByProject.key({ input: { projectId } }) });
     },
     onError: (err: Error) => {
       toast.error(err.message);
@@ -74,14 +75,15 @@ export function CreateDocumentButton({ projectId }: DocumentUploadProps) {
 
   const createMutation = useMutation({
     mutationFn: (data: { filename: string }) =>
-      uploadDocument(projectId, {
+      client.document.create({
+        projectId,
         filename: data.filename,
         content: "",
-        doc_type: "markdown",
+        docType: "markdown",
       }),
     onSuccess: (doc) => {
       toast.success("文档已创建");
-      queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
+      queryClient.invalidateQueries({ queryKey: orpc.document.listByProject.key({ input: { projectId } }) });
       setOpen(false);
       form.reset();
       navigate({

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { createSkill } from "@/api/skills";
+import { client, orpc } from "@/lib/orpc";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,10 +43,10 @@ export function SkillDialog({ open, onOpenChange, onCreated }: SkillDialogProps)
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
-    mutationFn: createSkill,
+    mutationFn: (data: { slug: string }) => client.skill.create(data),
     onSuccess: (_data, variables) => {
       toast.success("技能已创建");
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: orpc.skill.list.key() });
       onOpenChange(false);
       onCreated?.(variables.slug);
     },

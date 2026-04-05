@@ -6,8 +6,7 @@ import { useIncidentStreamStore } from "@/stores/incident-stream";
 import type { InvestigationAgent } from "@/stores/incident-stream";
 import { confirmResolution } from "@/api/incidents";
 import { Button } from "@/components/ui/button";
-import { getServers } from "@/api/servers";
-import { getServices } from "@/api/services";
+import { orpc } from "@/lib/orpc";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { SSEEvent } from "@/lib/types";
 import { Markdown } from "@/components/ui/markdown";
@@ -368,17 +367,15 @@ export function InvestigationPhase({
   );
   const hasInvestigations = investigations.length > 0;
 
-  const { data: serversData } = useQuery({
-    queryKey: ["servers", "all"],
-    queryFn: () => getServers({ page_size: 200 }),
+  const { data: serversData } = useQuery(orpc.server.list.queryOptions({
+    input: { pageSize: 200 },
     staleTime: 5 * 60 * 1000,
-  });
+  }));
 
-  const { data: servicesData } = useQuery({
-    queryKey: ["services", "all"],
-    queryFn: () => getServices({ page_size: 200 }),
+  const { data: servicesData } = useQuery(orpc.service.list.queryOptions({
+    input: { pageSize: 200 },
     staleTime: 5 * 60 * 1000,
-  });
+  }));
 
   const serverMap = useMemo(() => {
     const map = new Map<string, string>();

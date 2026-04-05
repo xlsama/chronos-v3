@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldError } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/stores/auth";
-import { login, register, getMe } from "@/api/auth";
+import { client } from "@/lib/orpc";
 import logoSvg from "@/assets/img/logo.svg";
 
 export const Route = createFileRoute("/login")({
@@ -46,12 +46,12 @@ function LoginPage() {
   };
 
   const loginMutation = useMutation({
-    mutationFn: login,
+    mutationFn: (data: { email: string; password: string }) => client.auth.login(data),
     onSuccess: async (data) => {
-      useAuthStore.getState().setAuth({ id: "", email: "", name: "", is_active: true, created_at: "" }, data.access_token);
+      useAuthStore.getState().setAuth({ id: "", email: "", name: "", avatar: null, isActive: true, createdAt: "" }, data.accessToken);
       try {
-        const me = await getMe();
-        useAuthStore.getState().setAuth(me, data.access_token);
+        const me = await client.auth.me();
+        useAuthStore.getState().setAuth(me, data.accessToken);
         navigate({ to: "/incidents" });
       } catch {
         useAuthStore.getState().clearAuth();
@@ -61,7 +61,7 @@ function LoginPage() {
   });
 
   const registerMutation = useMutation({
-    mutationFn: register,
+    mutationFn: (data: { email: string; password: string; name: string }) => client.auth.register(data),
     onSuccess: () => {
       toast.success("注册成功，请登录");
       setMode("login");

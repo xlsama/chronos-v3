@@ -1,8 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
-import { updateProject } from "@/api/projects";
-import type { Project } from "@/lib/types";
+import { client, orpc } from "@/lib/orpc";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +14,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+
+interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+}
 
 export function EditProjectDialog({
   project,
@@ -29,9 +34,10 @@ export function EditProjectDialog({
 
   const mutation = useMutation({
     mutationFn: (data: { name?: string; description?: string }) =>
-      updateProject(project.id, data),
+      client.project.update({ id: project.id, ...data }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: orpc.project.list.key() });
+      queryClient.invalidateQueries({ queryKey: orpc.project.get.key({ input: { id: project.id } }) });
       toast.success("项目已更新");
       onOpenChange(false);
     },

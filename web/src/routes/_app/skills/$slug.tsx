@@ -5,13 +5,7 @@ import { motion } from "motion/react";
 import { ArrowLeft, History, Loader2, Pencil, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { pageVariants, pageTransition } from "@/lib/motion";
-import {
-  deleteSkill,
-  getSkill,
-  getSkillFile,
-  putSkillFile,
-  updateSkill,
-} from "@/api/skills";
+import { client, orpc } from "@/lib/orpc";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { VersionHistoryDialog } from "@/components/version-history/version-history-dialog";
 import {
@@ -54,28 +48,26 @@ function SkillDetailPage() {
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  const { data: skill, isLoading } = useQuery({
-    queryKey: ["skill", slug],
-    queryFn: () => getSkill(slug),
-  });
+  const { data: skill, isLoading } = useQuery(orpc.skill.get.queryOptions({
+    input: { slug },
+  }));
 
   // Check if selected file exists on backend
   const isExistingFile =
     !!selectedFile &&
-    (skill?.script_files?.some((f) => `scripts/${f}` === selectedFile) ||
-      skill?.reference_files?.some(
+    (skill?.scriptFiles?.some((f) => `scripts/${f}` === selectedFile) ||
+      skill?.referenceFiles?.some(
         (f) => `references/${f}` === selectedFile,
       ) ||
-      skill?.asset_files?.some(
+      skill?.assetFiles?.some(
         (f) => `assets/${f}` === selectedFile,
       ));
 
   // Fetch file content only for existing files
-  const { data: fileData, isLoading: fileLoading } = useQuery({
-    queryKey: ["skill-file", slug, selectedFile],
-    queryFn: () => getSkillFile(slug, selectedFile!),
+  const { data: fileData, isLoading: fileLoading } = useQuery(orpc.skill.getFile.queryOptions({
+    input: { slug, path: selectedFile! },
     enabled: !!selectedFile && isExistingFile,
-  });
+  }));
 
   // When file data loads and we're in edit mode, initialize draft if not yet set
   useEffect(() => {
@@ -174,38 +166,37 @@ function SkillDetailPage() {
       if (selectedFile === null) {
         const content = drafts.get(null);
         if (content === undefined) throw new Error("No draft");
-        return updateSkill(slug, { content });
+        return client.skill.update({ slug, content });
       } else {
         const content = drafts.get(selectedFile);
         if (content === undefined) throw new Error("No draft");
-        return putSkillFile(slug, selectedFile, content);
+        return client.skill.putFile({ slug, path: selectedFile, content });
       }
     },
     onSuccess: () => {
       const key = selectedFile;
       const content = drafts.get(key);
       toast.success(key === null ? "SKILL.md 已保存" : "文件已保存");
-      // Update originals so dirty clears
       if (content !== undefined) {
         setOriginals((prev) => new Map(prev).set(key, content));
       }
-      queryClient.invalidateQueries({ queryKey: ["skill", slug] });
+      queryClient.invalidateQueries({ queryKey: orpc.skill.get.key({ input: { slug } }) });
       queryClient.invalidateQueries({ queryKey: ["versions", "skill", slug] });
       if (key !== null) {
         queryClient.invalidateQueries({
-          queryKey: ["skill-file", slug, key],
+          queryKey: orpc.skill.getFile.key({ input: { slug, path: key } }),
         });
       } else {
-        queryClient.invalidateQueries({ queryKey: ["skills"] });
+        queryClient.invalidateQueries({ queryKey: orpc.skill.list.key() });
       }
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteSkill(slug),
+    mutationFn: () => client.skill.remove({ slug }),
     onSuccess: () => {
       toast.success("技能已删除");
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: orpc.skill.list.key() });
       navigate({ to: "/skills" });
     },
   });
@@ -293,9 +284,9 @@ function SkillDetailPage() {
               <aside className="w-60 shrink-0 border-r overflow-y-auto p-3">
                 <SkillFileTree
                   slug={slug}
-                  scriptFiles={skill.script_files}
-                  referenceFiles={skill.reference_files}
-                  assetFiles={skill.asset_files}
+                  scriptFiles={skill.scriptFiles}
+                  referenceFiles={skill.referenceFiles}
+                  assetFiles={skill.assetFiles}
                   selectedFile={selectedFile}
                   dirtyFiles={editing ? dirtyFiles : undefined}
                   onSelectFile={(f) => {

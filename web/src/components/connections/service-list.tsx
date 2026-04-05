@@ -12,7 +12,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { deleteService, getServices, testService } from "@/api/services";
+import { client, orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
 import { ServiceIcon } from "@/lib/service-icons";
 import type { Service } from "@/lib/types";
@@ -91,7 +91,7 @@ export function ServiceItem({ service }: { service: Service }) {
   const [showEditDialog, setShowEditDialog] = useState(false);
 
   const testMutation = useMutation({
-    mutationFn: testService,
+    mutationFn: (id: string) => client.service.test({ id }),
     onSuccess: (data) => {
       if (data.success) {
         toast.success("服务连接测试成功", {
@@ -100,16 +100,16 @@ export function ServiceItem({ service }: { service: Service }) {
       } else {
         toast.error("服务连接测试失败", { description: data.message });
       }
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: orpc.service.list.key() });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteService,
+    mutationFn: (id: string) => client.service.remove({ id }),
     onSuccess: () => {
       toast.success("服务已删除");
       setShowDeleteDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+      queryClient.invalidateQueries({ queryKey: orpc.service.list.key() });
     },
   });
 
@@ -120,7 +120,7 @@ export function ServiceItem({ service }: { service: Service }) {
     <>
       <div className="border-b last:border-b-0">
         <div className="flex items-center gap-3 p-4">
-          <ServiceIcon serviceType={service.service_type} className="h-5 w-5" />
+          <ServiceIcon serviceType={service.serviceType} className="h-5 w-5" />
           <StatusIcon className={cn("h-4 w-4", status.color)} />
           <div className="flex-1 space-y-0.5">
             <p className="font-medium">{service.name}</p>
@@ -134,7 +134,7 @@ export function ServiceItem({ service }: { service: Service }) {
             )}
           </div>
           <Badge variant="outline" className="text-xs">
-            {typeLabels[service.service_type] ?? service.service_type}
+            {typeLabels[service.serviceType] ?? service.serviceType}
           </Badge>
           <Badge
             className={
@@ -215,11 +215,10 @@ export function ServiceList() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
-  const { data, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ["services", page],
-    queryFn: () => getServices({ page, page_size: pageSize }),
+  const { data, isLoading, isPlaceholderData } = useQuery(orpc.service.list.queryOptions({
+    input: { page, pageSize },
     placeholderData: keepPreviousData,
-  });
+  }));
 
   const services = data?.items;
   const total = data?.total ?? 0;

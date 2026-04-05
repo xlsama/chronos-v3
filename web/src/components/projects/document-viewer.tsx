@@ -2,11 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { History, Pencil, Eye, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  getDocument,
-  getDocumentFileUrl,
-  updateDocument,
-} from "@/api/documents";
+import { getDocumentFileUrl } from "@/api/documents";
+import { client, orpc } from "@/lib/orpc";
 import { VersionHistoryDialog } from "@/components/version-history/version-history-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,25 +43,23 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
   const [draft, setDraft] = useState("");
   const [showHistory, setShowHistory] = useState(false);
 
-  const { data: doc, isLoading } = useQuery({
-    queryKey: ["document", documentId],
-    queryFn: () => getDocument(documentId!),
+  const { data: doc, isLoading } = useQuery(orpc.document.get.queryOptions({
+    input: { id: documentId! },
     enabled: !!documentId,
-  });
+  }));
 
   const saveMutation = useMutation({
-    mutationFn: () => updateDocument(documentId!, draft),
+    mutationFn: () => client.document.update({ id: documentId!, content: draft }),
     onSuccess: () => {
       toast.success("文档已保存");
       setEditing(false);
-      queryClient.invalidateQueries({ queryKey: ["document", documentId] });
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: orpc.document.get.key({ input: { id: documentId! } }) });
     },
   });
 
   const isMarkdown =
-    doc?.doc_type === "markdown" || doc?.doc_type === "memory_config";
-  const isEditable = doc ? EDITABLE_TYPES.has(doc.doc_type) : false;
+    doc?.docType === "markdown" || doc?.docType === "memory_config";
+  const isEditable = doc ? EDITABLE_TYPES.has(doc.docType) : false;
 
   function startEditing() {
     if (doc) {
@@ -74,7 +69,6 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
   }
 
   function renderDocContent(doc: NonNullable<typeof doc>) {
-    // 编辑模式
     if (editing) {
       if (isMarkdown) {
         return (
@@ -96,7 +90,6 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
       );
     }
 
-    // 只读模式
     if (isMarkdown) {
       return (
         <ScrollArea className="h-full" scrollToTop>
@@ -110,7 +103,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
     return (
       <FilePreview
         content={doc.content}
-        fileType={doc.doc_type as FileType}
+        fileType={doc.docType as FileType}
         fileUrl={getDocumentFileUrl(doc.id)}
         filename={doc.filename}
       />
@@ -125,7 +118,7 @@ export function DocumentViewer({ documentId, onClose, readOnly }: DocumentViewer
             {doc?.filename ?? "文档预览"}
           </DialogTitle>
           <div className="mr-6 flex items-center gap-2">
-            {doc?.doc_type === "memory_config" && (
+            {doc?.docType === "memory_config" && (
               <Button variant="outline" size="sm" onClick={() => setShowHistory(true)}>
                 <History className="mr-1.5 h-3.5 w-3.5" />
                 更新历史

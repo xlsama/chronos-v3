@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useStore } from "@tanstack/react-form";
 import { toast } from "sonner";
 import { Upload, Eye, EyeOff, FileKey2 } from "lucide-react";
-import { createServer, updateServer } from "@/api/servers";
+import { client, orpc } from "@/lib/orpc";
 import { serverSchema } from "@/lib/schemas";
 import type { Server } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -73,7 +73,7 @@ export function ServerForm({
     port?: number;
     username?: string;
     password?: string;
-    private_key?: string;
+    privateKey?: string;
   }) => void;
   initialPassword?: string;
 }) {
@@ -81,20 +81,20 @@ export function ServerForm({
   const isEdit = mode === "edit";
 
   const createMutation = useMutation({
-    mutationFn: createServer,
+    mutationFn: (data: Parameters<typeof client.server.create>[0]) => client.server.create(data),
     onSuccess: () => {
       toast.success("服务器已添加");
-      queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: orpc.server.list.key() });
       onSuccess();
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: Parameters<typeof updateServer>[1]) =>
-      updateServer(server!.id, data),
+    mutationFn: (data: Partial<Parameters<typeof client.server.create>[0]>) =>
+      client.server.update({ id: server!.id, ...data }),
     onSuccess: () => {
       toast.success("服务器已更新");
-      queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: orpc.server.list.key() });
       onSuccess();
     },
   });
@@ -108,11 +108,11 @@ export function ServerForm({
         host: server.host,
         port: String(server.port),
         username: server.username,
-        auth_method: server.auth_method === "private_key" ? "private_key" : "password",
+        auth_method: server.authMethod === "private_key" ? "private_key" : "password",
         password: initialPassword ?? "",
         private_key: "",
-        use_bastion: server.has_bastion,
-        bastion_host: server.bastion_host ?? "",
+        use_bastion: server.hasBastion,
+        bastion_host: server.bastionHost ?? "",
         bastion_port: "22",
         bastion_username: "",
         bastion_auth_method: "password",
@@ -149,7 +149,7 @@ export function ServerForm({
           port: parseInt(value.port),
           username: value.username,
           password: value.auth_method === "password" ? value.password || undefined : undefined,
-          private_key: value.auth_method === "private_key" ? value.private_key || undefined : undefined,
+          privateKey: value.auth_method === "private_key" ? value.private_key || undefined : undefined,
         });
         onSuccess();
         return;
@@ -166,37 +166,37 @@ export function ServerForm({
 
         if (value.auth_method === "password" && value.password) {
           data.password = value.password;
-          data.private_key = null;
+          data.privateKey = null;
         } else if (value.auth_method === "private_key" && value.private_key) {
-          data.private_key = value.private_key;
+          data.privateKey = value.private_key;
           data.password = null;
         }
 
         // Bastion fields
         if (value.use_bastion) {
-          data.bastion_host = value.bastion_host || null;
-          data.bastion_port = value.bastion_port ? parseInt(value.bastion_port) : null;
-          data.bastion_username = value.bastion_username || null;
+          data.bastionHost = value.bastion_host || null;
+          data.bastionPort = value.bastion_port ? parseInt(value.bastion_port) : null;
+          data.bastionUsername = value.bastion_username || null;
           if (value.bastion_auth_method === "password" && value.bastion_password) {
-            data.bastion_password = value.bastion_password;
-            data.bastion_private_key = null;
+            data.bastionPassword = value.bastion_password;
+            data.bastionPrivateKey = null;
           } else if (value.bastion_auth_method === "private_key" && value.bastion_private_key) {
-            data.bastion_private_key = value.bastion_private_key;
-            data.bastion_password = null;
+            data.bastionPrivateKey = value.bastion_private_key;
+            data.bastionPassword = null;
           }
         } else {
-          data.bastion_host = null;
-          data.bastion_port = null;
-          data.bastion_username = null;
-          data.bastion_password = null;
-          data.bastion_private_key = null;
+          data.bastionHost = null;
+          data.bastionPort = null;
+          data.bastionUsername = null;
+          data.bastionPassword = null;
+          data.bastionPrivateKey = null;
         }
 
         if (Object.keys(data).length === 0) {
           onSuccess();
           return;
         }
-        updateMutation.mutate(data as Parameters<typeof updateServer>[1]);
+        updateMutation.mutate(data as Partial<Parameters<typeof client.server.create>[0]>);
         return;
       }
 
@@ -239,20 +239,25 @@ export function ServerForm({
         return;
       }
 
-      // Build API payload (strip use_bastion, auth_method, bastion_auth_method)
-      // oxlint-disable-next-line typescript/no-unused-vars -- strip form-only fields from API payload
-      const { use_bastion, auth_method, bastion_auth_method, ...apiData } = result.data;
+      // Build API payload: map form snake_case fields → API camelCase
+      const d = result.data;
       const apiPayload = {
-        ...apiData,
-        ...(use_bastion
-          ? {}
-          : {
-              bastion_host: undefined,
-              bastion_port: undefined,
-              bastion_username: undefined,
-              bastion_password: undefined,
-              bastion_private_key: undefined,
-            }),
+        name: d.name,
+        description: d.description,
+        host: d.host,
+        port: d.port,
+        username: d.username,
+        password: d.auth_method === "password" ? d.password : undefined,
+        privateKey: d.auth_method === "private_key" ? d.private_key : undefined,
+        ...(d.use_bastion
+          ? {
+              bastionHost: d.bastion_host,
+              bastionPort: d.bastion_port,
+              bastionUsername: d.bastion_username,
+              bastionPassword: d.bastion_auth_method === "password" ? d.bastion_password : undefined,
+              bastionPrivateKey: d.bastion_auth_method === "private_key" ? d.bastion_private_key : undefined,
+            }
+          : {}),
       };
       createMutation.mutate(apiPayload);
     },

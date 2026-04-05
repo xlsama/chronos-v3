@@ -1,10 +1,9 @@
 {
   "permissions": {
     "additionalDirectories": [
-      "/Users/xlsama/w/yum-data-security",
-      "/Users/xlsama/w/yum-data-security-web",
       "/Users/xlsama/w/claude-code",
-      "/Users/xlsama/w/dify"
+      "/Users/xlsama/w/dify",
+      "/Users/xlsama/w/OpenHarness"
     ]
   }
 }

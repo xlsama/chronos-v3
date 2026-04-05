@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useForm } from "@tanstack/react-form";
-import { createProject } from "@/api/projects";
+import { client, orpc } from "@/lib/orpc";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,9 +23,10 @@ export function CreateProjectDialog() {
   const navigate = useNavigate();
 
   const mutation = useMutation({
-    mutationFn: createProject,
+    mutationFn: (data: { name: string; description?: string }) =>
+      client.project.create(data),
     onSuccess: (project) => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: orpc.project.list.key() });
       setOpen(false);
       navigate({
         to: "/projects/$projectId",

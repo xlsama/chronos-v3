@@ -6,9 +6,9 @@ import { motion } from "motion/react";
 import { toast } from "sonner";
 import { pageVariants, pageTransition } from "@/lib/motion";
 import { ArrowLeft, EllipsisVertical, Trash2 } from "lucide-react";
-import { deleteProject, getProject } from "@/api/projects";
+import { client, orpc } from "@/lib/orpc";
 import { CreateDocumentButton, UploadDocumentButton } from "@/components/projects/document-upload";
-import { ImportConnectionsButton } from "@/components/projects/import-connections-dialog";
+// import { ImportConnectionsButton } from "@/components/projects/import-connections-dialog";
 import { DocumentList } from "@/components/projects/document-list";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,16 +40,15 @@ function ProjectDetailPage() {
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  const { data: project, isLoading } = useQuery({
-    queryKey: ["project", projectId],
-    queryFn: () => getProject(projectId),
-  });
+  const { data: project, isLoading } = useQuery(orpc.project.get.queryOptions({
+    input: { id: projectId },
+  }));
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteProject(projectId),
+    mutationFn: () => client.project.remove({ id: projectId }),
     onSuccess: () => {
-      toast.success("知识库已删除");
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("知识库已���除");
+      queryClient.invalidateQueries({ queryKey: orpc.project.list.key() });
       navigate({ to: "/projects" });
     },
   });
@@ -111,7 +110,7 @@ function ProjectDetailPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">文档</h2>
           <div className="flex items-center gap-2">
-            <ImportConnectionsButton projectId={projectId} />
+            {/* <ImportConnectionsButton projectId={projectId} /> */}
             <UploadDocumentButton projectId={projectId} />
             <CreateDocumentButton projectId={projectId} />
           </div>

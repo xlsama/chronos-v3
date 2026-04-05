@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { getServers } from "@/api/servers";
-import { getServices } from "@/api/services";
+import { orpc } from "@/lib/orpc";
 import { listVariants, listItemVariants } from "@/lib/motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -19,19 +18,17 @@ import type { Server } from "@/lib/types";
 import type { Service } from "@/lib/types";
 
 type ConnectionEntry =
-  | { type: "server"; data: Server; created_at: string }
-  | { type: "service"; data: Service; created_at: string };
+  | { type: "server"; data: Server; createdAt: string }
+  | { type: "service"; data: Service; createdAt: string };
 
 export function ConnectionList() {
-  const { data: serversData, isLoading: serversLoading } = useQuery({
-    queryKey: ["servers", 1],
-    queryFn: () => getServers({ page: 1, page_size: 200 }),
-  });
+  const { data: serversData, isLoading: serversLoading } = useQuery(
+    orpc.server.list.queryOptions({ input: { page: 1, pageSize: 200 } }),
+  );
 
-  const { data: servicesData, isLoading: servicesLoading } = useQuery({
-    queryKey: ["services", 1],
-    queryFn: () => getServices({ page: 1, page_size: 200 }),
-  });
+  const { data: servicesData, isLoading: servicesLoading } = useQuery(
+    orpc.service.list.queryOptions({ input: { page: 1, pageSize: 200 } }),
+  );
 
   const isLoading = serversLoading || servicesLoading;
 
@@ -39,17 +36,17 @@ export function ConnectionList() {
     const result: ConnectionEntry[] = [];
     if (serversData?.items) {
       for (const s of serversData.items) {
-        result.push({ type: "server", data: s, created_at: s.created_at });
+        result.push({ type: "server", data: s, createdAt: s.createdAt });
       }
     }
     if (servicesData?.items) {
       for (const s of servicesData.items) {
-        result.push({ type: "service", data: s, created_at: s.created_at });
+        result.push({ type: "service", data: s, createdAt: s.createdAt });
       }
     }
     result.sort(
       (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
     return result;
   }, [serversData, servicesData]);

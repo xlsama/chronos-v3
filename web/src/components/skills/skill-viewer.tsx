@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Loader2, Pencil, Save } from "lucide-react";
 import { toast } from "sonner";
-import { getSkill, updateSkill } from "@/api/skills";
+import { client, orpc } from "@/lib/orpc";
 import { parseFrontmatter } from "@/lib/frontmatter";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,19 +31,18 @@ export function SkillViewer({ skillSlug, onClose, autoEdit, readOnly }: SkillVie
   const [draft, setDraft] = useState("");
   const autoEditApplied = useRef(false);
 
-  const { data: skill, isLoading } = useQuery({
-    queryKey: ["skill", skillSlug],
-    queryFn: () => getSkill(skillSlug!),
+  const { data: skill, isLoading } = useQuery(orpc.skill.get.queryOptions({
+    input: { slug: skillSlug! },
     enabled: !!skillSlug,
-  });
+  }));
 
   const saveMutation = useMutation({
-    mutationFn: () => updateSkill(skillSlug!, { content: draft }),
+    mutationFn: () => client.skill.update({ slug: skillSlug!, content: draft }),
     onSuccess: () => {
       toast.success("技能已保存");
       setEditing(false);
-      queryClient.invalidateQueries({ queryKey: ["skill", skillSlug] });
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: orpc.skill.get.key({ input: { slug: skillSlug! } }) });
+      queryClient.invalidateQueries({ queryKey: orpc.skill.list.key() });
     },
   });
 

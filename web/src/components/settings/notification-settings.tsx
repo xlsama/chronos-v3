@@ -16,11 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  getNotificationSettings,
-  upsertNotificationSettings,
-  testWebhook,
-} from "@/api/notification-settings";
+import { client, orpc } from "@/lib/orpc";
 
 const NOTIFICATION_SCENARIOS = [
   { title: "新事件创建", description: "当创建新的事件时，发送通知" },
@@ -36,16 +32,15 @@ export function NotificationSettings() {
   const [testing, setTesting] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ["notification-settings", platform],
-    queryFn: () => getNotificationSettings(platform),
-  });
+  const { data: settings, isLoading } = useQuery(orpc.notification.get.queryOptions({
+    input: { platform },
+  }));
 
   useEffect(() => {
     if (settings && !initialized) {
       setDraft({
-        webhookUrl: settings.webhook_url ?? "",
-        signKey: settings.sign_key ?? "",
+        webhookUrl: settings.webhookUrl ?? "",
+        signKey: settings.signKey ?? "",
         enabled: settings.enabled ?? true,
       });
       setInitialized(true);
@@ -60,18 +55,18 @@ export function NotificationSettings() {
   }, [platform]);
 
   const updateMutation = useMutation({
-    mutationFn: (data: { webhook_url: string; sign_key?: string; enabled: boolean }) =>
-      upsertNotificationSettings(platform, data),
+    mutationFn: (data: { webhookUrl: string; signKey?: string; enabled: boolean }) =>
+      client.notification.upsert({ platform, ...data }),
     onSuccess: () => {
       toast.success("保存成功");
-      queryClient.invalidateQueries({ queryKey: ["notification-settings", platform] });
+      queryClient.invalidateQueries({ queryKey: orpc.notification.get.key({ input: { platform } }) });
     },
   });
 
   const handleSave = () => {
     updateMutation.mutate({
-      webhook_url: draft.webhookUrl,
-      sign_key: draft.signKey || undefined,
+      webhookUrl: draft.webhookUrl,
+      signKey: draft.signKey || undefined,
       enabled: draft.enabled,
     });
   };
@@ -79,10 +74,9 @@ export function NotificationSettings() {
   const handleTest = async () => {
     setTesting(true);
     try {
-      const result = await testWebhook({
-        webhook_url: draft.webhookUrl,
-        sign_key: draft.signKey || undefined,
-        platform: "feishu",
+      const result = await client.notification.testWebhook({
+        webhookUrl: draft.webhookUrl,
+        signKey: draft.signKey || undefined,
       });
       if (result.success) {
         toast.success("测试消息发送成功");

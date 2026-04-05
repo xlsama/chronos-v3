@@ -6,11 +6,11 @@ export interface Server {
   port: number;
   username: string;
   status: string;
-  auth_method: "password" | "private_key" | "none";
-  has_bastion: boolean;
-  bastion_host: string | null;
-  created_at: string;
-  updated_at: string;
+  authMethod: "password" | "private_key" | "none";
+  hasBastion: boolean;
+  bastionHost: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Attachment {
@@ -72,38 +72,14 @@ export interface Service {
   id: string;
   name: string;
   description: string | null;
-  service_type: string;
+  serviceType: string;
   host: string;
   port: number;
   config: Record<string, unknown>;
-  has_password: boolean;
+  hasPassword: boolean;
   status: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ProjectDocument {
-  id: string;
-  project_id: string;
-  filename: string;
-  doc_type: string;
-  status: string;
-  error_message: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ProjectDocumentDetail extends ProjectDocument {
-  content: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface IncidentHistory {
@@ -115,39 +91,20 @@ export interface IncidentHistory {
   created_at: string;
 }
 
-export interface Skill {
-  slug: string;
-  name: string;
-  description: string;
-  has_scripts: boolean;
-  has_references: boolean;
-  has_assets: boolean;
-  draft: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SkillDetail extends Skill {
-  content: string;
-  script_files: string[];
-  reference_files: string[];
-  asset_files: string[];
-}
-
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
   page: number;
-  page_size: number;
+  pageSize: number;
 }
 
 export interface ContentVersion {
   id: string;
-  entity_type: string;
-  entity_id: string;
-  version_number: number;
-  change_source: string;
-  created_at: string;
+  entityType: string;
+  entityId: string;
+  versionNumber: number;
+  changeSource: string;
+  createdAt: string;
 }
 
 export interface ContentVersionDetail extends ContentVersion {

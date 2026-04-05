@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { FileText, Trash2 } from "lucide-react";
 import { listVariants, listItemVariants } from "@/lib/motion";
 import dayjs from "@/lib/dayjs";
-import { deleteDocument, getDocuments } from "@/api/documents";
+import { client, orpc } from "@/lib/orpc";
 import { CreateDocumentButton, UploadDocumentButton } from "./document-upload";
 import {
   AlertDialog,
@@ -61,9 +61,8 @@ export function DocumentList({ projectId }: DocumentListProps) {
     filename: string;
   } | null>(null);
 
-  const { data: documents, isLoading } = useQuery({
-    queryKey: ["documents", projectId],
-    queryFn: () => getDocuments(projectId),
+  const { data: documents, isLoading } = useQuery(orpc.document.listByProject.queryOptions({
+    input: { projectId },
     refetchInterval: (query) => {
       const docs = query.state.data;
       if (!docs) return false;
@@ -72,13 +71,13 @@ export function DocumentList({ projectId }: DocumentListProps) {
       );
       return hasInProgress ? 2000 : false;
     },
-  });
+  }));
 
   const deleteMutation = useMutation({
-    mutationFn: deleteDocument,
+    mutationFn: (id: string) => client.document.remove({ id }),
     onSuccess: () => {
       toast.success("文档已删除");
-      queryClient.invalidateQueries({ queryKey: ["documents", projectId] });
+      queryClient.invalidateQueries({ queryKey: orpc.document.listByProject.key({ input: { projectId } }) });
     },
   });
 
@@ -123,8 +122,8 @@ export function DocumentList({ projectId }: DocumentListProps) {
       >
         {(documents) => {
           const sortedDocuments = [...documents].sort((a, b) => {
-            if (a.doc_type === "memory_config" && b.doc_type !== "memory_config") return -1;
-            if (a.doc_type !== "memory_config" && b.doc_type === "memory_config") return 1;
+            if (a.docType === "memory_config" && b.docType !== "memory_config") return -1;
+            if (a.docType !== "memory_config" && b.docType === "memory_config") return 1;
             return 0;
           });
 
@@ -146,22 +145,22 @@ export function DocumentList({ projectId }: DocumentListProps) {
                   <div className="flex-1">
                     <p className="text-sm font-medium">{doc.filename}</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {dayjs(doc.updated_at).fromNow()}
+                      {dayjs(doc.updatedAt).fromNow()}
                     </p>
                   </div>
-                  {doc.doc_type === "memory_config" && (
+                  {doc.docType === "memory_config" && (
                     <Badge className="bg-slate-50 text-slate-600 border-transparent dark:bg-slate-800/40 dark:text-slate-400">
                       概要
                     </Badge>
                   )}
-                  {doc.doc_type !== "memory_config" &&
-                    (doc.status === "index_failed" && doc.error_message ? (
+                  {doc.docType !== "memory_config" &&
+                    (doc.status === "index_failed" && doc.errorMessage ? (
                       <Tooltip>
                         <TooltipTrigger render={<Badge className={statusColors.index_failed} />}>
                             {statusLabels.index_failed}
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-xs">
-                          {doc.error_message}
+                          {doc.errorMessage}
                         </TooltipContent>
                       </Tooltip>
                     ) : (
@@ -174,7 +173,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
                         {statusLabels[doc.status] ?? doc.status}
                       </Badge>
                     ))}
-                  {doc.doc_type !== "memory_config" && (
+                  {doc.docType !== "memory_config" && (
                     <Button
                       variant="ghost"
                       size="sm"

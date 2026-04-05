@@ -9,7 +9,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { deleteSkillFile } from "@/api/skills";
+import { client, orpc } from "@/lib/orpc";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -67,10 +67,10 @@ export function SkillFileTree({
   >("scripts");
 
   const deleteMutation = useMutation({
-    mutationFn: (path: string) => deleteSkillFile(slug, path),
+    mutationFn: (path: string) => client.skill.deleteFile({ slug, path }),
     onSuccess: () => {
       toast.success("文件已删除");
-      queryClient.invalidateQueries({ queryKey: ["skill", slug] });
+      queryClient.invalidateQueries({ queryKey: orpc.skill.get.key({ input: { slug } }) });
       setShowDeleteDialog(null);
       // If we deleted the selected file, go back to SKILL.md
       if (showDeleteDialog === selectedFile) {

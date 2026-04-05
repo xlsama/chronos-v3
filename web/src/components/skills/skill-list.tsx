@@ -6,8 +6,7 @@ import { toast } from "sonner";
 import { EllipsisVertical, Sparkles, Trash2 } from "lucide-react";
 import { listVariants, listItemVariants } from "@/lib/motion";
 import dayjs from "@/lib/dayjs";
-import { deleteSkill, getSkills } from "@/api/skills";
-import type { Skill } from "@/lib/types";
+import { client, orpc } from "@/lib/orpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +35,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { QueryContent } from "@/components/query-content";
 
+type Skill = Awaited<ReturnType<typeof client.skill.list>>[number];
+
 interface SkillItemProps {
   skill: Skill;
   onSelect: () => void;
@@ -46,11 +47,11 @@ function SkillItem({ skill, onSelect }: SkillItemProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteSkill(skill.slug),
+    mutationFn: () => client.skill.remove({ slug: skill.slug }),
     onSuccess: () => {
       toast.success("技能已删除");
       setShowDeleteDialog(false);
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: orpc.skill.list.key() });
     },
   });
 
@@ -71,7 +72,7 @@ function SkillItem({ skill, onSelect }: SkillItemProps) {
             </p>
           </div>
           <span className="shrink-0 text-xs text-muted-foreground">
-            {dayjs(skill.updated_at).fromNow()}
+            {dayjs(skill.updatedAt).fromNow()}
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -127,10 +128,7 @@ interface SkillListProps {
 
 export function SkillList({ filter }: SkillListProps) {
   const navigate = useNavigate();
-  const { data: skills, isLoading } = useQuery({
-    queryKey: ["skills"],
-    queryFn: getSkills,
-  });
+  const { data: skills, isLoading } = useQuery(orpc.skill.list.queryOptions({}));
 
   const filteredSkills = useMemo(() => {
     if (!skills) return undefined;

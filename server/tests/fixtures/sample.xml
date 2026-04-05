@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<deployment>
+  <name>api-gateway</name>
+  <namespace>production</namespace>
+  <replicas>3</replicas>
+  <container>
+    <image>registry.internal/api-gateway:v2.1.0</image>
+    <port>8080</port>
+    <resources>
+      <cpu>500m</cpu>
+      <memory>512Mi</memory>
+    </resources>
+    <healthCheck>
+      <path>/health</path>
+      <interval>10s</interval>
+    </healthCheck>
+  </container>
+  <env>
+    <var name="DB_HOST">pg-master.db.svc</var>
+    <var name="REDIS_URL">redis://redis-cluster:6379</var>
+    <var name="LOG_LEVEL">info</var>
+  </env>
+</deployment>
