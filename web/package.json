@@ -15,7 +15,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@orpc/client": "^1.13.13",
     "@orpc/react-query": "^1.13.13",
-    "@pierre/diffs": "^1.1.10",
+    "@pierre/diffs": "^1.1.12",
     "@streamdown/code": "^1.1.1",
     "@streamdown/mermaid": "^1.0.2",
     "@tailwindcss/vite": "^4.2.2",
@@ -59,14 +59,14 @@
     "@types/node": "^25.5.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@typescript/native-preview": "^7.0.0-dev.20260403.1",
+    "@typescript/native-preview": "^7.0.0-dev.20260407.1",
     "@vitejs/devtools": "^0.1.13",
     "@vitejs/plugin-react": "^6.0.1",
-    "oxlint": "^1.58.0",
-    "oxlint-tsgolint": "^0.19.0",
+    "oxlint": "^1.59.0",
+    "oxlint-tsgolint": "^0.20.0",
     "server": "workspace:*",
     "shiki": "^4.0.2",
     "typescript": "~6.0.2",
-    "vite": "^8.0.3"
+    "vite": "^8.0.5"
   }
 }

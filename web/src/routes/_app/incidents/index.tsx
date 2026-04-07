@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { IncidentList, STATUS_OPTIONS, SEVERITY_OPTIONS, STATUS_LABELS, SEVERITY_LABELS } from "@/components/incidents/incident-list";
-import { CreateIncidentDialog } from "@/components/incidents/create-incident-dialog";
+import { CreateIncidentTrigger } from "@/components/incidents/create-incident-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { pageVariants, pageTransition } from "@/lib/motion";
 
@@ -51,7 +51,7 @@ function IncidentsPage() {
             </SelectContent>
           </Select>
         </div>
-        <CreateIncidentDialog />
+        <CreateIncidentTrigger />
       </div>
       <div className="flex flex-1 flex-col min-h-0">
         <IncidentList statusFilter={statusFilter} severityFilter={severityFilter} />

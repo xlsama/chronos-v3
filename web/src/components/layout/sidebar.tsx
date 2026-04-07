@@ -55,7 +55,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getAvatarUrl } from "@/api/auth";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 
-const mainItems = [{ to: "/incidents", label: "事件", icon: Inbox }] as const;
+const mainItems = [{ to: "/incidents", label: "收件箱", icon: Inbox }] as const;
 
 const contextItems = [
   { to: "/connections", label: "连接", icon: Cable },
@@ -143,7 +143,7 @@ export function AppSidebar() {
           <SidebarGroupContent>{renderGroup(mainItems)}</SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>资源</SidebarGroupLabel>
+          <SidebarGroupLabel>配置</SidebarGroupLabel>
           <SidebarGroupContent>{renderGroup(contextItems)}</SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>

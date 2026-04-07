@@ -1,0 +1,589 @@
+[
+  {
+    "Id": "f57c1577908185347fd70ee150e2b0f0a0f1b9294654fde98e1df7fac2f11a65",
+    "Names": [
+      "/k8s_POD_nginx-55d845f659-djkmt_chronos-test-ns_dc8bdaec-0ea5-4f30-98f8-4f044b6b5645_0"
+    ],
+    "Image": "rancher/mirrored-pause:3.6",
+    "ImageID": "sha256:7d46a07936af93fcce097459055f93ab07331509aa55f4a2a90d95a3ace1850e",
+    "Command": "/pause",
+    "Created": 1775552320,
+    "Ports": [],
+    "Labels": {
+      "annotation.kubectl.kubernetes.io/restartedAt": "2026-04-07T08:58:40.294Z",
+      "annotation.kubernetes.io/config.seen": "2026-04-07T16:58:40.374214188+08:00",
+      "annotation.kubernetes.io/config.source": "api",
+      "app": "nginx",
+      "io.kubernetes.container.name": "POD",
+      "io.kubernetes.docker.type": "podsandbox",
+      "io.kubernetes.pod.name": "nginx-55d845f659-djkmt",
+      "io.kubernetes.pod.namespace": "chronos-test-ns",
+      "io.kubernetes.pod.uid": "dc8bdaec-0ea5-4f30-98f8-4f044b6b5645",
+      "pod-template-hash": "55d845f659"
+    },
+    "State": "exited",
+    "Status": "Exited (0) 19 seconds ago",
+    "HostConfig": {
+      "NetworkMode": "none"
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "none": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "d4da057ecf5948591918a52bde999e14bd812c4af4ab1b7ecb7f776ce91d6e71",
+          "EndpointID": "",
+          "Gateway": "",
+          "IPAddress": "",
+          "IPPrefixLen": 0,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "0d6df3c2e0cffa47be5798394aef66b2b90e8b3ae8f4ac8697bac48c6af4d9fe",
+    "Names": [
+      "/k8s_POD_nginx-55d845f659-rzlcb_chronos-test-ns_69d5bf85-9273-46a5-b1d9-e30919065af5_0"
+    ],
+    "Image": "rancher/mirrored-pause:3.6",
+    "ImageID": "sha256:7d46a07936af93fcce097459055f93ab07331509aa55f4a2a90d95a3ace1850e",
+    "Command": "/pause",
+    "Created": 1775552320,
+    "Ports": [],
+    "Labels": {
+      "annotation.kubectl.kubernetes.io/restartedAt": "2026-04-07T08:58:40.294Z",
+      "annotation.kubernetes.io/config.seen": "2026-04-07T16:58:40.321234220+08:00",
+      "annotation.kubernetes.io/config.source": "api",
+      "app": "nginx",
+      "io.kubernetes.container.name": "POD",
+      "io.kubernetes.docker.type": "podsandbox",
+      "io.kubernetes.pod.name": "nginx-55d845f659-rzlcb",
+      "io.kubernetes.pod.namespace": "chronos-test-ns",
+      "io.kubernetes.pod.uid": "69d5bf85-9273-46a5-b1d9-e30919065af5",
+      "pod-template-hash": "55d845f659"
+    },
+    "State": "exited",
+    "Status": "Exited (0) 15 seconds ago",
+    "HostConfig": {
+      "NetworkMode": "none"
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "none": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "d4da057ecf5948591918a52bde999e14bd812c4af4ab1b7ecb7f776ce91d6e71",
+          "EndpointID": "",
+          "Gateway": "",
+          "IPAddress": "",
+          "IPPrefixLen": 0,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "dca41cd790b364ea6918d555c9f0cc3cd8c511eafe57f7cc5f4f55a12d9f6262",
+    "Names": [
+      "/k8s_POD_nginx-f576985cc-mjdd7_chronos-test-ns_6018c889-72ef-472c-9c09-f2a528e3500d_0"
+    ],
+    "Image": "rancher/mirrored-pause:3.6",
+    "ImageID": "sha256:7d46a07936af93fcce097459055f93ab07331509aa55f4a2a90d95a3ace1850e",
+    "Command": "/pause",
+    "Created": 1775552319,
+    "Ports": [],
+    "Labels": {
+      "annotation.kubernetes.io/config.seen": "2026-04-07T16:58:39.080853182+08:00",
+      "annotation.kubernetes.io/config.source": "api",
+      "app": "nginx",
+      "io.kubernetes.container.name": "POD",
+      "io.kubernetes.docker.type": "podsandbox",
+      "io.kubernetes.pod.name": "nginx-f576985cc-mjdd7",
+      "io.kubernetes.pod.namespace": "chronos-test-ns",
+      "io.kubernetes.pod.uid": "6018c889-72ef-472c-9c09-f2a528e3500d",
+      "pod-template-hash": "f576985cc"
+    },
+    "State": "exited",
+    "Status": "Exited (0) 20 seconds ago",
+    "HostConfig": {
+      "NetworkMode": "none"
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "none": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "d4da057ecf5948591918a52bde999e14bd812c4af4ab1b7ecb7f776ce91d6e71",
+          "EndpointID": "",
+          "Gateway": "",
+          "IPAddress": "",
+          "IPPrefixLen": 0,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "ce0728a987b396fd4657d904da67df660c730fed08858bb468fdceaebdc434a4",
+    "Names": [
+      "/k8s_POD_nginx-f576985cc-rztvc_chronos-test-ns_032ada4b-75df-4e78-88bc-17084b234f0c_0"
+    ],
+    "Image": "rancher/mirrored-pause:3.6",
+    "ImageID": "sha256:7d46a07936af93fcce097459055f93ab07331509aa55f4a2a90d95a3ace1850e",
+    "Command": "/pause",
+    "Created": 1775552319,
+    "Ports": [],
+    "Labels": {
+      "annotation.kubernetes.io/config.seen": "2026-04-07T16:58:39.088451981+08:00",
+      "annotation.kubernetes.io/config.source": "api",
+      "app": "nginx",
+      "io.kubernetes.container.name": "POD",
+      "io.kubernetes.docker.type": "podsandbox",
+      "io.kubernetes.pod.name": "nginx-f576985cc-rztvc",
+      "io.kubernetes.pod.namespace": "chronos-test-ns",
+      "io.kubernetes.pod.uid": "032ada4b-75df-4e78-88bc-17084b234f0c",
+      "pod-template-hash": "f576985cc"
+    },
+    "State": "exited",
+    "Status": "Exited (0) 20 seconds ago",
+    "HostConfig": {
+      "NetworkMode": "none"
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "none": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "d4da057ecf5948591918a52bde999e14bd812c4af4ab1b7ecb7f776ce91d6e71",
+          "EndpointID": "",
+          "Gateway": "",
+          "IPAddress": "",
+          "IPPrefixLen": 0,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "6eef5d547b87af1cf76673f8ff273c6e164218534518227373c621b888c9357f",
+    "Names": [
+      "/k8s_local-path-provisioner_local-path-provisioner-774c6665dc-kzpmv_kube-system_2e34bff6-b7b4-401c-a895-505a3c988e06_0"
+    ],
+    "Image": "sha256:b41714cf6249634852799cf17377f98e07dace3e242c68d0f62797e452bbd032",
+    "ImageID": "sha256:b41714cf6249634852799cf17377f98e07dace3e242c68d0f62797e452bbd032",
+    "Command": "local-path-provisioner start --config /etc/config/config.json",
+    "Created": 1775201914,
+    "Ports": [],
+    "Labels": {
+      "annotation.io.kubernetes.container.hash": "474e33c6",
+      "annotation.io.kubernetes.container.restartCount": "0",
+      "annotation.io.kubernetes.container.terminationMessagePath": "/dev/termination-log",
+      "annotation.io.kubernetes.container.terminationMessagePolicy": "File",
+      "annotation.io.kubernetes.pod.terminationGracePeriod": "30",
+      "io.kubernetes.container.logpath": "/var/log/pods/kube-system_local-path-provisioner-774c6665dc-kzpmv_2e34bff6-b7b4-401c-a895-505a3c988e06/local-path-provisioner/0.log",
+      "io.kubernetes.container.name": "local-path-provisioner",
+      "io.kubernetes.docker.type": "container",
+      "io.kubernetes.pod.name": "local-path-provisioner-774c6665dc-kzpmv",
+      "io.kubernetes.pod.namespace": "kube-system",
+      "io.kubernetes.pod.uid": "2e34bff6-b7b4-401c-a895-505a3c988e06",
+      "io.kubernetes.sandbox.id": "1f724cd4ee977615ef18a423704d795e353d216ca9835068241fba2e92f0e6c5"
+    },
+    "State": "running",
+    "Status": "Up 4 days",
+    "HostConfig": {
+      "NetworkMode": "container:1f724cd4ee977615ef18a423704d795e353d216ca9835068241fba2e92f0e6c5"
+    },
+    "NetworkSettings": {
+      "Networks": {}
+    },
+    "Mounts": [
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/2e34bff6-b7b4-401c-a895-505a3c988e06/containers/local-path-provisioner/549aa9ec",
+        "Destination": "/dev/termination-log",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/2e34bff6-b7b4-401c-a895-505a3c988e06/volumes/kubernetes.io~configmap/config-volume",
+        "Destination": "/etc/config",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/2e34bff6-b7b4-401c-a895-505a3c988e06/etc-hosts",
+        "Destination": "/etc/hosts",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/2e34bff6-b7b4-401c-a895-505a3c988e06/volumes/kubernetes.io~projected/kube-api-access-7lsb9",
+        "Destination": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      }
+    ]
+  },
+  {
+    "Id": "36562cec38a7324409cbfee18a0fbff81948421a5f0137ed747168fc7cfd068d",
+    "Names": [
+      "/k8s_coredns_coredns-6cc96b5c97-9r75h_kube-system_c68db578-e319-4a8b-8ee8-64bbe5543fde_0"
+    ],
+    "Image": "sha256:97e04611ad43405a2e5863ae17c6f1bc9181bdefdaa78627c432ef754a4eb108",
+    "ImageID": "sha256:97e04611ad43405a2e5863ae17c6f1bc9181bdefdaa78627c432ef754a4eb108",
+    "Command": "/coredns -conf /etc/coredns/Corefile",
+    "Created": 1775201914,
+    "Ports": [],
+    "Labels": {
+      "annotation.io.kubernetes.container.hash": "fe70e89f",
+      "annotation.io.kubernetes.container.ports": "[{\"name\":\"dns\",\"containerPort\":53,\"protocol\":\"UDP\"},{\"name\":\"dns-tcp\",\"containerPort\":53,\"protocol\":\"TCP\"},{\"name\":\"metrics\",\"containerPort\":9153,\"protocol\":\"TCP\"}]",
+      "annotation.io.kubernetes.container.restartCount": "0",
+      "annotation.io.kubernetes.container.terminationMessagePath": "/dev/termination-log",
+      "annotation.io.kubernetes.container.terminationMessagePolicy": "File",
+      "annotation.io.kubernetes.pod.terminationGracePeriod": "30",
+      "io.kubernetes.container.logpath": "/var/log/pods/kube-system_coredns-6cc96b5c97-9r75h_c68db578-e319-4a8b-8ee8-64bbe5543fde/coredns/0.log",
+      "io.kubernetes.container.name": "coredns",
+      "io.kubernetes.docker.type": "container",
+      "io.kubernetes.pod.name": "coredns-6cc96b5c97-9r75h",
+      "io.kubernetes.pod.namespace": "kube-system",
+      "io.kubernetes.pod.uid": "c68db578-e319-4a8b-8ee8-64bbe5543fde",
+      "io.kubernetes.sandbox.id": "f8b29f23700fada85be6a8b6e4962c72b02f69e20b95424671fd5e0de8005498"
+    },
+    "State": "running",
+    "Status": "Up 4 days",
+    "HostConfig": {
+      "NetworkMode": "container:f8b29f23700fada85be6a8b6e4962c72b02f69e20b95424671fd5e0de8005498"
+    },
+    "NetworkSettings": {
+      "Networks": {}
+    },
+    "Mounts": [
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/c68db578-e319-4a8b-8ee8-64bbe5543fde/containers/coredns/e4b0e19f",
+        "Destination": "/dev/termination-log",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/c68db578-e319-4a8b-8ee8-64bbe5543fde/volumes/kubernetes.io~configmap/config-volume",
+        "Destination": "/etc/coredns",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/c68db578-e319-4a8b-8ee8-64bbe5543fde/volumes/kubernetes.io~configmap/custom-config-volume",
+        "Destination": "/etc/coredns/custom",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/c68db578-e319-4a8b-8ee8-64bbe5543fde/etc-hosts",
+        "Destination": "/etc/hosts",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/var/lib/kubelet/pods/c68db578-e319-4a8b-8ee8-64bbe5543fde/volumes/kubernetes.io~projected/kube-api-access-clttr",
+        "Destination": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      }
+    ]
+  },
+  {
+    "Id": "1f724cd4ee977615ef18a423704d795e353d216ca9835068241fba2e92f0e6c5",
+    "Names": [
+      "/k8s_POD_local-path-provisioner-774c6665dc-kzpmv_kube-system_2e34bff6-b7b4-401c-a895-505a3c988e06_0"
+    ],
+    "Image": "rancher/mirrored-pause:3.6",
+    "ImageID": "sha256:7d46a07936af93fcce097459055f93ab07331509aa55f4a2a90d95a3ace1850e",
+    "Command": "/pause",
+    "Created": 1775201913,
+    "Ports": [],
+    "Labels": {
+      "annotation.kubernetes.io/config.seen": "2026-04-03T15:38:33.597329721+08:00",
+      "annotation.kubernetes.io/config.source": "api",
+      "app": "local-path-provisioner",
+      "io.kubernetes.container.name": "POD",
+      "io.kubernetes.docker.type": "podsandbox",
+      "io.kubernetes.pod.name": "local-path-provisioner-774c6665dc-kzpmv",
+      "io.kubernetes.pod.namespace": "kube-system",
+      "io.kubernetes.pod.uid": "2e34bff6-b7b4-401c-a895-505a3c988e06",
+      "pod-template-hash": "774c6665dc"
+    },
+    "State": "running",
+    "Status": "Up 4 days",
+    "HostConfig": {
+      "NetworkMode": "none"
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "none": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "d4da057ecf5948591918a52bde999e14bd812c4af4ab1b7ecb7f776ce91d6e71",
+          "EndpointID": "66a52661f4b39002f4b1eaa3614bcd9780e1059268a1584e203266fe3d29b767",
+          "Gateway": "",
+          "IPAddress": "",
+          "IPPrefixLen": 0,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "f8b29f23700fada85be6a8b6e4962c72b02f69e20b95424671fd5e0de8005498",
+    "Names": [
+      "/k8s_POD_coredns-6cc96b5c97-9r75h_kube-system_c68db578-e319-4a8b-8ee8-64bbe5543fde_0"
+    ],
+    "Image": "rancher/mirrored-pause:3.6",
+    "ImageID": "sha256:7d46a07936af93fcce097459055f93ab07331509aa55f4a2a90d95a3ace1850e",
+    "Command": "/pause",
+    "Created": 1775201913,
+    "Ports": [],
+    "Labels": {
+      "annotation.kubernetes.io/config.seen": "2026-04-03T15:38:33.597325304+08:00",
+      "annotation.kubernetes.io/config.source": "api",
+      "io.kubernetes.container.name": "POD",
+      "io.kubernetes.docker.type": "podsandbox",
+      "io.kubernetes.pod.name": "coredns-6cc96b5c97-9r75h",
+      "io.kubernetes.pod.namespace": "kube-system",
+      "io.kubernetes.pod.uid": "c68db578-e319-4a8b-8ee8-64bbe5543fde",
+      "k8s-app": "kube-dns",
+      "pod-template-hash": "6cc96b5c97"
+    },
+    "State": "running",
+    "Status": "Up 4 days",
+    "HostConfig": {
+      "NetworkMode": "none"
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "none": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "d4da057ecf5948591918a52bde999e14bd812c4af4ab1b7ecb7f776ce91d6e71",
+          "EndpointID": "4088ac6465ae180a6fa4b0685bcabd437fd076a67d22cabe34db8dfeacc81e0b",
+          "Gateway": "",
+          "IPAddress": "",
+          "IPPrefixLen": 0,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "4ffe83fe68ff86d9447e99a33efec368c9cff2d3fa2edbb3f7ed9ac9941d101e",
+    "Names": [
+      "/chronos-v3-postgres-1"
+    ],
+    "Image": "pgvector/pgvector:pg17",
+    "ImageID": "sha256:076f69e404b796ef2f60098ea996e56f247bfc5f80d5e8a7ae7cf982d9e0883d",
+    "Command": "docker-entrypoint.sh postgres",
+    "Created": 1775184312,
+    "Ports": [
+      {
+        "IP": "0.0.0.0",
+        "PrivatePort": 5432,
+        "PublicPort": 5432,
+        "Type": "tcp"
+      },
+      {
+        "IP": "::",
+        "PrivatePort": 5432,
+        "PublicPort": 5432,
+        "Type": "tcp"
+      }
+    ],
+    "Labels": {
+      "com.docker.compose.config-hash": "64faffb442c728083eb07e592a8cbe5c1874d87ba01b095f2088e9259c95d711",
+      "com.docker.compose.container-number": "1",
+      "com.docker.compose.depends_on": "",
+      "com.docker.compose.image": "sha256:076f69e404b796ef2f60098ea996e56f247bfc5f80d5e8a7ae7cf982d9e0883d",
+      "com.docker.compose.oneoff": "False",
+      "com.docker.compose.project": "chronos-v3",
+      "com.docker.compose.project.config_files": "/Users/xlsama/w/chronos-v3/docker-compose.yaml",
+      "com.docker.compose.project.working_dir": "/Users/xlsama/w/chronos-v3",
+      "com.docker.compose.service": "postgres",
+      "com.docker.compose.version": "2.40.3"
+    },
+    "State": "running",
+    "Status": "Up 4 days (healthy)",
+    "HostConfig": {
+      "NetworkMode": "chronos-v3_default"
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "chronos-v3_default": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "ba:44:d9:67:04:f5",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "9d27f4a41096d826b1127d017a8531c940cf5b18c29c2aeb2597edc0a1b168a2",
+          "EndpointID": "ec23eef7f28852c65fc9f4c47a0587d1f25dc2786f64967817b163c3ea406466",
+          "Gateway": "192.168.97.1",
+          "IPAddress": "192.168.97.2",
+          "IPPrefixLen": 24,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "Mounts": [
+      {
+        "Type": "volume",
+        "Name": "chronos-v3_pgdata",
+        "Source": "/var/lib/docker/volumes/chronos-v3_pgdata/_data",
+        "Destination": "/var/lib/postgresql/data",
+        "Driver": "local",
+        "Mode": "rw",
+        "RW": true,
+        "Propagation": ""
+      }
+    ]
+  },
+  {
+    "Id": "b948e78aee0744d560f1791ff1fe0747e4caa3c8a6e2bae585bfae82c6c22030",
+    "Names": [
+      "/chronos-v3-redis-1"
+    ],
+    "Image": "redis:7-alpine",
+    "ImageID": "sha256:49898aa0365c1577275e77a57b9ffa8a6ebd9d13eb981610a679e64185eaf0f2",
+    "Command": "docker-entrypoint.sh redis-server",
+    "Created": 1775184312,
+    "Ports": [
+      {
+        "IP": "0.0.0.0",
+        "PrivatePort": 6379,
+        "PublicPort": 6379,
+        "Type": "tcp"
+      },
+      {
+        "IP": "::",
+        "PrivatePort": 6379,
+        "PublicPort": 6379,
+        "Type": "tcp"
+      }
+    ],
+    "Labels": {
+      "com.docker.compose.config-hash": "0bd52fe91f9657a1814e03ae0ea6314743ac980c65df69e1e6559014ef5f6ba0",
+      "com.docker.compose.container-number": "1",
+      "com.docker.compose.depends_on": "",
+      "com.docker.compose.image": "sha256:49898aa0365c1577275e77a57b9ffa8a6ebd9d13eb981610a679e64185eaf0f2",
+      "com.docker.compose.oneoff": "False",
+      "com.docker.compose.project": "chronos-v3",
+      "com.docker.compose.project.config_files": "/Users/xlsama/w/chronos-v3/docker-compose.yaml",
+      "com.docker.compose.project.working_dir": "/Users/xlsama/w/chronos-v3",
+      "com.docker.compose.service": "redis",
+      "com.docker.compose.version": "2.40.3"
+    },
+    "State": "running",
+    "Status": "Up 4 days (healthy)",
+    "HostConfig": {
+      "NetworkMode": "chronos-v3_default"
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "chronos-v3_default": {
+          "IPAMConfig": null,
+          "Links": null,
+          "Aliases": null,
+          "MacAddress": "a2:10:a3:9f:a4:57",
+          "DriverOpts": null,
+          "GwPriority": 0,
+          "NetworkID": "9d27f4a41096d826b1127d017a8531c940cf5b18c29c2aeb2597edc0a1b168a2",
+          "EndpointID": "107f74130514d21c558270202f5fdec211fb9315157ee00cb376342b9c298ad1",
+          "Gateway": "192.168.97.1",
+          "IPAddress": "192.168.97.3",
+          "IPPrefixLen": 24,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "GlobalIPv6PrefixLen": 0,
+          "DNSNames": null
+        }
+      }
+    },
+    "Mounts": [
+      {
+        "Type": "volume",
+        "Name": "chronos-v3_redisdata",
+        "Source": "/var/lib/docker/volumes/chronos-v3_redisdata/_data",
+        "Destination": "/data",
+        "Driver": "local",
+        "Mode": "rw",
+        "RW": true,
+        "Propagation": ""
+      }
+    ]
+  }
+]

@@ -1,7 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Activity } from "lucide-react";
 import { toast } from "sonner";
 import { uploadFiles } from "@/api/attachments";
 import { createIncident } from "@/api/incidents";
@@ -11,12 +10,13 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { PromptComposer } from "@/components/prompt-composer";
+import { useCreateIncidentDialogStore } from "@/stores/create-incident-dialog";
 
 export function CreateIncidentDialog() {
-  const [open, setOpen] = useState(false);
+  const { open, setOpen } = useCreateIncidentDialogStore();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -60,12 +60,6 @@ export function CreateIncidentDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={<Button size="sm" className="gap-1.5" data-testid="create-incident-btn" />}
-      >
-        <Activity data-icon="inline-start" className="size-3" />
-        新建事件
-      </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>创建事件</DialogTitle>
@@ -77,5 +71,16 @@ export function CreateIncidentDialog() {
         />
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function CreateIncidentTrigger() {
+  const setOpen = useCreateIncidentDialogStore((s) => s.setOpen);
+
+  return (
+    <Button size="sm" className="gap-1.5" data-testid="create-incident-btn" onClick={() => setOpen(true)}>
+      新建事件
+      <Kbd className="ml-1 text-[10px] h-4 min-w-4">⌘K</Kbd>
+    </Button>
   );
 }
